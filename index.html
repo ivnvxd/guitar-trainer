@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A practical guitar fretboard trainer: intervals, ear training, triad inversions, scales, chords, and the circle of fifths.">
+  <title>Guitar Fretboard — Practice and Reference</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+  <script src="extras.js" defer></script>
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Back to top"><span class="brand-mark">◎</span><span>Fretboard</span></a>
+      <nav aria-label="Sections"><a href="#trainer">Practice</a><a href="#ear-training">Ear</a><a href="#triads">Triads</a><a href="#reference">Reference</a><a href="#circle">Circle</a></nav>
+    </header>
+    <main id="top">
+      <div class="workspace-intro"><h1>Guitar Fretboard</h1><p>Practice, ear training, triads, scales, chords, and the circle of fifths · standard EADGBE tuning</p></div>
+
+      <section id="trainer" class="section-block" aria-labelledby="trainer-heading">
+        <div class="section-heading"><div><h2 id="trainer-heading">Fretboard practice</h2><p>Choose a lesson and find the requested degree on the fretboard.</p></div><div class="summary-stat" id="progress-summary" aria-live="polite"></div></div>
+        <div class="trainer-layout">
+          <aside class="lesson-panel" aria-label="Learning path"><div class="panel-title-row"><h3>Learning path</h3><span>from anchors to scales</span></div><div id="lesson-list" class="lesson-list"></div><p class="side-note">Lessons are available in any order. Your results stay in this browser.</p></aside>
+          <div class="trainer-panel">
+            <div class="trainer-top"><div><p class="small-overline">CURRENT LESSON</p><h3 id="lesson-title"></h3><p id="lesson-description" class="lesson-description"></p></div><span id="lesson-formula" class="formula-pill"></span></div>
+            <div class="root-controls"><div><span class="control-label">Root string</span><div id="root-string-buttons" class="segment-control" role="group" aria-label="Root string"></div></div><div class="fret-control"><label class="control-label" for="root-fret">Root fret</label><div class="range-row"><input id="root-fret" type="range" min="5" max="12" step="1" value="5"><output id="root-fret-value" for="root-fret">5</output></div></div></div>
+            <div class="challenge"><div><p class="small-overline">QUESTION <span id="question-number"></span></p><h4 id="challenge-title"></h4><p id="challenge-subtitle"></p></div><button id="anchor-toggle" class="text-button" type="button" aria-pressed="false">Show anchors</button></div>
+            <div class="board-scroll trainer-scroll"><div id="trainer-board" class="fret-grid trainer-grid" role="group" aria-label="Answer on the fretboard"></div></div>
+            <p class="board-caption">Tap any fret to answer. The blue dot marks the root.</p>
+            <div id="feedback" class="feedback" role="status" aria-live="polite"><span class="feedback-icon">◎</span><span>Choose a position on the fretboard.</span></div>
+            <div class="trainer-actions"><button id="hint-button" type="button" class="button-quiet">Hint</button><button id="reveal-button" type="button" class="button-quiet">Show answer</button><button id="next-button" type="button" class="button-primary" disabled>Next question →</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ear-training" class="section-block" aria-labelledby="ear-heading">
+        <div class="section-heading"><div><h2 id="ear-heading">Ear training</h2><p>Listen first. Identify the interval or triad, then connect the sound to the fretboard.</p></div><div id="ear-score" class="summary-stat" aria-live="polite"></div></div>
+        <div class="ear-panel">
+          <div id="ear-controls" class="ear-controls"><div><span class="control-label">Exercise</span><div id="ear-mode" class="segment-control" role="group" aria-label="Ear exercise"><button type="button" data-ear-mode="interval" aria-pressed="true">Intervals</button><button type="button" data-ear-mode="triad" aria-pressed="false">Triad quality</button></div></div><div id="ear-difficulty-wrap" hidden><label class="control-label" for="ear-difficulty">Include</label><select id="ear-difficulty"></select></div><div><label class="control-label" for="ear-presentation">Play as</label><select id="ear-presentation"><option value="up">Ascending</option><option value="down">Descending</option><option value="together">Together</option></select></div></div>
+          <details id="ear-interval-picker" class="ear-interval-picker"><summary>Intervals in this exercise <span id="ear-interval-count">5 selected</span></summary><div class="ear-interval-picker-body"><div class="ear-interval-presets" role="group" aria-label="Interval presets"><button type="button" data-interval-preset="core">Core five</button><button type="button" data-interval-preset="all">All intervals</button></div><div id="ear-interval-list" class="ear-interval-list" role="group" aria-label="Intervals to practice"></div><p id="ear-interval-help" class="ear-interval-help" role="status" aria-live="polite">Choose any combination. At least one interval must stay selected.</p></div></details>
+          <div class="ear-question"><div><span class="small-overline">LISTENING QUESTION <span id="ear-question-number">1</span></span><h3 id="ear-prompt">What did you hear?</h3><p id="ear-instruction">The starting note changes each question, so focus on the distance.</p></div><div class="ear-play-controls"><button id="ear-replay" type="button" class="button-primary">▶ Play / replay</button><button id="ear-first-note" type="button" class="button-quiet">First note only</button></div></div>
+          <div id="ear-answer-grid" class="ear-answer-grid" role="group" aria-label="Answer choices"></div>
+          <div id="ear-feedback" class="feedback" role="status" aria-live="polite"><span class="feedback-icon">◎</span><span>Play the question, then choose an answer.</span></div>
+          <div id="ear-position" class="ear-position" hidden></div>
+          <div class="ear-bottom"><span>Space replays the sound. Choose an answer before checking the fretboard.</span><button id="ear-next" type="button" class="button-primary" disabled>Next sound →</button></div>
+        </div>
+      </section>
+
+      <section id="triads" class="section-block" aria-labelledby="triad-heading">
+        <div class="section-heading"><div><h2 id="triad-heading">Triads and inversions</h2><p>See and hear the same three notes in root position, first inversion, and second inversion.</p></div></div>
+        <div class="triad-panel"><div class="triad-controls"><div><label class="control-label" for="triad-key">Root</label><select id="triad-key"></select></div><div><label class="control-label" for="triad-quality">Quality</label><select id="triad-quality"><option value="major">Major</option><option value="minor">Minor</option><option value="diminished">Diminished</option><option value="augmented">Augmented</option></select></div><div><label class="control-label" for="triad-strings">String set</label><select id="triad-strings"><option value="top">3–2–1 (G–B–e)</option><option value="middle">4–3–2 (D–G–B)</option></select></div></div>
+          <div class="triad-explanation"><div><strong id="triad-formula"></strong><p id="triad-notes"></p></div><button id="triad-label-toggle" class="button-quiet" type="button" aria-pressed="false">Hide note labels</button></div>
+          <div id="triad-cards" class="triad-cards"></div>
+          <div class="triad-quiz"><div><strong>Inversion listening check</strong><p id="triad-quiz-feedback" aria-live="polite">Hear an inversion and choose the matching card.</p></div><div><button id="triad-quiz-play" type="button" class="button-quiet">▶ Play a question</button><button id="triad-quiz-next" type="button" class="button-quiet" disabled>New question</button></div></div>
+        </div>
+      </section>
+
+      <section id="reference" class="section-block" aria-labelledby="reference-heading">
+        <div class="section-heading"><div><h2 id="reference-heading">Reference</h2><p>Explore a scale, chord, or interval across the fretboard. Tap notes to hear them.</p></div></div>
+        <div class="reference-panel">
+          <div class="reference-controls"><div><label class="control-label" for="key-select">Root</label><select id="key-select"></select></div><div><span class="control-label">Show</span><div id="family-buttons" class="segment-control family-control" role="group" aria-label="Material type"><button type="button" data-family="scales" aria-pressed="true">Scales</button><button type="button" data-family="chords" aria-pressed="false">Chords</button><button type="button" data-family="intervals" aria-pressed="false">Intervals</button></div></div><div><label class="control-label" for="pattern-select">Pattern</label><select id="pattern-select"></select></div></div>
+          <div class="reference-info"><div><p class="small-overline" id="reference-family-label"></p><h3 id="reference-title"></h3><p id="reference-description"></p></div><div id="label-buttons" class="segment-control label-control" role="group" aria-label="Fretboard labels"><button type="button" data-labels="degrees" aria-pressed="true">Degrees</button><button type="button" data-labels="notes" aria-pressed="false">Notes</button></div></div>
+          <div id="tone-strip" class="tone-strip" aria-label="Note sequence"></div>
+          <div class="step-controls"><div><span class="small-overline">CURRENT DEGREE</span><strong id="reference-step-name"></strong></div><div class="step-buttons"><button id="reference-prev" type="button" class="button-quiet" aria-label="Previous degree">←</button><button id="reference-next" type="button" class="button-quiet" aria-label="Next degree">→</button><button id="reference-step-toggle" type="button" class="button-quiet" aria-pressed="false">Highlight: off</button></div></div>
+          <div class="reference-board-head"><span>Standard tuning <b>E A D G B e</b></span><span>Frets 0–15 · scroll the board →</span></div>
+          <div class="board-scroll reference-scroll"><div id="reference-board" class="fret-grid reference-grid" role="group" aria-label="Fretboard positions"></div></div>
+          <div class="reference-footer"><p id="played-note" aria-live="polite">Tap a note on the fretboard to hear it.</p><button id="play-pattern" type="button" class="button-quiet sound-button">▶ Play the sequence</button></div>
+          <div id="voicing-panel" class="voicing-panel" hidden><div class="voicing-head"><div><h4>Playable chord shape</h4><p id="voicing-description"></p></div><div id="voicing-buttons" class="segment-control" role="group" aria-label="Chord shape"></div></div><div id="voicing-diagram" class="voicing-diagram"></div><button id="play-voicing" type="button" class="button-quiet">▶ Play the chord</button><p class="voicing-help">Tap a sounding string to hear its note. × means mute that string.</p></div>
+        </div>
+      </section>
+
+      <section id="circle" class="section-block" aria-labelledby="circle-heading">
+        <div class="section-heading"><div><h2 id="circle-heading">Circle of fifths</h2><p>Clockwise moves up a fifth; counterclockwise moves up a fourth. Relative minor keys are inside.</p></div></div>
+        <div class="circle-panel"><div class="circle-main"><div class="circle-toolbar"><span>Choose a key</span><div><button id="circle-next-question" type="button" class="button-quiet" hidden>Next question</button><button id="circle-quiz-toggle" type="button" class="button-quiet" aria-pressed="false">Test yourself</button></div></div><div id="circle-wheel" class="circle-wheel" role="group" aria-label="Major keys on the circle of fifths"><div class="circle-center"><span>MAJOR</span><strong id="circle-center-key">C</strong><small id="circle-center-minor">A minor</small></div></div><div id="circle-feedback" class="circle-feedback" role="status" aria-live="polite">Choose a key on the circle.</div></div><div class="circle-details"><div class="circle-detail-top"><span class="small-overline">SELECTED KEY</span><h3 id="circle-key-name"></h3><p id="circle-signature"></p><p id="circle-relative"></p></div><div class="circle-scale"><span class="small-overline">SCALE NOTES</span><div id="circle-scale-notes"></div></div><div class="circle-chords"><span class="small-overline">DIATONIC TRIADS</span><div id="circle-diatonic-chords"></div></div><button id="circle-show-fretboard" type="button" class="button-quiet">Show the scale on the fretboard →</button></div></div>
+      </section>
+    </main>
+    <footer class="site-footer"><span>Standard EADGBE tuning</span><span>Progress is stored in this browser</span></footer>
+  </div>
+</body>
+</html>
