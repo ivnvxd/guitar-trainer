@@ -20,7 +20,7 @@ Upload these files and folders:
 
 Do not upload `docs/`, `tests/`, `README.md` or `.git/`. The site does not need them.
 
-`fonts/` holds the two typefaces of the site, Public Sans for text and Besley for titles, and their license. The site serves them itself.
+`fonts/` holds the typeface of the site, Geist, and its license. The site serves it itself.
 
 When you publish a new version, change `VERSION` in `sw.js`. Browsers then replace the files they keep for offline use.
 

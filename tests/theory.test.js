@@ -61,6 +61,16 @@ for (const root of T.ROOTS) for (const q of ['major', 'minor']) {
   const order = shapes.map(s => s.shape).join('');
   ok('CAGEDCAGED'.includes(order), `${root} ${q} order ${order}`);
 }
+// Each CAGED shape shares at least one place with the next one up the neck, also across fret 12.
+for (const root of T.ROOTS) for (const q of ['major', 'minor']) {
+  const shapes = T.cagedShapes(root, q);
+  const next = shapes.map((s, i) => i < 4 ? shapes[i + 1] : Object.assign({}, shapes[0], { frets: shapes[0].frets.map(f => f === null ? null : f + 12) }));
+  shapes.forEach((s, i) => ok(T.sharedPlaces(s, next[i]).length > 0, `${root} ${q}: ${s.shape} and ${next[i].shape} share no note`));
+  const map = T.cagedMap(root, q, 24);
+  ok(map.every(s => s.low >= 0 && s.high <= 24), `${root} ${q}: map leaves the neck`);
+  ok(map.length >= 8, `${root} ${q}: only ${map.length} shapes on 24 frets`);
+}
+eq(T.cagedMap('C', 'major', 15).map(s => s.shape).join(''), 'CAGEDC');
 
 // Movable shapes and the full shape list of every chord on every root.
 for (const root of T.ROOTS) for (const chord of T.CHORDS) {

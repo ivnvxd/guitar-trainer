@@ -61,7 +61,7 @@
       return { hold: 0.8, text: `${correct ? '' : `You chose ${DUAL[Number(v)]}. `}It is ${DUAL[T.mod(q.midi)]} on the ${where(q.string, q.fret)}. The faint dots show the other places of this note.` };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })),
         D.field('Frets', GT.segmented('Frets', RANGES, c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All 12']], c.naturals, v => set({ naturals: v }))));
@@ -117,7 +117,7 @@
       return { text: v === 'gave-up' ? `Here are all ${q.positions.length} places. You found the green ones.` : correct ? `All ${q.positions.length} places, no wrong taps.` : `All found, with ${q.wrong.length} wrong tap${q.wrong.length > 1 ? 's' : ''}.` };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.field('Frets', GT.segmented('Frets', [[5, '0–5'], [12, '0–12'], [15, '0–15']], c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All 12']], c.naturals, v => set({ naturals: v }))));
     }
@@ -180,7 +180,7 @@
       return { text: `${correct ? '' : `You tapped ${T.PC_PLAIN[T.mod(given.midi)]}, the ${DEGREES[T.mod(given.midi - q.root) - 1] || 'root'}. `}The ${q.label} of ${rootName} is ${target}. Every place in these frets is green.` };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.field('Quick sets', h('div', { class: 'chips' }, PRESETS.map(([list, label]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(list === c.set.join(' ')), onclick: () => set({ set: list.split(' ') }) }, label)))),
         D.pickset('Degrees', DEGREES.map(d => ({ value: d, main: d, sub: DEGREE_NAMES[d] })), c.set, v => set({ set: v })),
         D.pickset('Root on string', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: ord(s), sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })));
@@ -242,7 +242,7 @@
       return { hold: 1.2, text: `${T.INVERSIONS[q.inversion]}: ${best.tones.map(l => tones.find(t => t.label === l).name).join(' ')} from low to high, frets ${best.frets.join('-')}.`, actions: [['▶ Hear it', () => A.notes(midis, 'strum')], ['Open in Library', () => GT.go(`library/triads/${q.quality}/${GT.rootSlug(q.rootName)}/${q.setId}`)]] };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.pickset('Quality', ['major', 'minor', 'dim', 'aug'].map(id => ({ value: id, main: T.chordById(id).name })), c.qualities, v => set({ qualities: v })),
         D.pickset('String sets', T.TRIAD_SETS.map(s => ({ value: s.id, main: s.id.split('').reverse().join('–'), sub: s.name.replace(/^Strings [^(]+/, '') })), c.sets, v => set({ sets: v })));
     }
@@ -253,6 +253,24 @@
   function rootStrings(quality, shapeLetter) {
     const s = T.CAGED[quality].find(x => x.shape === shapeLetter);
     return s.frets.map((f, i) => f === null ? null : T.mod(T.STANDARD[i] + f) === T.pcOf(s.root) ? i : null).filter(i => i !== null);
+  }
+  const andList = list => list.length > 1 ? list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1] : list.join('');
+  const placesOf = frets => frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
+  // The outlines of a shape and its neighbors on the map, with rings on the notes they share.
+  function cagedPicture(rootName, quality, shapes, extra = {}) {
+    const map = T.cagedMap(rootName, quality, 17);
+    const regions = [], shared = new Set(), links = [];
+    for (const sh of shapes) {
+      const at = map.findIndex(m => m.frets.every((f, k) => f === sh.frets[k]));
+      if (at < 0) continue;
+      for (const n of [map[at - 1], map[at + 1]].filter(Boolean)) {
+        if (!shapes.includes(n) && !extra.only) regions.push({ points: placesOf(n.frets), label: n.shape, cls: 'is-near shape-' + n.shape });
+        T.sharedPlaces(sh, n).forEach(x => shared.add(x));
+      }
+      regions.push({ points: placesOf(sh.frets), label: map[at].shape, cls: 'is-current shape-' + map[at].shape });
+      links.push({ points: placesOf(sh.frets), cls: 'is-shape' });
+    }
+    return { regions, links, ring: (s, f) => shared.has(`${s}:${f}`) };
   }
   D.add({
     id: 'neck-caged', track: 'neck',
@@ -289,7 +307,9 @@
         const markers = q.shape.frets.map((f, i) => f === null ? null : (() => { const t = tones.find(x => x.pc === T.mod(T.STANDARD[i] + f)); return { string: i, fret: f, kind: FB.degreeKind(t.label), label: t.label }; })()).filter(Boolean);
         ui.actions([['▶ Strum', () => A.notes(q.shape.frets.map((f, i) => f === null ? null : T.STANDARD[i] + f).filter(m => m !== null), 'strum')]]);
         const win = ui.narrow() ? { from: Math.max(0, q.shape.low - 1), to: Math.max(q.shape.low - 1, 0) + 5 } : { from: 0, to: 15 };
-        ui.board.replaceChildren(ui.neck(markers, Object.assign(win, { tuning: T.STANDARD, muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'A CAGED shape' })));
+        q.win = win; q.markers = markers;
+        // Lines join the notes, so the shape reads as one figure. The lane under the neck waits for the answer's letters.
+        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, win, { tuning: T.STANDARD, lane: true, links: [{ points: placesOf(q.shape.frets), cls: 'is-shape' }], muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'A CAGED shape' })));
         ui.choices(['C', 'A', 'G', 'E', 'D'].map(l => ({ value: l, main: l, sub: `${l} shape` })));
         return;
       }
@@ -300,7 +320,7 @@
       const win = ui.narrow() ? { from: Math.max(0, q.fret - 2), to: Math.max(0, q.fret - 2) + 5 } : { from: 0, to: 15 };
       ui.board.replaceChildren(ui.neck([{ string: q.string, fret: q.fret, kind: 'root', label: q.rootName }], Object.assign(win, { tuning: T.STANDARD, label: 'The root' })));
       const row = h('div', { class: 'answers' });
-      const draw = () => row.replaceChildren(...['C', 'A', 'G', 'E', 'D'].map((l, i) => h('button', { type: 'button', class: 'answer', 'aria-pressed': String(q.picked.includes(l)), style: q.picked.includes(l) ? 'border-color:var(--accent);background:var(--accent-soft)' : '', onclick: () => toggle(l) }, h('b', null, l), h('span', null, 'shape'), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
+      const draw = () => row.replaceChildren(...['C', 'A', 'G', 'E', 'D'].map((l, i) => h('button', { type: 'button', class: 'answer', 'aria-pressed': String(q.picked.includes(l)), onclick: () => toggle(l) }, h('b', null, l), h('span', null, 'shape'), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
       const toggle = l => {
         if (q.over) return;
         q.picked = q.picked.includes(l) ? q.picked.filter(x => x !== l) : q.picked.concat(l);
@@ -315,14 +335,39 @@
     check: (q, v) => q.mode === 'name' ? v === q.letter : v === q.expected.slice().sort().join(','),
     feedback(q, v, correct, ui) {
       if (q.mode === 'name') {
-        const strings = rootStrings(q.quality, q.letter).map(s => ord(s)).join(', ');
-        return { text: `${q.letter} shape: it is the open ${q.letter}${q.quality === 'minor' ? 'm' : ''} chord moved up the neck. Its roots are on the ${strings} strings.`, actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}/caged-${q.letter}`)]] };
+        const strings = andList(rootStrings(q.quality, q.letter).map(s => ord(s)));
+        // The answer on the same neck: the shape's outline and the shapes before and after it.
+        const pic = cagedPicture(q.rootName, q.quality, [q.shape]);
+        const markers = q.markers.map(m => Object.assign({}, m, { ring: pic.ring(m.string, m.fret) }));
+        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, q.win, { tuning: T.STANDARD, lane: true, regions: pic.regions, links: pic.links, muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'The shape and its neighbors' })));
+        const near = pic.regions.filter(r => r.cls.startsWith('is-near')).map(r => r.label);
+        return {
+          title: `${q.letter} shape`,
+          text: `The open ${q.letter}${q.quality === 'minor' ? 'm' : ''} chord moved up the neck. Its roots are on the ${strings} strings.${near.length ? ` Beside it on the neck: the ${andList(near)} ${near.length > 1 ? 'shapes' : 'shape'}. The ringed notes are the ones they share.` : ''}`,
+          actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}/caged-${q.letter}`)]]
+        };
       }
-      ui.board.querySelectorAll('.answer').forEach(b => { b.disabled = true; const l = b.querySelector('b').textContent; if (q.expected.includes(l)) b.classList.add('is-correct'); else if (q.picked.includes(l)) b.classList.add('is-wrong'); });
-      return { text: `From a root on the ${ord(q.string)} string: the ${q.expected.join(' and ')} shapes.`, actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}`)]] };
+      ui.board.querySelectorAll('.answer').forEach(b => { b.disabled = true; const l = b.querySelector('b').textContent; if (q.expected.includes(l)) { b.classList.add('is-correct'); b.append(D.icon('check', 'answer-mark')); } else if (q.picked.includes(l)) { b.classList.add('is-wrong'); b.append(D.icon('cross', 'answer-mark')); } });
+      // Both shapes that grow from this root, side by side on the neck.
+      const map = T.cagedMap(q.rootName, q.quality, 17);
+      const both = q.expected.map(l => map.find(m => m.shape === l && m.frets[q.string] === q.fret)).filter(Boolean);
+      let visual = null;
+      if (both.length) {
+        const pic = cagedPicture(q.rootName, q.quality, both, { only: true });
+        const tones = T.tonesOn(q.rootName, T.chordById(q.quality));
+        const markers = [];
+        for (const sh of both) sh.frets.forEach((f, s) => {
+          if (f === null || markers.some(m => m.string === s && m.fret === f)) return;
+          const t = tones.find(x => x.pc === T.mod(T.STANDARD[s] + f));
+          markers.push({ string: s, fret: f, kind: FB.degreeKind(t.label), label: t.label, ring: pic.ring(s, f) });
+        });
+        const lo = Math.min(...both.map(b => b.low)), hi = Math.max(...both.map(b => b.high));
+        visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(17, Math.max(hi + 1, lo + 5)), tuning: T.STANDARD, orientation: 'horizontal', regions: pic.regions, links: pic.links, label: 'The two shapes from this root' });
+      }
+      return { title: `${q.expected.join(' and ')} shapes`, text: `From a root on the ${ord(q.string)} string, ${q.rootName} at fret ${q.fret}. The two shapes overlap where they share notes.`, visual, actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}`)]] };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', [['name', 'Name the shape'], ['roots', 'Shapes from a root']], c.mode, v => set({ mode: v }))),
         D.field('Chords', GT.segmented('Chords', [['major', 'Major'], ['minor', 'Minor']], c.quality, v => set({ quality: v }))));
     }

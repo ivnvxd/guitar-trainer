@@ -1,10 +1,7 @@
 These font files are under the SIL Open Font License, Version 1.1.
 
-public-sans.woff2 (Latin subset, from Fontsource)
-Copyright 2015 The Public Sans Project Authors (https://github.com/uswds/public-sans) PublicSans-Italic[wght].ttf: Copyright 2015 The Public Sans Project Authors (https://github.com/uswds/public-sans)
-
-besley.woff2 (Latin subset, from Fontsource)
-Copyright 2020 The Besley Project Authors (https://github.com/indestructible-type) Besley-Italic[wght].ttf: Copyright 2020 The Besley Project Authors (https://github.com/indestructible-type)
+geist.woff2 (Latin subset, from Fontsource)
+Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

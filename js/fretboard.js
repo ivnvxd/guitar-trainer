@@ -7,6 +7,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   const INLAYS = [3, 5, 7, 9, 15, 17, 19, 21];
   const DOUBLE = [12, 24];
+  let uid = 0;
 
   function el(name, attrs = {}, parent) {
     const node = document.createElementNS(NS, name);
@@ -34,6 +35,11 @@
    * options.leftHanded         mirror the neck
    * options.dimOutside         [low, high]: shade the frets outside this range
    * options.label              accessible name of the board
+   * options.links              [{ points: [{ string, fret }], cls }]: lines that join notes, under the dots
+   * options.regions            [{ points: [{ string, fret }], label, cls }]: an outline around a group of notes,
+   *                            with its label beside the neck (CAGED shapes)
+   * options.lane               keep the room for region letters, so the neck does not grow when they appear
+   * A marker with ring: true gets a second ring, for a note that two shapes share.
    */
   function render(container, options) {
     const o = Object.assign({ from: 0, to: 15, tuning: GT.theory.STANDARD, markers: [], orientation: 'auto', leftHanded: false }, options);
@@ -46,8 +52,13 @@
     const pad = { along: vertical ? 46 : 30, across: vertical ? 44 : 26 }; // room for fret numbers, string names and mute marks
     const neckLength = widths.reduce((a, b) => a + b, 0);
     const neckWidth = gap * (strings - 1);
+    // Outlines and lines keep only the notes inside the frets shown.
+    const inView = p => p.fret >= o.from && p.fret <= o.to && p.string >= 0 && p.string < strings;
+    const regions = (o.regions || []).map(r => Object.assign({}, r, { points: r.points.filter(inView) })).filter(r => r.points.length);
+    // Region letters sit in a lane under a flat neck. An upright neck has room beside it.
+    const lane = !vertical && (o.lane || regions.some(r => r.label)) ? 26 : 0;
     const W = vertical ? neckWidth + pad.across * 2 : neckLength + pad.along + 8;
-    const H = vertical ? neckLength + pad.along + 8 : neckWidth + pad.across * 2 + 16;
+    const H = vertical ? neckLength + pad.along + 8 : neckWidth + pad.across * 2 + 16 + lane;
 
     // Position along the neck (fret centre) and across it (string), mapped to x/y.
     const starts = [];
@@ -66,6 +77,11 @@
     container.replaceChildren();
     const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: `fb ${vertical ? 'fb-vertical' : 'fb-horizontal'}`, role: 'group', 'aria-label': o.label || 'Fretboard' });
     container.appendChild(svg);
+    // Wood: darker at the edges, so the neck looks round.
+    const gid = 'fbw' + (++uid);
+    const defs = el('defs', {}, svg);
+    const grad = el('linearGradient', Object.assign({ id: gid }, vertical ? { x1: 0, y1: 0, x2: 1, y2: 0 } : { x1: 0, y1: 0, x2: 0, y2: 1 }), defs);
+    [[0, 'fb-wood-edge'], [0.5, 'fb-wood-mid'], [1, 'fb-wood-edge']].forEach(([at, cls]) => el('stop', { offset: at, class: cls }, grad));
 
     // The board, starting after the open-string column when fret 0 is shown.
     const boardStart = o.from === 0 ? fretLine(0) : pad.along;
@@ -75,7 +91,7 @@
       return el('rect', Object.assign({ x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y), width: Math.abs(p2.x - p1.x), height: Math.abs(p2.y - p1.y) }, attrs), svg);
     };
     const c1 = pad.across - gap * 0.42, c2 = pad.across + neckWidth + gap * 0.42;
-    rect(boardStart, boardEnd, c1, c2, { class: 'fb-board', rx: 3 });
+    rect(boardStart, boardEnd, c1, c2, { class: 'fb-board', rx: 3, fill: `url(#${gid})` });
     if (o.dimOutside) {
       const [lo, hi] = o.dimOutside;
       if (lo > o.from) rect(o.from === 0 ? boardStart : pad.along, fretLine(Math.max(o.from, lo - 1)), c1, c2, { class: 'fb-shade' });
@@ -88,6 +104,10 @@
       if (INLAYS.includes(f)) { const p = xy(along(f), mid); el('circle', { cx: p.x, cy: p.y, r: 5.5, class: 'fb-inlay' }, svg); }
       if (DOUBLE.includes(f)) for (const d of [-gap, gap]) { const p = xy(along(f), mid + d); el('circle', { cx: p.x, cy: p.y, r: 5.5, class: 'fb-inlay' }, svg); }
     }
+    // Shape outlines, under the frets and strings.
+    const pos = p => xy(along(p.fret), across(p.string));
+    const regionLayer = el('g', { class: 'fb-regions' }, svg);
+    for (const r of regions) el('path', { d: hullPath(r.points.map(pos), vertical ? 21 : 19), class: 'fb-region ' + (r.cls || '') }, regionLayer);
     // Frets and nut.
     for (let f = o.from; f <= o.to; f++) {
       const a = fretLine(f);
@@ -98,6 +118,11 @@
     for (let s = 0; s < strings; s++) {
       const p1 = xy(boardStart - (o.from === 0 ? widths[0] * 0.8 : 0), across(s)), p2 = xy(boardEnd, across(s));
       el('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: `fb-string${s < 3 ? ' fb-wound' : ''}`, 'stroke-width': (2.2 - s * 0.28).toFixed(2) }, svg);
+    }
+    // Lines that join notes, for example the notes of one chord shape.
+    for (const l of o.links || []) {
+      if (l.points.length < 2 || !l.points.every(inView)) continue;
+      el('polyline', { points: l.points.map(pos).map(p => `${p.x},${p.y}`).join(' '), class: 'fb-link ' + (l.cls || '') }, svg);
     }
     // Fret numbers and string names.
     const names = o.tuning.map(m => GT.theory.PC_PLAIN[m % 12]);
@@ -142,10 +167,23 @@
         if (m) {
           if (m.title) el('title', {}, g).textContent = m.title;
           if (m.kind === 'muted') { const t = el('text', { class: 'fb-mute', 'text-anchor': 'middle', y: 5 }, g); t.textContent = '×'; continue; }
-          el('circle', { r: m.small ? 9 : 14, class: 'fb-dot' }, g);
+          const r = m.small ? 9 : 14;
+          if (m.ring) el('circle', { r: r + 5, class: 'fb-ring' }, g);
+          el('circle', { r: r + 4, class: 'fb-halo' }, g);
+          el('circle', { r, class: 'fb-dot' }, g);
           if (m.label) { const t = el('text', { class: 'fb-label', 'text-anchor': 'middle', y: 4.5 }, g); t.textContent = m.label; if (m.label.length > 2) t.classList.add('fb-label-long'); }
         }
       }
+    }
+    // Region letters, beside the neck at the middle of each outline.
+    for (const r of regions) {
+      if (!r.label || !r.points.length) continue;
+      const ps = r.points.map(pos);
+      const mx = ps.reduce((a, p) => a + p.x, 0) / ps.length, my = ps.reduce((a, p) => a + p.y, 0) / ps.length;
+      const p = vertical ? { x: o.leftHanded ? c1 - 11 : c2 + 11, y: my } : { x: mx, y: c2 + 41 };
+      const g = el('g', { class: 'fb-region-label ' + (r.cls || ''), transform: `translate(${p.x} ${p.y})` }, svg);
+      el('circle', { r: 10 }, g);
+      el('text', { y: 4, 'text-anchor': 'middle' }, g).textContent = r.label;
     }
     if (o.onPress) {
       const handler = target => {
@@ -158,6 +196,26 @@
       svg.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest) { e.preventDefault(); handler(e.target); } });
     }
     return { svg, vertical };
+  }
+
+  // The outline of a group of points, grown by r: the convex hull with round corners.
+  function hullPath(points, r) {
+    const p = points.slice().sort((a, b) => a.x - b.x || a.y - b.y)
+      .filter((q, i, list) => i === 0 || q.x !== list[i - 1].x || q.y !== list[i - 1].y);
+    if (!p.length) return '';
+    if (p.length === 1) { const { x, y } = p[0]; return `M ${x - r} ${y} a ${r} ${r} 0 1 0 ${2 * r} 0 a ${r} ${r} 0 1 0 ${-2 * r} 0 Z`; }
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [], upper = [];
+    for (const q of p) { while (lower.length > 1 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+    for (const q of p.slice().reverse()) { while (upper.length > 1 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+    const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+    const n = hull.length;
+    // The outward normal of each edge; the path runs along the edges, moved out by r, with an arc at each corner.
+    const normal = hull.map((a, i) => { const b = hull[(i + 1) % n], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1; return { x: dy / len, y: -dx / len }; });
+    const at = (q, nv) => `${(q.x + nv.x * r).toFixed(1)} ${(q.y + nv.y * r).toFixed(1)}`;
+    let d = `M ${at(hull[0], normal[n - 1])}`;
+    hull.forEach((q, i) => { d += ` A ${r} ${r} 0 0 1 ${at(q, normal[i])} L ${at(hull[(i + 1) % n], normal[i])}`; });
+    return d + ' Z';
   }
 
   // Color family of a degree label: root, third, fifth, seventh or other.

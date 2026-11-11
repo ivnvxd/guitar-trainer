@@ -15,6 +15,9 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 9. Tools: a metronome and one-minute chord changes.
 10. Circle of fifths: a frame holds the seven chords of the key with their numerals, in major and in minor. Progressions light up on the circle as they play.
 11. Light and dark themes. Automatic follows the device.
+12. CAGED map: the five shapes over the whole neck as outlines, with rings on the notes two shapes share. One shape shows lines between its notes and the outlines of its neighbors. The CAGED drill shows the same picture after each answer.
+13. Intervals: a song that starts with the interval after each answer, Hear all for the whole set, your answer and the right one at once after a miss, and the interval you chose comes back soon as well.
+14. Library: every choice of a page (root, type, shape, string set, labels, frets) sits in one panel above the neck.
 
 ## Next
 

@@ -39,6 +39,18 @@
     return best;
   }
   const where = p => `${FB.ordinal(6 - p.string)} string, ${p.fret === 0 ? 'open' : 'fret ' + p.fret}`;
+  const songFor = (semi, dir) => dir === 'harmonic' ? null : (T.INTERVAL_SONGS[semi] || {})[dir] || null;
+  // Your answer, then the right one, on the same first note.
+  function compareIntervals(q, chosenSemi, times = 1) {
+    const other = q.dir === 'down' ? q.root - chosenSemi : q.root + chosenSemi;
+    const gap = q.dir === 'harmonic' ? 1.5 : 1.8;
+    A.silence();
+    for (let k = 0; k < times; k++) {
+      A.later(() => playInterval(q.root, other, q.dir), 2 * gap * k * 1000);
+      A.later(() => playInterval(q.root, q.target, q.dir), (2 * k + 1) * gap * 1000);
+    }
+    return 2 * gap * times;
+  }
 
   D.add({
     id: 'ear-intervals', track: 'ear',
@@ -48,7 +60,8 @@
     help: [
       'Name it: you hear two notes and choose the interval. Sing it: you see an interval, hear the first note, and sing the second before you check. On the neck: you hear the interval and tap the second note on the guitar.',
       'With "Add intervals for me" on, you start with the perfect 5th, major 3rd, octave and perfect 4th. When you answer these right about 85 percent of the time, the next group comes in: minor 3rd, major 2nd, minor 2nd, then the 6ths and the tritone, then the 7ths.',
-      'Practice ascending first, then descending, then together. A right answer that takes more than 3 seconds still counts as not learned yet, so it comes back sooner. After a miss, press Compare to hear your answer and the right one on the same note.',
+      'Practice ascending first, then descending, then together. A right answer that takes more than 3 seconds still counts as not learned yet, so it comes back sooner. After a miss you hear your answer and the right one on the same note, and both intervals come back a few questions later.',
+      'Hear all plays every interval of your set from the same first note, and lights each answer while it sounds. Use it when new intervals come in. After each answer, a song that starts with the interval helps you recall it.',
       'Ten minutes a day works better than one long session.'
     ],
     defaults: { mode: 'identify', direction: 'up', auto: true, set: [7, 4, 12, 5] },
@@ -103,9 +116,24 @@
       }
       ui.title('Which interval?');
       ui.sub(q.dir === 'harmonic' ? 'Both notes together.' : q.dir === 'down' ? 'Descending: the second note is lower.' : 'Ascending: the second note is higher.');
-      ui.actions([['▶ Replay', replay, 'R'], ['▶ First note', () => A.note(q.root, 0, 1)]]);
-      ui.choices(this.semis(ui.config).map(s => ({ value: s, main: T.intervalBySemi(s).short, sub: T.intervalBySemi(s).name })));
+      const semis = this.semis(ui.config);
+      // Hear all: every interval of the set from the same first note, each answer lit while it sounds.
+      const tour = () => {
+        if (!ui.session.answered) q.assisted = true;
+        A.silence();
+        const tiles = ui.answers.querySelectorAll('.answer');
+        const step = q.dir === 'harmonic' ? 1.6 : 1.9;
+        semis.forEach((semi, i) => A.later(() => {
+          tiles.forEach((t, k) => t.classList.toggle('is-playing', k === i));
+          playInterval(q.root, q.dir === 'down' ? q.root - semi : q.root + semi, q.dir);
+        }, i * step * 1000));
+        A.later(() => tiles.forEach(t => t.classList.remove('is-playing')), semis.length * step * 1000);
+      };
+      ui.actions([['▶ Replay', replay, 'R'], ['▶ First note', () => A.note(q.root, 0, 1)], ['▶ Hear all', tour, 'H']]);
+      q.tour = tour;
+      ui.choices(semis.map(s => ({ value: s, main: T.intervalBySemi(s).short, sub: T.intervalBySemi(s).name })));
     },
+    onKey(e, q) { if (q && q.tour && (e.key === 'h' || e.key === 'H')) { e.preventDefault(); q.tour(); } },
     play(q, what) {
       if (!q) return 0;
       if (q.mode === 'sing') { A.note(q.root, 0, 1.2); return 0; }
@@ -129,7 +157,7 @@
           for (let s = 0; s < 6; s++) { const f = q.target - t[s]; if (f >= q.from && f <= q.to && !(s === place1.string && f === place1.fret)) markers.push({ string: s, fret: f, kind: 'correct', label: b }); }
           const given = Number(v);
           if (q.tapped) markers.push({ string: q.tapped.string, fret: q.tapped.fret, kind: 'wrong', label: name(given) });
-          ui.board.replaceChildren(ui.neck(markers, { from: q.from, to: q.to, label: 'Answer' }));
+          ui.board.replaceChildren(ui.neck(markers, { from: q.from, to: q.to, label: 'Answer', links: markers.filter(m => m.kind === 'correct').map(m => ({ points: [place1, m], cls: 'is-answer' })) }));
           const diff = Math.abs(given - q.root);
           const givenIv = diff <= 12 ? T.intervalBySemi(diff) : null;
           return {
@@ -141,22 +169,27 @@
       }
       markers.push({ string: place2.string, fret: place2.fret, kind: FB.degreeKind(intervalLabel(q.semi)) === 'root' ? 'correct' : FB.degreeKind(intervalLabel(q.semi)), label: b });
       const lo = Math.min(place1.fret, place2.fret), hi = Math.max(place1.fret, place2.fret);
-      ui.board.replaceChildren(ui.neck(markers, { from: Math.max(0, lo - 2), to: Math.min(15, Math.max(hi + 2, lo + 4)), orientation: 'horizontal', label: 'Where the interval is on the guitar' }));
-      const text = `${correct ? '' : `You chose ${T.intervalBySemi(Number(v)).name.toLowerCase()}. `}It was ${an(iv.name.toLowerCase())}: ${a} (${where(place1)}) to ${b} (${where(place2)}).`;
+      // The two notes on the neck, joined by a line, in the result box: the answers above stay where they are.
+      const visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(15, Math.max(hi + 1, lo + 4)), orientation: 'horizontal', compact: true, links: [{ points: [place1, place2], cls: 'is-answer' }], label: 'Where the interval is on the guitar' });
+      const song = songFor(q.semi, q.dir);
+      const frets = q.semi === 0 ? 'the same note' : `${q.semi} fret${q.semi > 1 ? 's' : ''} apart on one string`;
+      const text = `${a} to ${b}: ${frets}. On the neck: ${where(place1)} to ${where(place2)}.${song ? ` Think of ${song}.` : ''}`;
       const actions = [['▶ Replay', () => this.play(q)]];
-      if (!correct) actions.unshift(['▶ Compare', () => {
-        const other = q.dir === 'down' ? q.root - Number(v) : q.root + Number(v);
-        const gap = q.dir === 'harmonic' ? 1.5 : 1.8;
-        A.silence();
-        [0, 2 * gap].forEach(t0 => {
-          A.later(() => playInterval(q.root, other, q.dir), t0 * 1000);
-          A.later(() => playInterval(q.root, q.target, q.dir), (t0 + gap) * 1000);
-        });
-      }]);
-      return { text, actions };
+      if (!correct) {
+        actions.unshift(['▶ Compare', () => compareIntervals(q, Number(v), 2)]);
+        // After a miss you hear your answer and the right one at once.
+        A.later(() => compareIntervals(q, Number(v), 1), 450);
+      }
+      return {
+        title: correct ? iv.name : `It was ${an(iv.name.toLowerCase())}`,
+        sub: correct ? null : `You chose ${T.intervalBySemi(Number(v)).name.toLowerCase()}. Hear yours, then the right one.`,
+        text, visual, actions,
+        // A mixed-up pair comes back sooner: the interval you chose is asked again soon as well.
+        requeue: correct ? [] : [`${v}:${q.dir}`]
+      };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', [['identify', 'Name it'], ['sing', 'Sing it'], ['guitar', 'On the neck']], c.mode, v => set({ mode: v }))),
         D.field('Direction', GT.segmented('Direction', [['up', 'Ascending'], ['down', 'Descending'], ['harmonic', 'Together'], ['mixed', 'Mixed']], c.direction, v => set({ direction: v }))),
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.semis(Object.assign({}, c, { auto: true })) }) }), 'Add intervals for me as I improve'),
@@ -229,7 +262,7 @@
       };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.field('New key', GT.segmented('New key', [['each', 'Every question'], ['ten', 'Every 10 questions']], c.keyChange, v => set({ keyChange: v }))),
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.labels(Object.assign({}, c, { auto: true })) }) }), 'Add degrees for me as I improve'),
         c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.labels(c).join(', ')}.`)
@@ -291,7 +324,7 @@
       };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.inversions, onchange: e => set({ inversions: e.target.checked }) }), 'Invert triads'),
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.ids(Object.assign({}, c, { auto: true })) }) }), 'Add chords for me as I improve'),
         c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.ids(c).map(id => T.chordById(id).name.toLowerCase()).join(', ')}.`)
@@ -379,7 +412,7 @@
       };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.numerals(Object.assign({}, c, { auto: true })) }) }), 'Add chords for me as I improve'),
         c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.numerals(c).join(', ')}.`)
           : D.pickset('Chords', Object.keys(NUMERAL_DEGREE).map(n => ({ value: n, main: n })), c.set, v => set({ set: v.includes('I') ? v : ['I'].concat(v) }), 2));

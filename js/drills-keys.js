@@ -102,7 +102,7 @@
       return { hold: 1.2, text: `${ROMANS[q.mode][q.degree - 1]} in ${q.key} ${q.mode} is ${q.chord.name}. The key: ${all}.`, actions: [['▶ Hear it', () => A.notes(midis, 'strum')]] };
     },
     options(c, set) {
-      return h('div', { style: 'display:grid;gap:14px' },
+      return h('div', { class: 'opts' },
         D.pickset('Keys', [{ value: 'major', main: 'Major keys' }, { value: 'minor', main: 'Minor keys' }], c.modes, v => set({ modes: v })),
         D.pickset('Chord numbers', [1, 2, 3, 4, 5, 6, 7].map(d => ({ value: d, main: ROMANS.major[d - 1], sub: `/ ${ROMANS.minor[d - 1]}` })), c.degrees, v => set({ degrees: v })));
     }

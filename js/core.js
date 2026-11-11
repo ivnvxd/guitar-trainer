@@ -57,7 +57,7 @@
     const theme = settings.theme === 'auto' ? (lightQuery && lightQuery.matches ? 'light' : 'dark') : settings.theme;
     document.documentElement.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'light' ? '#f2f3f0' : '#1a1c1b';
+    if (meta) meta.content = theme === 'light' ? '#f4f6f9' : '#0f1218';
   }
   if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
   const tuning = () => (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;

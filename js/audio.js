@@ -15,7 +15,9 @@
     const Ctx = root.AudioContext || root.webkitAudioContext;
     if (!Ctx) return null;
     if (!ctx) {
-      ctx = new Ctx();
+      // iPhone: without this, the ring/silent switch mutes the site. Safari 17 and later.
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+      ctx = new Ctx({ latencyHint: 'interactive' });
       master = ctx.createGain();
       master.gain.value = volume;
       // A gentle low-pass takes the edge off the plucked noise.
@@ -26,9 +28,49 @@
       limit.threshold.value = -8; limit.knee.value = 4; limit.ratio.value = 12; limit.attack.value = 0.003; limit.release.value = 0.2;
       master.connect(tone); tone.connect(limit); limit.connect(ctx.destination);
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    // Safari also has the state 'interrupted', after a call or a switch to another app.
+    if (ctx.state !== 'running') ctx.resume().catch(() => { /* needs a tap first */ });
     return ctx;
   }
+
+  // Phones start audio only inside a tap. The first tap or key press anywhere opens the sound:
+  // it resumes the context and plays one silent sample, which iOS needs to unlock the output.
+  // Older iPhones without navigator.audioSession: a short silent <audio> element moves the page
+  // to the media channel, so the silent switch does not mute it.
+  // The media step runs until a play() succeeds, because iOS may not count the first event as a tap.
+  let mediaDone = !(/iPhone|iPad|iPod/.test(navigator.userAgent)) || !!navigator.audioSession;
+  let mediaTrying = false;
+  const SILENT_WAV = 'data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
+  function unlock() {
+    if (!context()) return;
+    if (ctx.state !== 'running') {
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      src.connect(ctx.destination);
+      src.start(0);
+    }
+    if (!mediaDone && !mediaTrying) {
+      mediaTrying = true;
+      try {
+        const tag = document.createElement('audio');
+        tag.setAttribute('x-webkit-airplay', 'deny');
+        tag.preload = 'auto';
+        tag.src = SILENT_WAV;
+        const p = tag.play();
+        if (p && p.then) p.then(() => { mediaDone = true; tag.pause(); }).catch(() => { /* try again on the next tap */ }).finally(() => { mediaTrying = false; });
+        else { mediaDone = true; mediaTrying = false; }
+      } catch { mediaTrying = false; }
+    }
+    if (ctx.state === 'running' && mediaDone) for (const type of GESTURES) root.removeEventListener(type, unlock, true);
+  }
+  const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'];
+  for (const type of GESTURES) root.addEventListener(type, unlock, true);
+  // Back from another app: the context may be paused. The next tap resumes it as well.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !ctx || ctx.state === 'running') return;
+    ctx.resume().catch(() => {});
+    for (const type of GESTURES) root.addEventListener(type, unlock, true);
+  });
   const freq = midi => 440 * Math.pow(2, (midi - 69) / 12);
 
   // Karplus-Strong. The averaging filter delays by half a sample, so the period is N + 0.5.

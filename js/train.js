@@ -15,6 +15,19 @@
   const byId = {};
   const drills = { add(def) { list.push(def); byId[def.id] = def; }, list, byId };
   const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
+  // Small line icons, drawn in the current text color.
+  const ICONS = {
+    check: 'M5 12.5l4.5 4.5L19 7.5',
+    cross: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
+    plus: 'M12 5v14M5 12h14',
+    sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4'
+  };
+  function icon(name, cls = '') {
+    const el = GT.fretboard.el;
+    const svg = el('svg', { viewBox: '0 0 24 24', class: 'icon ' + cls, 'aria-hidden': 'true' });
+    el('path', { d: ICONS[name] }, svg);
+    return svg;
+  }
 
   // ---------- hub ----------
   function hub(main) {
@@ -66,15 +79,18 @@
   // ---------- runner ----------
   function run(main, d) {
     const config = loadConfig(d);
-    const session = { count: 0, correct: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false };
+    const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false };
     let advanceTimer = null;
 
     const statLine = h('div', { class: 'drill-stats', 'aria-live': 'off' });
-    const settingsPanel = h('div', { class: 'settings-panel', hidden: true });
-    const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': 'false', onclick: () => {
+    // The options stay open on a wide screen, so a change is one click away. The choice is remembered.
+    const optionsOpen = store.get('drillOptions', root.innerWidth >= 900);
+    const settingsPanel = h('div', { class: 'settings-panel', id: 'drill-options', hidden: !optionsOpen });
+    const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options', onclick: () => {
       settingsPanel.hidden = !settingsPanel.hidden;
       settingsBtn.setAttribute('aria-expanded', String(!settingsPanel.hidden));
-    } }, 'Options');
+      store.set('drillOptions', !settingsPanel.hidden);
+    } }, icon('sliders'), 'Options');
     const title = h('h2', { id: 'q-title' });
     const sub = h('p', { class: 'sub' });
     const promptActions = h('div', { class: 'prompt-actions' });
@@ -124,7 +140,8 @@
       statLine.replaceChildren(
         h('span', null, h('b', null, length ? `${Math.min(session.count + (session.answered ? 0 : 1), length)} / ${length}` : session.count + 1), 'question'),
         h('span', null, h('b', null, session.count ? acc + '%' : '–'), 'right'),
-        h('span', null, h('b', null, med ? (med / 1000).toFixed(1) + ' s' : '–'), 'typical time'));
+        h('span', null, h('b', null, med ? (med / 1000).toFixed(1) + ' s' : '–'), 'typical time'),
+        h('span', { class: session.streak >= 3 ? 'is-hot' : '' }, h('b', null, session.streak), 'in a row'));
     }
     function pool() { return d.pool(config); }
     function nextItem() {
@@ -143,6 +160,8 @@
       session.answered = false;
       session.last = item;
       feedback.className = 'feedback';
+      feedback.onpointerdown = null;
+      session.stay = null;
       feedback.replaceChildren(h('p', { class: 'muted' }, d.hint || 'Choose an answer.'));
       board.replaceChildren();
       sub.textContent = '';
@@ -168,39 +187,61 @@
       session.answered = true;
       const q = session.q;
       const correct = d.check(q, value);
-      const ms = Math.max(0, performance.now() - session.started);
       const fast = typeof d.fastMs === 'function' ? d.fastMs(config) : d.fastMs || 4000;
+      // After help such as Hear all, a right answer still counts, but as slow: it is not learned yet.
+      const ms = Math.max(0, performance.now() - session.started, q.assisted ? fast * 2 : 0);
       const id = statsId(d, config);
       P.record(id, q.item, correct, ms, fast);
       session.count++;
-      if (correct) { session.correct++; session.times.push(ms); }
+      if (correct) { session.correct++; session.streak++; if (!q.assisted) session.times.push(ms); }
       else {
+        session.streak = 0;
         session.missed[q.item] = (session.missed[q.item] || 0) + 1;
         session.requeue.push({ item: q.item, at: session.count + 3 + Math.floor(Math.random() * 3) });
       }
-      // Mark the answer buttons.
+      // Mark the answer buttons: a check on the right one, a cross on a wrong choice.
       answers.querySelectorAll('.answer').forEach(b => {
         b.disabled = true;
-        if (d.check(q, decode(b.dataset.value))) b.classList.add('is-correct');
-        else if (b.dataset.value === String(value)) b.classList.add('is-wrong');
+        if (d.check(q, decode(b.dataset.value))) { b.classList.add('is-correct'); b.append(icon('check', 'answer-mark')); }
+        else if (b.dataset.value === String(value)) { b.classList.add('is-wrong'); b.append(icon('cross', 'answer-mark')); }
       });
       const fb = d.feedback(q, value, correct, ui) || {};
+      // A mixed-up item, such as the interval you chose instead, comes back sooner too.
+      for (const item of fb.requeue || []) if (item !== q.item && pool().includes(item)) session.requeue.push({ item, at: session.count + 2 + Math.floor(Math.random() * 3) });
       let unlocked = null;
       if (d.stages && config.auto) unlocked = maybeUnlock(d, config);
-      feedback.className = 'feedback ' + (correct ? 'ok' : 'bad');
-      feedback.replaceChildren(
-        h('p', null, h('b', null, correct ? (ms > fast ? 'Right, but slow. ' : 'Right. ') : 'Not quite. '), fb.text || '', unlocked ? h('span', null, ' ', h('b', null, unlocked)) : null),
-        h('div', { class: 'actions' }, (fb.actions || []).map(([label, fn]) => h('button', { type: 'button', class: 'btn', onclick: fn }, label)),
-          h('button', { type: 'button', class: 'btn btn-primary', onclick: next }, 'Next', h('span', { class: 'kbd' }, 'Space'))));
+      // Go on by itself after a right answer, once the feedback sound has finished. A picture gets more time.
+      const wait = Math.max(d.advanceMs || 1100, (fb.hold || 0) * 1000 + 400, fb.visual ? 2600 : 0);
+      const auto = correct && settings.autoAdvance !== false && d.autoAdvance !== false && !unlocked;
+      const timerBar = auto ? h('div', { class: 'result-timer', 'aria-hidden': 'true' }, h('i', { style: `animation-duration:${wait}ms` })) : null;
+      // Any touch inside the result box stops the countdown, so you can replay and look.
+      const stay = () => { clearTimeout(advanceTimer); if (timerBar) timerBar.remove(); };
+      const verdict = correct ? (q.assisted ? 'Right, with help' : ms > fast ? 'Right, but slow' : 'Right') : 'Not quite';
+      feedback.className = 'feedback result ' + (correct ? 'ok' : 'bad');
+      feedback.onpointerdown = e => { if (!e.target.closest('.btn-primary')) stay(); };
+      feedback.replaceChildren(...[
+        h('div', { class: 'result-head' },
+          h('span', { class: 'result-icon' }, icon(correct ? 'check' : 'cross')),
+          h('div', { class: 'result-say' },
+            h('span', { class: 'result-verdict' }, verdict),
+            fb.title ? h('b', { class: 'result-answer' }, fb.title) : null,
+            fb.sub ? h('span', { class: 'result-sub' }, fb.sub) : null)),
+        fb.text ? h('p', { class: 'result-text' }, fb.text) : null,
+        unlocked ? h('p', { class: 'result-new' }, icon('plus'), unlocked) : null,
+        fb.visual ? h('div', { class: 'result-visual' }, fb.visual) : null,
+        h('div', { class: 'actions' }, (fb.actions || []).map(([label, fn]) => h('button', { type: 'button', class: 'btn', onclick: () => { stay(); fn(); } }, label)),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: next }, 'Next', h('span', { class: 'kbd' }, 'Space'))),
+        timerBar].filter(Boolean));
+      session.stay = stay;
       updateStats();
-      // On a phone the feedback can sit below a tall neck: bring it into view.
-      if (feedback.getBoundingClientRect().bottom > root.innerHeight) {
+      // On a phone the feedback can sit below a tall neck or under the tab bar: bring it into view.
+      const bar = document.querySelector('.topbar nav');
+      const covered = bar && getComputedStyle(bar).position === 'fixed' ? bar.offsetHeight : 0;
+      if (feedback.getBoundingClientRect().bottom > root.innerHeight - covered) {
         const still = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
         feedback.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
       }
-      // Go on by itself after a right answer, once the feedback sound has finished.
-      const wait = Math.max(d.advanceMs || 1100, (fb.hold || 0) * 1000 + 400);
-      if (correct && settings.autoAdvance !== false && d.autoAdvance !== false && !unlocked) advanceTimer = setTimeout(next, wait);
+      if (auto) advanceTimer = setTimeout(next, wait);
       else feedback.querySelector('.btn-primary').focus({ preventScroll: true });
     }
     // The key hints name only the keys that work in this drill and mode.
@@ -237,7 +278,7 @@
     }
     function restart() {
       clearTimeout(advanceTimer);
-      Object.assign(session, { count: 0, correct: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false });
+      Object.assign(session, { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false });
       stage.replaceChildren(promptBox);
       next();
     }
@@ -250,7 +291,7 @@
         if (tag === 'BUTTON' && e.key === 'Enter') return;
         e.preventDefault();
         if (session.answered) next(); else ui.play();
-      } else if (e.key === 'r' || e.key === 'R') { ui.play(); }
+      } else if (e.key === 'r' || e.key === 'R') { if (session.stay) session.stay(); ui.play(); }
       else {
         const i = KEYS.indexOf(e.key);
         const btn = i >= 0 ? answers.querySelectorAll('.answer')[i] : null;
@@ -263,7 +304,7 @@
     function buildSettings() {
       settingsPanel.replaceChildren(
         d.options ? d.options(config, patch => { Object.assign(config, patch); saveConfig(d, config); buildSettings(); restart(); }) : null,
-        h('div', { class: 'row' },
+        h('div', { class: 'opts' },
           h('div', { class: 'field' }, h('span', null, 'Session length'), GT.segmented('Session length', [[10, '10'], [20, '20'], [40, '40'], [0, 'No end']], config.length, v => { config.length = v; saveConfig(d, config); buildSettings(); updateStats(); }))));
     }
     if (config.length === undefined) config.length = 20;
@@ -313,5 +354,5 @@
   }
   function field(label, control) { return h('div', { class: 'field' }, h('span', null, label), control); }
 
-  GT.drills = Object.assign(drills, { pickset, field, statsId, loadConfig, TRACKS, KEYS });
+  GT.drills = Object.assign(drills, { pickset, field, statsId, loadConfig, TRACKS, KEYS, icon });
 })(window);

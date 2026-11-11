@@ -62,6 +62,21 @@
     { id: 'P8', semi: 12, label: '8', name: 'Octave', short: 'P8' }
   ];
   const intervalBySemi = semi => INTERVALS.find(i => i.semi === semi);
+  // Songs that open with an interval, by semitones. They help you recall the sound of a melodic interval.
+  const INTERVAL_SONGS = {
+    1: { up: 'Jaws (the theme)', down: 'Joy to the World' },
+    2: { up: 'Happy Birthday, on “-py birth-”', down: 'Mary Had a Little Lamb' },
+    3: { up: 'Smoke on the Water (the riff)', down: 'Hey Jude' },
+    4: { up: 'When the Saints Go Marching In', down: 'Swing Low, Sweet Chariot' },
+    5: { up: 'Here Comes the Bride', down: 'Eine kleine Nachtmusik' },
+    6: { up: 'The Simpsons theme', down: 'Black Sabbath (the riff)' },
+    7: { up: 'Star Wars (the main theme)', down: 'The Flintstones' },
+    8: { up: 'The Entertainer, on the third and fourth notes' },
+    9: { up: 'My Bonnie Lies over the Ocean', down: 'Nobody Knows the Trouble I’ve Seen' },
+    10: { up: 'Star Trek (the original theme)' },
+    11: { up: 'Take On Me (the chorus)' },
+    12: { up: 'Somewhere Over the Rainbow' }
+  };
 
   const SCALE_GROUPS = [
     { id: 'major-modes', name: 'Major scale and its modes', items: [
@@ -263,6 +278,23 @@
     return shapes.sort((a, b) => a.low - b.low);
   }
 
+  // Every CAGED shape that fits between the nut and maxFret, also the copies 12 frets up or down,
+  // in order up the neck. Neighbours share notes: that is how the five shapes join.
+  function cagedMap(rootName, quality = 'major', maxFret = 15) {
+    const out = [];
+    for (const s of cagedShapes(rootName, quality)) for (const k of [-12, 0, 12]) {
+      const frets = s.frets.map(f => f === null ? null : f + k);
+      const used = frets.filter(f => f !== null);
+      const low = Math.min(...used), high = Math.max(...used);
+      if (low >= 0 && high <= maxFret) out.push({ shape: s.shape, frets, low, high });
+    }
+    return out.sort((a, b) => a.low - b.low || a.high - b.high);
+  }
+  // The places that two shapes both use, as "string:fret".
+  function sharedPlaces(a, b) {
+    return a.frets.map((f, s) => f !== null && b.frets[s] === f ? `${s}:${f}` : null).filter(Boolean);
+  }
+
   // Movable shapes as fret offsets from the root fret on the root string (0 = 6th string, 1 = 5th, 2 = 4th).
   const MOVABLE = {
     '7': [{ rootString: 0, offsets: [0, 2, 0, 1, 0, 0] }, { rootString: 1, offsets: [null, 0, 2, 0, 2, 0] }, { rootString: 2, offsets: [null, null, 0, 2, 1, 2] }],
@@ -429,8 +461,8 @@
   const theory = {
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, INVERSIONS, MODE_INDEX,
-    mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, scaleById, chordById,
-    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, triadVoicings, positions,
+    mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
+    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions,
     placeShape, chordShapes, identifyChord, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)

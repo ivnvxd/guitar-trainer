@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#1a1c1b">
+  <meta name="theme-color" content="#0f1218">
   <script>
     // Set the theme before the first paint, so a light page does not flash dark.
     try {
       var theme = JSON.parse(localStorage.getItem('gt.settings') || '{}').theme || 'auto';
       if (theme === 'auto') theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.dataset.theme = theme;
-      if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f2f3f0';
+      if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f4f6f9';
     } catch (e) { /* the dark theme stays */ }
   </script>
   <meta name="description" content="Guitar ear training and fretboard drills, with a library of scales, chords, triads, intervals and keys.">
@@ -19,8 +19,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="preload" href="fonts/public-sans.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/besley.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/app.css">
   <script src="js/theory.js" defer></script>
   <script src="js/audio.js" defer></script>
@@ -39,12 +38,12 @@
 <body>
   <header class="topbar">
     <div class="topbar-inner">
-      <a class="brand" href="#/train"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9.3h18M3 14.7h18M9 4v16M15 4v16"/><circle cx="12" cy="12" r="2.2"/></svg><span id="brand-name">Guitar Trainer</span></a>
+      <a class="brand" href="#/train"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffc84f"/><stop offset=".55" stop-color="#ff8f3d"/><stop offset="1" stop-color="#ff6b3d"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#bm)"/><g stroke="#1c1005" stroke-linecap="round"><path d="M7 11.5h18M7 16h18M7 20.5h18" stroke-width="1.4" opacity=".45"/><path d="M12.5 8v16M19.5 8v16" stroke-width="1.8" opacity=".7"/></g><circle cx="16" cy="16" r="3.2" fill="#1c1005"/></svg><span id="brand-name">Guitar Trainer</span></a>
       <nav aria-label="Main">
-        <a data-nav="train" href="#/train">Train</a>
-        <a data-nav="library" href="#/library">Library</a>
-        <a data-nav="progress" href="#/progress">Progress</a>
-        <a data-nav="settings" href="#/settings">Settings</a>
+        <a data-nav="train" href="#/train"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>Train</a>
+        <a data-nav="library" href="#/library"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h4v15H5zM10.5 4.5h4v15h-4zM16 5.2l3.6-.9 3 14.6-3.6.8z"/></svg>Library</a>
+        <a data-nav="progress" href="#/progress"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l4-4 3 3 6-6M15 8h4v4"/></svg>Progress</a>
+        <a data-nav="settings" href="#/settings"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"/></svg>Settings</a>
       </nav>
     </div>
   </header>

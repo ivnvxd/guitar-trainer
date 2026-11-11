@@ -19,11 +19,20 @@
     return h('nav', { class: 'chips roots', 'aria-label': 'Root note' },
       roots.map(r => h('a', { class: 'chip', href: '#/' + hrefFor(r), 'aria-current': String(r === current) }, r)));
   }
+  // The control panel above the neck: every choice of a page in one place.
+  function ctl(label, control, cls = '') { return h('div', { class: 'ctl ' + cls }, h('span', { class: 'ctl-label' }, label), control); }
+  function controls(...items) { return h('div', { class: 'controls', role: 'group', 'aria-label': 'Choices' }, items.flat().filter(Boolean)); }
+  function rootCtl(state, view) { return ctl('Root', rootRow(state.root, r => view.link(Object.assign({}, state, { root: r, pos: null }))), 'ctl-wide'); }
+  // A drop-down list with groups: [{ name, items: [[value, text]] }].
+  function pickList(label, groups, value, onChange) {
+    return h('select', { 'aria-label': label, onchange: e => onChange(e.target.value) },
+      groups.map(g => h('optgroup', { label: g.name }, g.items.map(([v, t]) => h('option', { value: v, selected: v === value }, t)))));
+  }
   function labelsSeg(onChange) {
-    return h('div', { class: 'opt' }, 'Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees']], lib.labels, v => { saveLib({ labels: v }); onChange(); }));
+    return ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees']], lib.labels, v => { saveLib({ labels: v }); onChange(); }));
   }
   function fretsSeg(onChange) {
-    return h('div', { class: 'opt' }, 'Frets', GT.segmented('Frets shown', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => { GT.saveSettings({ frets: v }); onChange(); }));
+    return ctl('Frets', GT.segmented('Frets shown', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => { GT.saveSettings({ frets: v }); onChange(); }));
   }
   function legend(kinds) {
     const names = { root: 'Root', third: 'Third', fifth: 'Fifth', seventh: 'Seventh', other: 'Other tones' };
@@ -61,11 +70,11 @@
     FB.render(box, Object.assign({ from: 0, to: settings.frets, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation }, extra));
     return box;
   }
-  function miniNeck(markers, low, high, label, muted) {
+  function miniNeck(markers, low, high, label, muted, extra = {}) {
     const from = low <= 1 ? 0 : low - 1;
     const to = Math.max(from + 4, high);
     const box = h('div', { class: 'neck' });
-    FB.render(box, { from, to, tuning: GT.tuning(), markers, muted, orientation: 'vertical', leftHanded: settings.leftHanded, label });
+    FB.render(box, Object.assign({ from, to, tuning: GT.tuning(), markers, muted, orientation: 'vertical', leftHanded: settings.leftHanded, label }, extra));
     return box;
   }
   function describeNote(tones) {
@@ -92,10 +101,6 @@
       return { scale, root: rootFromSlug(p[1]) || 'C', pos: p[2] && p[2].startsWith('position-') ? Number(p[2].slice(9)) : null };
     },
     link: s => `library/scales/${s.scale.id}/${rootSlug(s.root)}${s.pos ? '/position-' + s.pos : ''}`,
-    side(state) {
-      return T.SCALE_GROUPS.map(g => h('div', { class: 'lib-group' }, h('h3', null, g.name),
-        h('div', { class: 'lib-items' }, g.items.map(i => h('a', { href: '#/' + scalesView.link({ scale: i, root: state.root }), 'aria-current': String(i.id === state.scale.id) }, i.name)))));
-    },
     title: s => `${s.root} ${lowerName(s.scale.name)}`,
     render(state) {
       const { scale, root: r } = state;
@@ -130,12 +135,13 @@
       drawNeck();
       const posOptions = [[0, 'Whole neck']].concat(positions.map(p => [p.index, `${p.index}`]));
       const out = [
-        h('div', { class: 'crumb' }, 'Scales: ', T.SCALE_GROUPS.find(g => g.id === scale.group).name),
-        h('div', { class: 'lib-title' }, h('h1', null, scalesView.title(state)), h('div', { class: 'row' }, playButton('Play', play))),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, scalesView.title(state)), h('p', { class: 'muted lib-sub' }, T.SCALE_GROUPS.find(g => g.id === scale.group).name)), h('div', { class: 'row' }, playButton('Play', play))),
         formula,
-        h('div', { class: 'lib-options' },
+        controls(
+          rootCtl(state, scalesView),
+          ctl('Scale', pickList('Scale', T.SCALE_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, i.name]) })), scale.id, v => GT.go(scalesView.link(Object.assign({}, state, { scale: T.scaleById(v), pos: null })), true))),
+          positions.length ? ctl('Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true))) : null,
           labelsSeg(rerender),
-          positions.length ? h('div', { class: 'opt' }, 'Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true))) : null,
           fretsSeg(rerender)),
         neckSlot, cap,
         h('div', { class: 'row', style: 'justify-content:space-between' }, legend(kindsOf(tones)), pos ? h('span', { class: 'small muted' }, `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}.`) : null)
@@ -205,45 +211,67 @@
       return { chord, root: rootFromSlug(p[1]) || 'C', shape: p[2] || null };
     },
     link: s => `library/chords/${s.chord.id}/${rootSlug(s.root)}${s.shape ? '/' + s.shape : ''}`,
-    side(state) {
-      // Open chords link to their shape: open C is the C shape, open Cmaj7 is the open shape.
+    // Open chords link to their shape: open C is the C shape, open Cmaj7 is the open shape.
+    openChords() {
       const openLink = c => {
         const shapes = T.chordShapes(c.root, c.chord);
         const match = shapes.find(s => s.frets.every((f, i) => f === c.frets[i]));
         return '#/' + chordsView.link({ chord: T.chordById(c.chord), root: c.root, shape: match ? match.id : null });
       };
-      return T.CHORD_GROUPS.map(g => h('div', { class: 'lib-group' }, h('h3', null, g.name),
-        h('div', { class: 'lib-items' }, g.items.map(i => h('a', { href: '#/' + chordsView.link({ chord: i, root: state.root }), 'aria-current': String(i.id === state.chord.id) }, i.name, h('small', null, state.root + i.symbol))))))
-        .concat(h('div', { class: 'lib-group' }, h('h3', null, 'Open chords'),
-          h('div', { class: 'chips', style: 'padding:0 8px' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c), style: 'min-height:32px;padding:4px 9px' }, T.chordName(c.root, T.chordById(c.chord)))))));
+      return h('div', { class: 'chips' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c) }, T.chordName(c.root, T.chordById(c.chord)))));
     },
     title: s => T.chordName(s.root, s.chord),
     render(state) {
       const { chord, root: r } = state;
       const tones = T.tonesOn(r, chord);
       const shapes = T.chordShapes(r, chord.id, GT.tuning());
-      const shape = state.shape === 'neck' ? null : shapes.find(s => s.id.toLowerCase() === String(state.shape).toLowerCase()) || shapes[0] || null;
+      // Major and minor chords open on the CAGED map: the five shapes over the whole neck.
+      const caged = shapes.some(s => s.id.startsWith('caged-'));
+      const want = state.shape || (caged ? 'caged' : null);
+      const shape = want === 'neck' || want === 'caged' ? null : shapes.find(s => s.id.toLowerCase() === String(want).toLowerCase()) || shapes[0] || null;
+      const showMap = caged && want === 'caged';
+      const map = caged ? T.cagedMap(r, chord.id, settings.frets) : [];
+      const placesOf = sh => sh.frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
       const cap = caption();
       let markers;
-      if (shape) {
-        markers = toneMarkers(tones).map(m => shape.frets[m.string] === m.fret ? m : Object.assign(m, { kind: 'ghost' }));
+      const extra = {};
+      if (showMap) {
+        // A note that two shapes use gets a ring: that is where the shapes join.
+        const uses = new Map();
+        for (const sh of map) for (const p of placesOf(sh)) uses.set(`${p.string}:${p.fret}`, (uses.get(`${p.string}:${p.fret}`) || 0) + 1);
+        markers = toneMarkers(tones).map(m => { const n = uses.get(`${m.string}:${m.fret}`); return n ? Object.assign(m, { ring: n > 1 }) : Object.assign(m, { kind: 'ghost' }); });
+        extra.regions = map.map(sh => ({ points: placesOf(sh), label: sh.shape, cls: 'shape-' + sh.shape }));
+      } else if (shape) {
+        // One shape: lines join its notes, and the outlines of the shapes before and after it show where it connects.
+        const at = map.findIndex(sh => sh.frets.every((f, k) => f === shape.frets[k]));
+        const near = at < 0 ? [] : [map[at - 1], map[at + 1]].filter(Boolean);
+        const shared = new Set(near.flatMap(n => T.sharedPlaces(shape, n)));
+        markers = toneMarkers(tones).map(m => shape.frets[m.string] === m.fret ? Object.assign(m, { ring: shared.has(`${m.string}:${m.fret}`) }) : Object.assign(m, { kind: 'ghost' }));
+        extra.links = [{ points: placesOf(shape), cls: 'is-shape' }];
+        if (at >= 0) extra.regions = near.map(n => ({ points: placesOf(n), label: n.shape, cls: 'is-near shape-' + n.shape })).concat({ points: placesOf(shape), label: map[at].shape, cls: 'is-current shape-' + map[at].shape });
+        if (shape.low > 0) extra.dimOutside = [shape.low, shape.high];
+        extra.muted = shape.frets.map((f, s) => f === null ? s : null).filter(s => s !== null);
       } else markers = toneMarkers(tones);
-      const muted = shape ? shape.frets.map((f, s) => f === null ? s : null).filter(s => s !== null) : [];
       const strum = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'strum');
       const arpeggio = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'up', 0.28, 0.5);
-      const shapeOptions = [['neck', 'Whole neck']].concat(shapes.map(s => [s.id, s.name]));
+      const shapeOptions = (caged ? [['caged', 'All five']] : []).concat([['neck', 'Whole neck']], shapes.map(s => [s.id, s.name]));
+      const current = showMap ? 'caged' : shape ? shape.id : 'neck';
+      const atShape = shape && map.findIndex(sh => sh.frets.every((f, k) => f === shape.frets[k]));
+      const mapNote = showMap ? 'Five shapes cover the neck, and each one overlaps the next. A ringed note belongs to two shapes: that is where they join. Pick a shape to see it alone.'
+        : shape && caged && atShape >= 0 ? `Lines join the notes of the ${shape.name}. The outlines beside it are the ${[map[atShape - 1], map[atShape + 1]].filter(Boolean).map(n => n.shape + ' shape').join(' and the ')}, and the ringed notes are the ones they share.` : null;
       const out = [
-        h('div', { class: 'crumb' }, 'Chords: ', T.CHORD_GROUPS.find(g => g.id === chord.group).name),
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, chordsView.title(state)), h('p', { class: 'muted', style: 'margin-top:4px' }, `${r} ${lowerName(chord.name)}`)),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, chordsView.title(state)), h('p', { class: 'muted lib-sub' }, `${r} ${lowerName(chord.name)}`)),
           h('div', { class: 'row' }, playButton('Strum', strum), playButton('Arpeggio', arpeggio))),
         h('div', { class: 'formula' }, tones.map(t => h('div', { class: 'tone', style: 'cursor:default' }, h('i', { class: 'swatch', style: `background:var(--${FB.degreeKind(t.label)})` }), h('b', null, lib.labels === 'notes' ? t.name : t.label), h('span', null, lib.labels === 'notes' ? t.label : t.name)))),
-        h('div', { class: 'lib-options' },
+        controls(
+          rootCtl(state, chordsView),
+          ctl('Chord', pickList('Chord', T.CHORD_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, `${i.name} (${r}${i.symbol})`]) })), chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r }), true))),
+          shapes.length ? ctl('Shape', GT.segmented('Shape', shapeOptions, current, v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true))) : null,
           labelsSeg(rerender),
-          shapes.length ? h('div', { class: 'opt' }, 'Shape', GT.segmented('Shape', shapeOptions, shape ? shape.id : 'neck', v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true))) : null,
           fretsSeg(rerender)),
-        neck(markers, { muted, onPress: pressPlayer(cap, describeNote(tones)), dimOutside: shape && shape.low > 0 ? [shape.low, shape.high] : null, label: `${chordsView.title(state)} on the neck` }),
+        neck(markers, Object.assign({ onPress: pressPlayer(cap, describeNote(tones)), label: `${chordsView.title(state)} on the neck` }, extra)),
         cap,
-        legend(kindsOf(tones))
+        h('div', { class: 'row', style: 'justify-content:space-between;align-items:flex-start' }, legend(kindsOf(tones)), mapNote ? h('p', { class: 'small muted', style: 'max-width:60ch' }, mapNote) : null)
       ];
       if (shapes.length) {
         out.push(section(CAGEDnote(chord) ? 'The five CAGED shapes' : 'Shapes', CAGEDnote(chord),
@@ -253,14 +281,16 @@
               return { string: i, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: FB.degreeKind(t.label) };
             })()).filter(Boolean);
             const mutedStrings = s.frets.map((f, i) => f === null ? i : null).filter(i => i !== null);
-            return h('a', { class: 'card', href: '#/' + chordsView.link(Object.assign({}, state, { shape: s.id })), style: 'text-decoration:none;color:inherit', 'aria-current': String(shape && shape.id === s.id) },
-              h('h3', null, s.name), h('p', null, s.low === 0 ? 'Open position' : `Frets ${s.low}–${s.high}`), miniNeck(m, s.low, s.high, `${s.name} of ${chordsView.title(state)}`, mutedStrings));
+            return h('a', { class: 'card', href: '#/' + chordsView.link(Object.assign({}, state, { shape: s.id })), style: 'text-decoration:none;color:inherit', 'aria-current': String(!!shape && shape.id === s.id) },
+              h('h3', null, s.name), h('p', null, s.low === 0 ? 'Open position' : `Frets ${s.low}–${s.high}`),
+              miniNeck(m, s.low, s.high, `${s.name} of ${chordsView.title(state)}`, mutedStrings, { links: [{ points: placesOf(s), cls: 'is-shape' }] }));
           }))));
       }
+      out.push(section('Open chords', 'The chords in the first frets. A chord that is also a CAGED shape opens as that shape.', chordsView.openChords()));
       return out;
     }
   };
-  const CAGEDnote = chord => ['major', 'minor'].includes(chord.id) ? 'Each shape is an open chord moved up the neck. In order up the neck they repeat C, A, G, E, D, and each one shares notes with the next.' : null;
+  const CAGEDnote = chord => ['major', 'minor'].includes(chord.id) ? 'Each shape is an open chord moved up the neck. In order up the neck they repeat C, A, G, E, D. Neighbor shapes share notes, so the five join into one map of the neck.' : null;
 
   // ---------- intervals ----------
   const intervalsView = {
@@ -269,10 +299,6 @@
       return { interval, root: rootFromSlug(p[1]) || 'C' };
     },
     link: s => `library/intervals/${s.interval.id}/${rootSlug(s.root)}`,
-    side(state) {
-      return [h('div', { class: 'lib-group' }, h('h3', null, 'From unison to octave'),
-        h('div', { class: 'lib-items' }, T.INTERVALS.map(i => h('a', { href: '#/' + intervalsView.link({ interval: i, root: state.root }), 'aria-current': String(i.id === state.interval.id) }, i.name, h('small', null, i.short)))))];
-    },
     title: s => s.interval.name,
     render(state) {
       const { interval, root: r } = state;
@@ -283,13 +309,18 @@
       const cap = caption();
       const base = 48 + T.mod(T.pcOf(r) - 48);
       const inv = T.INTERVALS.find(i => i.semi === 12 - interval.semi);
+      const songs = T.INTERVAL_SONGS[interval.semi] || {};
       const out = [
-        h('div', { class: 'crumb' }, 'Intervals'),
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, interval.name), h('p', { class: 'muted', style: 'margin-top:4px' }, `${r} to ${target}: ${interval.semi} ${interval.semi === 1 ? 'semitone' : 'semitones'} (frets on one string). Turned upside down it is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`)),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, interval.name), h('p', { class: 'muted lib-sub' }, `${r} to ${target}: ${interval.semi} ${interval.semi === 1 ? 'semitone' : 'semitones'} (frets on one string). Turned upside down it is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`)),
           h('div', { class: 'row' }, playButton('Up', () => A.notes([base, base + interval.semi], 'up')), playButton('Down', () => A.notes([base, base + interval.semi], 'down')), playButton('Together', () => A.notes([base, base + interval.semi], 'together')))),
-        h('div', { class: 'lib-options' }, labelsSeg(rerender), fretsSeg(rerender)),
+        controls(
+          rootCtl(state, intervalsView),
+          ctl('Interval', h('nav', { class: 'chips', 'aria-label': 'Interval' }, T.INTERVALS.map(i => h('a', { class: 'chip', href: '#/' + intervalsView.link({ interval: i, root: r }), 'aria-current': String(i.id === interval.id), title: i.name }, i.short))), 'ctl-wide'),
+          labelsSeg(rerender), fretsSeg(rerender)),
         neck(toneMarkers(tones), { onPress: pressPlayer(cap, describeNote(tones)), label: `${interval.name} from ${r}` }),
         cap,
+        songs.up || songs.down ? section('Songs that start with it', 'A song you know makes the sound easy to recall. Sing the start of it, then check with the buttons above.',
+          h('dl', { class: 'facts' }, songs.up ? [h('dt', null, 'Going up'), h('dd', null, songs.up)] : null, songs.down ? [h('dt', null, 'Going down'), h('dd', null, songs.down)] : null)) : null,
         section('Shapes on the neck', 'Where the upper note sits when you start on one string. The B string is tuned a semitone lower than the pattern, so shapes that cross it move one fret up.', intervalShapes(interval.semi))
       ];
       return out;
@@ -319,10 +350,6 @@
       return { quality: TRIAD_QUALITIES.includes(p[0]) ? p[0] : 'major', root: rootFromSlug(p[1]) || 'C', set: T.TRIAD_SETS.some(s => s.id === p[2]) ? p[2] : '123' };
     },
     link: s => `library/triads/${s.quality}/${rootSlug(s.root)}/${s.set}`,
-    side(state) {
-      return [h('div', { class: 'lib-group' }, h('h3', null, 'Quality'), h('div', { class: 'lib-items' }, TRIAD_QUALITIES.map(q => h('a', { href: '#/' + triadsView.link(Object.assign({}, state, { quality: q })), 'aria-current': String(q === state.quality) }, T.chordById(q).name, h('small', null, T.chordById(q).tones))))),
-        h('div', { class: 'lib-group' }, h('h3', null, 'String set'), h('div', { class: 'lib-items' }, T.TRIAD_SETS.map(s => h('a', { href: '#/' + triadsView.link(Object.assign({}, state, { set: s.id })), 'aria-current': String(s.id === state.set) }, s.name))))];
-    },
     title: s => `${T.chordName(s.root, T.chordById(s.quality))} triads`,
     render(state) {
       const chord = T.chordById(state.quality), r = state.root;
@@ -332,9 +359,13 @@
       const cap = caption();
       const onSet = (s) => set.strings.includes(s);
       const out = [
-        h('div', { class: 'crumb' }, 'Triads'),
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, triadsView.title(state)), h('p', { class: 'muted', style: 'margin-top:4px' }, `${tones.map(t => t.name).join(' ')} (${tones.map(t => t.label).join(' ')}) on ${set.name.toLowerCase()}`))),
-        h('div', { class: 'lib-options' }, labelsSeg(rerender), h('div', { class: 'opt' }, 'Strings', GT.segmented('String set', T.TRIAD_SETS.map(s => [s.id, s.id.split('').reverse().join('–')]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true))), fretsSeg(rerender)),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, triadsView.title(state)), h('p', { class: 'muted lib-sub' }, `${tones.map(t => t.name).join(' ')} (${tones.map(t => t.label).join(' ')}) on ${set.name.toLowerCase()}`)),
+          h('div', { class: 'row' }, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum')))),
+        controls(
+          rootCtl(state, triadsView),
+          ctl('Quality', GT.segmented('Quality', TRIAD_QUALITIES.map(q => [q, { major: 'Major', minor: 'Minor', dim: 'Dim', aug: 'Aug' }[q]]), state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true))),
+          ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map(s => [s.id, s.id.split('').reverse().join('–')]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true))),
+          labelsSeg(rerender), fretsSeg(rerender)),
         neck(toneMarkers(tones, { only: s => onSet(s) }), { onPress: pressPlayer(cap, describeNote(tones)), label: `${triadsView.title(state)} on ${set.name}` }),
         cap,
         legend(kindsOf(tones)),
@@ -366,13 +397,6 @@
       return { mode, key: mode === 'major' ? entry.major : entry.minor, entry };
     },
     link: s => `library/keys/${rootSlug(s.key)}/${s.mode}`,
-    side(state) {
-      const list = mode => h('div', { class: 'lib-items' }, KEY_NAMES.map(k => {
-        const name = mode === 'major' ? k.major : k.minor;
-        return h('a', { href: '#/' + keysView.link({ key: name, mode }), 'aria-current': String(state.mode === mode && state.key === name) }, `${name} ${mode}`, h('small', null, sigText(k.count, true)));
-      }));
-      return [h('div', { class: 'lib-group' }, h('h3', null, 'Major keys'), list('major')), h('div', { class: 'lib-group' }, h('h3', null, 'Minor keys'), list('minor'))];
-    },
     title: s => `${s.key} ${s.mode}`,
     render(state) {
       const { key, mode, entry } = state;
@@ -407,9 +431,12 @@
         degrees.forEach((d, i) => A.later(() => circle.hot(cells[d - 1]), i * each));
         A.later(() => circle.hot(null), degrees.length * each);
       };
+      const keyOf = (k, m) => m === 'major' ? k.major : k.minor;
       const details = h('div', null,
-        h('div', { class: 'crumb' }, 'Keys'),
         h('h1', null, keysView.title(state)),
+        controls(
+          ctl('Key', pickList('Key', [{ name: mode === 'major' ? 'Major keys' : 'Minor keys', items: KEY_NAMES.map(k => [keyOf(k, mode), `${keyOf(k, mode)} ${mode}${k.count ? ` (${sigText(k.count, true)})` : ''}`]) }], key, v => GT.go(keysView.link({ key: v, mode }), true))),
+          ctl('Mode', GT.segmented('Mode', [['major', 'Major'], ['minor', 'Minor']], mode, v => GT.go(keysView.link({ key, mode: v }), true)))),
         h('dl', { class: 'facts', style: 'margin-top:14px' },
           h('dt', null, 'Key signature'), h('dd', null, sigText(entry.count)),
           h('dt', null, mode === 'major' ? 'Relative minor' : 'Relative major'), h('dd', null, keyLink(relName, mode === 'major' ? 'minor' : 'major'), ', same notes'),
@@ -505,11 +532,6 @@
   const notesView = {
     parse(p) { return { mode: ['all', 'naturals'].includes(p[0]) ? p[0] : rootFromSlug(p[0]) ? 'one' : 'naturals', note: rootFromSlug(p[0]) || null }; },
     link: s => `library/notes/${s.mode === 'one' ? rootSlug(s.note) : s.mode}`,
-    side(state) {
-      return [h('div', { class: 'lib-group' }, h('h3', null, 'Show'), h('div', { class: 'lib-items' },
-        [['naturals', 'Natural notes'], ['all', 'All notes']].map(([m, text]) => h('a', { href: '#/' + notesView.link({ mode: m }), 'aria-current': String(state.mode === m) }, text)),
-        T.PC_PLAIN.map(n => h('a', { href: '#/' + notesView.link({ mode: 'one', note: n }), 'aria-current': String(state.mode === 'one' && T.pcOf(state.note) === T.pcOf(n)) }, `Every ${n}`))))];
-    },
     title: s => s.mode === 'one' ? `Every ${s.note} on the neck` : 'Notes on the neck',
     render(state) {
       const cap = caption();
@@ -522,12 +544,12 @@
         markers.push({ string: s, fret: f, label: name, kind: state.mode === 'one' ? 'root' : name.length > 1 ? 'ghost' : 'other' });
       }
       return [
-        h('div', { class: 'crumb' }, 'Notes'),
         h('div', { class: 'lib-title' }, h('h1', null, notesView.title(state))),
-        h('nav', { class: 'chips roots', 'aria-label': 'Note', style: 'margin-top:12px' },
-          [['naturals', 'Naturals'], ['all', 'All']].map(([m, t]) => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: m }), 'aria-current': String(state.mode === m) }, t)),
-          T.PC_PLAIN.map(n => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: 'one', note: n }), 'aria-current': String(state.mode === 'one' && T.pcOf(state.note) === T.pcOf(n)) }, n))),
-        h('div', { class: 'lib-options' }, fretsSeg(rerender)),
+        controls(
+          ctl('Show', h('nav', { class: 'chips roots', 'aria-label': 'Note' },
+            [['naturals', 'Naturals'], ['all', 'All']].map(([m, t]) => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: m }), 'aria-current': String(state.mode === m) }, t)),
+            T.PC_PLAIN.map(n => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: 'one', note: n }), 'aria-current': String(state.mode === 'one' && T.pcOf(state.note) === T.pcOf(n)) }, n))), 'ctl-wide'),
+          fretsSeg(rerender)),
         neck(markers, { onPress: pressPlayer(cap, describeNote(null)), label: notesView.title(state) }),
         cap,
         section('Ways to remember', null, h('dl', { class: 'facts' },
@@ -548,16 +570,14 @@
     const state = view.parse(parts.slice(1));
     rerender = () => render(main, parts);
     main.replaceChildren();
-    const wide = root.innerWidth > 980;
-    const rootLink = r => view.link(Object.assign({}, state, { root: r, pos: null }));
-    const hasRoot = ['scales', 'chords', 'intervals', 'triads'].includes(tab);
-    const side = h('details', { class: 'lib-side', open: wide },
-      h('summary', null, `${TABS.find(t => t[0] === tab)[1]}: ${view.title(state)}`),
-      h('div', { class: 'lib-nav' },
-        h('nav', { class: 'lib-tabs', 'aria-label': 'Library sections' }, TABS.map(([id, name]) => h('a', { href: '#/library/' + id + (hasRoot && ['scales', 'chords', 'intervals', 'triads'].includes(id) && id !== tab ? '' : ''), 'aria-current': String(id === tab) }, name))),
-        view.side(state)));
-    const body = h('div', { class: 'lib-main' }, hasRoot ? h('div', { style: 'margin-bottom:16px' }, rootRow(state.root, rootLink)) : null, view.render(state));
-    main.append(h('div', { class: 'lib' }, side, body));
+    // Section tabs. A section with roots opens on the root you look at now.
+    const tabLink = id => {
+      const target = VIEWS[id], base = target.parse([]);
+      return '#/' + (state.root && base.root ? target.link(Object.assign(base, { root: state.root })) : 'library/' + id);
+    };
+    const tabs = h('nav', { class: 'lib-tabs', 'aria-label': 'Library sections' }, TABS.map(([id, name]) => h('a', { href: tabLink(id), 'aria-current': String(id === tab) }, name)));
+    const body = h('div', { class: 'lib-main' }, view.render(state));
+    main.append(h('div', { class: 'lib' }, tabs, body));
     // On a phone the root row scrolls sideways: bring the chosen root to the middle.
     const chosen = body.querySelector('.roots [aria-current="true"]');
     if (chosen) { const row = chosen.parentNode; row.scrollLeft += chosen.getBoundingClientRect().left - row.getBoundingClientRect().left - (row.clientWidth - chosen.offsetWidth) / 2; }
