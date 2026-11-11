@@ -1,26 +1,32 @@
 # Learning roadmap
 
-The goal is to make every listening task connect back to playing the guitar. New exercises should ask for an answer first, then show the physical location and a short way to check it by singing or playing.
+Every listening task connects back to the guitar. A drill asks for an answer first. Then it shows where the notes are on the neck and plays them again. `research.md` lists the sources.
 
-## Implemented now
+## Done
 
-1. **Intervals by ear:** random starting notes, ascending/descending/harmonic playback, a saved custom selection of any intervals from unison through octave, replay, score, and a playable EADGBE position after answering.
-2. **Triad quality by ear:** major/minor first, then diminished/augmented and inversion questions. Each answer gives chord tones and the inversion.
-3. **Triad inversion map:** root/first/second inversion on the top two three-string sets, with note names or degrees, playback, and a listening check.
-4. **Fretboard and theory reference:** guided lessons, scales, chords, note playback, step highlighting, chord shapes, and circle of fifths.
+1. Intervals by ear: name it, sing it, or play it on the neck. The site adds interval groups at about 85 percent right. Compare plays your answer and the right one after a miss.
+2. Scale degrees in a key: a cadence of I, IV, V and I, then one note. The note resolves home after the answer.
+3. Chord quality: triads, inversions and seventh chords.
+4. Progressions by ear: four chords that start on I.
+5. Neck fluency: note names with a speed map, every place of a note, degrees from a root, triad shapes and CAGED shapes.
+6. Keys: key facts, chords in a key, and chord numbers in any key.
+7. Review of misses: slow or missed items come back sooner, and missed items return 3 to 5 questions later.
+8. Library: scales with positions, chords with CAGED and movable shapes, open chords, intervals, triads on four string sets, the circle of fifths, and the note map.
+9. Tools: a metronome and one-minute chord changes.
 
-## Highest-value additions
+## Next
 
-1. **Hear scale degrees in a key.** Play a short tonic or cadence, then one note. Ask for its degree and let the learner sing it before revealing the fret. This trains function as well as the raw distance between notes. [ToneDear's scale degree and interval-in-context exercises](https://tonedear.com/) and [Berklee Ear Training 1](https://online.berklee.edu/courses/ear-training-1) both cover this distinction.
-2. **Hear triads and inversions in a progression.** Play a short I–IV–V–I or ii–V–I phrase, ask for the chord function, quality, inversion, or bass note, and show compact guitar voicings with the smoothest movement between them. This follows the progression and inversion work in [Berklee's harmonic ear training course](https://online.berklee.edu/courses/harmonic-ear-training-recognizing-chord-progressions) and the string-set approach in [Berklee's triad-inversion lesson](https://online.berklee.edu/takenote/guitar-chords-101-triad-inversions-up-the-fretboard/).
-3. **Short melodic dictation.** Play a two-to-four-note phrase and have the learner reproduce it on the fretboard. Start with the current scale, then introduce chromatic notes and longer phrases. [ToneDear](https://tonedear.com/) includes melodic dictation; [musictheory.net](https://www.musictheory.net/exercises) provides complementary fretboard and ear-identification drills.
-4. **Rhythm and time.** Add a simple metronome and short call-and-response rhythm tasks; then use them with scale and triad exercises. [Berklee Ear Training 1](https://online.berklee.edu/courses/ear-training-1) includes rhythm alongside pitch work.
-5. **Adaptive review.** Track which intervals, inversions, keys, and string sets are missed, then favor those in later practice. Keep progress local and offer export/import. [musictheory.net's exercise customization and challenge mode](https://www.musictheory.net/faq) show the value of a focused and adjustable drill.
+1. Intervals in a key. A cadence, then two notes of the key. Name the interval and both degrees [E9, E12].
+2. Short melodic dictation. Two to four notes after a cadence. Play them back on the neck.
+3. Listening breaks. About every 25 questions, play 30 seconds of labeled intervals with no answers [E2].
+4. Closest triad inversion. Show a triad, name the next chord as a number, and tap its nearest inversion [F6, F9].
+5. Next pentatonic box. Show box N and ask for the notes of box N+1 [F17].
+6. Rhythm. Call-and-response rhythms with the metronome.
 
-## Design rules for new exercises
+## Rules for new drills
 
-- Keep answers short and immediate; replay must always be one action away.
-- Randomize the tonic and register so a memorized absolute pitch does not solve the task.
-- Separate melodic and simultaneous intervals, since they are different listening problems; [teoria's interval exercise](https://www.teoria.com/en/help/exercises/ie.php?sec=ie) does this explicitly.
-- Let the learner practice major/minor triads before adding diminished/augmented and inversions. [teoria's chord ear exercise](https://www.teoria.com/en/help/exercises/c3e.php) offers these distinctions.
-- Show a playable guitar answer, then offer a repeat with labels hidden.
+- Keep answers short. Replay is always one key away.
+- Randomize the root and the register, so a remembered pitch does not solve the task.
+- Keep melodic and harmonic intervals apart. They are different listening tasks.
+- Practice major and minor triads before diminished, augmented and inversions.
+- After a miss, show the right answer on the neck and play both answers.

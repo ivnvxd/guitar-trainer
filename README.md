@@ -1,23 +1,60 @@
-# Guitar Fretboard
+# Guitar Trainer
 
-A self-hosted guitar study page in standard EADGBE tuning. The interface is in English and runs entirely in the browser. There is no build step, account, dependency, or backend.
+Guitar Trainer is a guitar study site in two parts. Train has short daily drills for the ear, the neck and keys. Library shows scales, chords, intervals, triads, keys and notes on the neck. Everything runs in the browser. The site has no server code, no build step and no downloads from other sites.
 
-## Use
+## Use it
 
-Open `index.html` in a current browser, or upload the contents of this folder to any static host. For GitHub Pages, publish the repository root from the `main` branch. Keep `index.html`, `styles.css`, `app.js`, and `extras.js` together.
+1. Open `index.html` in a current browser. A local file works, but offline use and the home-screen icon need HTTPS.
+2. To publish, copy the files below to any static web host. The site works at the domain root and in a subfolder, such as `ivnv.dev/guitar/`.
+3. Browsers play sound only after a click or a key press. If a drill is silent at first, press Replay or Space.
 
-Audio starts after you press a play button or a note, as browsers require a user gesture. Exercise scores and lesson progress are stored in this browser's local storage.
+Upload these files and folders:
 
-## What is included
+- `index.html`
+- `css/`
+- `js/`
+- `icon.svg`, `icon-192.png`, `icon-512.png`
+- `manifest.webmanifest`
+- `sw.js`
 
-- **Practice:** root-string and fret choices, nine lessons from 1–5–8 through pentatonics and major/minor scales, hints, answer checks, and local progress.
-- **Ear:** ascending, descending, and harmonic interval questions with a personal selection of any intervals from unison through octave; major/minor or four-quality triad questions; randomized starting pitches, replay, first note, scores, and a fretboard position after each interval answer. The interval selection is saved in this browser. Advanced triad questions include inversions.
-- **Triads:** major, minor, diminished, and augmented voicings in root position and both inversions on 3–2–1 and 4–3–2 string sets, with note/degree labels, playback, and inversion listening checks.
-- **Reference:** scales, modes, intervals, chord formulas, playable chord shapes, note/degree labels, step highlighting, and sound.
-- **Circle of fifths:** key signatures, relative minors, diatonic triads, a self-check mode, and a shortcut to the selected scale.
+Do not upload `docs/`, `tests/`, `README.md` or `.git/`. The site does not need them.
 
-The [learning roadmap](docs/learning-roadmap.md) explains which teaching features are most useful to add next and links to the source material used to prioritize them.
+When you publish a new version, change `VERSION` in `sw.js`. Browsers then replace the files they keep for offline use.
 
-## Repository
+## What is in it
 
-This folder is a local Git repository. Open this folder in Codex to continue editing it. To publish through GitHub, create a remote repository, connect it as `origin`, push `main`, and enable GitHub Pages for the root folder.
+Train has three tracks and two tools:
+
+- Ear: intervals, scale degrees in a key, chord quality and chord progressions.
+- Neck: name the note, find every note, degrees from a root, triad shapes and CAGED shapes.
+- Keys and progressions: key facts, chords in a key, and numbers to chords.
+- Tools: a metronome and one-minute chord changes.
+
+Each drill asks again what you miss or answer slowly. When you answer about 85 percent right, the ear drills add new material. `docs/research.md` lists the research behind these choices.
+
+Library has one link for each view, for example `#/library/scales/blues/a` or `#/library/chords/maj7/c/caged-E`. You can bookmark a view or send its link.
+
+Progress and settings stay in the browser's local storage, on one device. The Progress page saves them to a file and loads them on another device.
+
+## Files
+
+| File | Job |
+| --- | --- |
+| `js/theory.js` | Note spelling, scales, chords, keys, chord shapes, triads and scale positions |
+| `js/audio.js` | The plucked-string sound, chords, sequences and the metronome |
+| `js/fretboard.js` | The neck drawing, flat on wide screens and upright on phones |
+| `js/core.js` | DOM helper, saved data, settings and the page router |
+| `js/progress.js` | Results per item, the choice of the next question, the daily log |
+| `js/library.js` | The Library pages |
+| `js/train.js` | The Train page and the runner that all drills share |
+| `js/drills-ear.js`, `js/drills-neck.js`, `js/drills-keys.js` | The drills |
+| `js/tools.js` | Metronome and chord changes |
+| `js/pages.js` | Progress and Settings |
+
+## Tests
+
+The theory tests need Node.js. They make sure that every chord shape, triad, scale position and key signature matches the theory.
+
+```
+node tests/theory.test.js
+```
