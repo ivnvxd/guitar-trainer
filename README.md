@@ -12,12 +12,15 @@ Upload these files and folders:
 
 - `index.html`
 - `css/`
+- `fonts/`
 - `js/`
 - `icon.svg`, `icon-192.png`, `icon-512.png`
 - `manifest.webmanifest`
 - `sw.js`
 
 Do not upload `docs/`, `tests/`, `README.md` or `.git/`. The site does not need them.
+
+`fonts/` holds the two typefaces of the site, Public Sans for text and Besley for titles, and their license. The site serves them itself.
 
 When you publish a new version, change `VERSION` in `sw.js`. Browsers then replace the files they keep for offline use.
 

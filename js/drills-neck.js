@@ -114,7 +114,7 @@
       q.over = true;
       const markers = q.positions.map(k => { const [s, f] = k.split(':').map(Number); return { string: s, fret: f, kind: q.found.has(k) ? 'correct' : 'target', label: T.PC_PLAIN[q.pc] }; });
       ui.board.replaceChildren(ui.neck(markers, { from: 0, to: ui.config.frets, label: `Every ${T.PC_PLAIN[q.pc]}` }));
-      return { text: v === 'gave-up' ? `Here are all ${q.positions.length} places. The white ones were missing.` : correct ? `All ${q.positions.length} places, no wrong taps.` : `All found, with ${q.wrong.length} wrong tap${q.wrong.length > 1 ? 's' : ''}.` };
+      return { text: v === 'gave-up' ? `Here are all ${q.positions.length} places. You found the green ones.` : correct ? `All ${q.positions.length} places, no wrong taps.` : `All found, with ${q.wrong.length} wrong tap${q.wrong.length > 1 ? 's' : ''}.` };
     },
     options(c, set) {
       return h('div', { style: 'display:grid;gap:14px' },

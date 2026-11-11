@@ -57,7 +57,7 @@
     const theme = settings.theme === 'auto' ? (lightQuery && lightQuery.matches ? 'light' : 'dark') : settings.theme;
     document.documentElement.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'light' ? '#f3f6f9' : '#0b1016';
+    if (meta) meta.content = theme === 'light' ? '#f2f3f0' : '#1a1c1b';
   }
   if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
   const tuning = () => (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;
@@ -78,7 +78,7 @@
   // Open a page. "replace" changes the link without a new history entry (for option changes).
   function go(path, replace) {
     const hash = '#/' + path.replace(/^#?\/?/, '');
-    if (replace) { history.replaceState(null, '', hash); render(); }
+    if (replace) { const y = root.scrollY; history.replaceState(null, '', hash); render(); root.scrollTo(0, y); }
     else if (location.hash === hash) render();
     else location.hash = hash;
   }
@@ -117,12 +117,24 @@
   }
   const pick = list => list[Math.floor(Math.random() * list.length)];
 
-  // A segmented control: one choice of several.
+  // A segmented control: one choice of several. Arrow keys move the choice, as in a radio group.
   function segmented(label, options, value, onChange, cls = '') {
-    return h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label },
-      options.map(([v, text]) => h('button', {
-        type: 'button', role: 'radio', 'aria-checked': String(v === value),
-        onclick: () => { if (v !== value) onChange(v); }
+    const at = options.findIndex(([v]) => v === value);
+    const choose = v => { if (v !== value) onChange(v); };
+    const onKey = e => {
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!step) return;
+      e.preventDefault();
+      e.stopPropagation();
+      choose(options[(Math.max(at, 0) + step + options.length) % options.length][0]);
+      // A change often redraws the page. Put the focus back on the new choice, so the arrow keys go on.
+      const now = document.querySelector(`[role="radiogroup"][aria-label="${label}"] [aria-checked="true"]`);
+      if (now) now.focus({ preventScroll: true });
+    };
+    return h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label, onkeydown: onKey },
+      options.map(([v, text], i) => h('button', {
+        type: 'button', role: 'radio', 'aria-checked': String(v === value), tabindex: i === Math.max(at, 0) ? '0' : '-1',
+        onclick: () => choose(v)
       }, text)));
   }
 

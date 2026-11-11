@@ -41,7 +41,7 @@
   const where = p => `${FB.ordinal(6 - p.string)} string, ${p.fret === 0 ? 'open' : 'fret ' + p.fret}`;
 
   D.add({
-    id: 'ear-intervals', track: 'ear', featured: true,
+    id: 'ear-intervals', track: 'ear',
     title: 'Intervals',
     blurb: 'Hear two notes and name the distance. Start with four intervals, the site adds the next ones when you are ready.',
     hint: 'Listen, then choose. The starting note changes every time.',
