@@ -170,5 +170,5 @@
     return 'other';
   }
 
-  GT.fretboard = { render, degreeKind, ordinal };
+  GT.fretboard = { render, degreeKind, ordinal, el };
 })(window);

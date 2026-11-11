@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#0b1016">
+  <meta name="theme-color" content="#1a1c1b">
   <script>
     // Set the theme before the first paint, so a light page does not flash dark.
     try {
       var theme = JSON.parse(localStorage.getItem('gt.settings') || '{}').theme || 'auto';
       if (theme === 'auto') theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
       document.documentElement.dataset.theme = theme;
-      if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f3f6f9';
+      if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f2f3f0';
     } catch (e) { /* the dark theme stays */ }
   </script>
   <meta name="description" content="Guitar ear training and fretboard drills, with a library of scales, chords, triads, intervals and keys.">
@@ -19,6 +19,8 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preload" href="fonts/public-sans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/besley.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/app.css">
   <script src="js/theory.js" defer></script>
   <script src="js/audio.js" defer></script>

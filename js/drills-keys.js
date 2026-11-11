@@ -94,7 +94,6 @@
       for (const c of T.diatonic(q.key, q.mode)) names[c.pc] = c.root;
       ui.choices(names.map((n, pc) => ({ value: pc, main: n })));
     },
-    play(q) { return 0; },
     check: (q, v) => Number(v) === q.chord.pc,
     feedback(q) {
       const midis = q.chord.chord.toneList.map(t => 48 + T.mod(q.chord.pc - 48) + t.semi);

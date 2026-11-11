@@ -20,31 +20,42 @@
   function hub(main) {
     const day = P.day(), goal = settings.goal || 10;
     const minutes = Math.round(day.ms / 60000);
+    const streak = P.streak();
     const last = byId[store.get('lastDrill')] || byId['ear-intervals'];
+    const track = (name, intro, rows) => h('section', { class: 'track' },
+      h('h2', null, name), h('p', { class: 'track-intro' }, intro), h('div', { class: 'drill-list' }, rows));
+    const tools = track('Tools', 'For practice with the guitar in your hands.', [
+      h('a', { class: 'drill-row', href: '#/tools/metronome' }, h('h3', null, 'Metronome'), h('p', null, 'Tempo, beats per bar and tap tempo.')),
+      h('a', { class: 'drill-row', href: '#/tools/changes' }, h('h3', null, 'One-minute chord changes'), h('p', null, 'Switch between two open chords for a minute. Beat your count.'))]);
     main.append(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Train'), h('p', null, 'Short drills you repeat each day. The site asks again what you miss or answer slowly, and adds new material when you are ready.'))),
       h('div', { class: 'today' },
-        h('div', { class: 'stat' }, h('b', null, `${minutes} of ${goal} min`), h('span', null, 'today')),
+        h('div', { class: 'today-goal' }, h('p', null, h('b', null, `${minutes} of ${goal} min`), h('span', null, 'today')), goalNeck(minutes, goal)),
         h('div', { class: 'stat' }, h('b', null, day.q), h('span', null, 'answers today')),
-        h('div', { class: 'stat' }, h('b', null, P.streak()), h('span', null, 'days in a row')),
-        h('div', { class: 'grow' }, h('div', { class: 'meter' }, h('div', { class: 'meter-bar' }, h('i', { style: `width:${Math.min(100, minutes / goal * 100)}%` })))),
+        h('div', { class: 'stat' }, h('b', null, streak), h('span', null, streak === 1 ? 'day in a row' : 'days in a row')),
         h('a', { class: 'btn btn-primary btn-big', href: '#/train/' + last.id }, day.q ? `Continue: ${last.title}` : `Start: ${last.title}`)),
-      ...TRACKS.map(t => h('section', { class: 'track' },
-        h('div', { class: 'track-head' }, h('h2', null, t.name), h('p', null, t.intro)),
-        h('div', { class: 'drills' }, list.filter(d => d.track === t.id).map(d => drillCard(d))))),
-      h('section', { class: 'track' },
-        h('div', { class: 'track-head' }, h('h2', null, 'Tools'), h('p', null, 'For practice with the guitar in your hands.')),
-        h('div', { class: 'drills' },
-          h('a', { class: 'drill-link', href: '#/tools/metronome' }, h('h3', null, 'Metronome'), h('p', null, 'Tempo, beats per bar and tap tempo.')),
-          h('a', { class: 'drill-link', href: '#/tools/changes' }, h('h3', null, 'One-minute chord changes'), h('p', null, 'Switch between two open chords for a minute. Beat your count.')))));
+      // Three columns on a wide screen. Tools share the last one, so the columns end level.
+      h('div', { class: 'tracks' }, TRACKS.map((t, i) => h('div', { class: 'track-col' },
+        track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow)),
+        i === TRACKS.length - 1 ? tools : null))));
   }
-  function drillCard(d) {
+  // Today's goal as a short neck: one fret for each minute of the goal, one dot for each minute done.
+  function goalNeck(minutes, goal) {
+    const W = 44, H = 34, el = GT.fretboard.el;
+    const svg = el('svg', { viewBox: `-4 0 ${goal * W + 6} ${H}`, class: 'goal-neck' + (minutes >= goal ? ' is-done' : ''), style: `max-width:${goal * W + 6}px`, role: 'img', 'aria-label': `${Math.min(minutes, goal)} of ${goal} minutes done today` });
+    el('rect', { x: 0, y: 2, width: goal * W, height: H - 4, rx: 3, class: 'fb-board' }, svg);
+    for (let f = 0; f <= goal; f++) el('line', { x1: f * W, y1: 3, x2: f * W, y2: H - 3, class: f === 0 ? 'fb-nut' : 'fb-fret' }, svg);
+    el('line', { x1: 0, y1: H / 2, x2: goal * W, y2: H / 2, class: 'fb-string fb-wound', 'stroke-width': 2 }, svg);
+    for (let m = 0; m < Math.min(minutes, goal); m++) el('circle', { cx: m * W + W / 2, cy: H / 2, r: 9, class: 'goal-dot' }, svg);
+    return svg;
+  }
+  function drillRow(d) {
     const config = loadConfig(d);
     const s = P.summary(statsId(d, config), d.pool(config));
-    return h('a', { class: 'drill-link' + (d.featured ? ' featured' : ''), href: '#/train/' + d.id },
+    return h('a', { class: 'drill-row', href: '#/train/' + d.id },
       h('h3', null, d.title), h('p', null, d.blurb),
-      h('div', { class: 'meter' }, h('div', { class: 'meter-bar' }, h('i', { style: `width:${s.total ? s.mastered / s.total * 100 : 0}%` })),
-        s.n ? `${Math.round(s.accuracy * 100)}% right, ${s.mastered} of ${s.total} solid` : 'Not started'));
+      s.n ? h('div', { class: 'meter' }, h('div', { class: 'meter-bar' }, h('i', { style: `width:${s.mastered / s.total * 100}%` })),
+        `${Math.round(s.accuracy * 100)}% right, ${s.mastered} of ${s.total} solid`) : null);
   }
 
   // ---------- configuration ----------
@@ -72,6 +83,7 @@
     const feedback = h('div', { class: 'feedback', role: 'status', 'aria-live': 'polite' });
     const stage = h('div');
     const timer = h('div', { class: 'timer', hidden: true }, h('i'));
+    const keysLine = h('p', { class: 'small muted drill-keys', style: 'margin-top:14px' });
 
     const ui = {
       config, session, board, answers,
@@ -83,6 +95,7 @@
       // Answer buttons: [{ value, main, sub }]
       choices(items) {
         answers.hidden = false;
+        answers.dataset.long = String(items.some(c => String(c.main).length > 3));
         answers.replaceChildren(...items.map((c, i) => h('button', { type: 'button', class: 'answer', dataset: { value: String(c.value) }, onclick: () => submit(c.value) },
           h('b', null, c.main), c.sub ? h('span', null, c.sub) : null, KEYS[i] ? h('span', { class: 'kbd', 'aria-hidden': 'true' }, KEYS[i]) : null)));
       },
@@ -136,6 +149,7 @@
       ui.startClock(0);
       d.render(session.q, ui);
       updateStats();
+      drawKeys();
       // Drills without a sound question start the clock when the question shows.
       session.heard = d.autoPlay === false || !d.play;
       if (d.autoPlay !== false && d.play) {
@@ -188,6 +202,12 @@
       const wait = Math.max(d.advanceMs || 1100, (fb.hold || 0) * 1000 + 400);
       if (correct && settings.autoAdvance !== false && d.autoAdvance !== false && !unlocked) advanceTimer = setTimeout(next, wait);
       else feedback.querySelector('.btn-primary').focus({ preventScroll: true });
+    }
+    // The key hints name only the keys that work in this drill and mode.
+    function drawKeys() {
+      const kbd = k => h('span', { class: 'kbd' }, k);
+      keysLine.replaceChildren('Keys: ', ...((!answers.hidden || d.onKey) ? [kbd('1'), '–', kbd('9'), ' answer, '] : []),
+        kbd('Space'), d.play ? ' replay or next' : ' next', ...(d.play ? [', ', kbd('R'), ' replay'] : []), '.');
     }
     const decode = v => (v !== '' && !isNaN(Number(v)) && String(Number(v)) === v) ? Number(v) : v;
     function maybeUnlock(def, cfg) {
@@ -261,7 +281,7 @@
       settingsPanel,
       stage,
       d.help ? h('details', { class: 'drill-help' }, h('summary', null, 'How this drill works'), d.help.map(p => h('p', null, p))) : null,
-      h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Keys: ', h('span', { class: 'kbd' }, '1'), '–', h('span', { class: 'kbd' }, '9'), ' answer, ', h('span', { class: 'kbd' }, 'Space'), ' replay or next, ', h('span', { class: 'kbd' }, 'R'), ' replay.')));
+      keysLine));
     document.addEventListener('keydown', onKey);
     next();
     return () => { document.removeEventListener('keydown', onKey); clearTimeout(advanceTimer); };

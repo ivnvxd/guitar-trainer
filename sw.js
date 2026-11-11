@@ -1,7 +1,8 @@
 /* Offline cache. Change VERSION when you publish new files, so browsers fetch them again. */
-const VERSION = 'guitar-trainer-2';
+const VERSION = 'guitar-trainer-3';
 const FILES = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest',
+  'fonts/public-sans.woff2', 'fonts/besley.woff2',
   'js/theory.js', 'js/audio.js', 'js/fretboard.js', 'js/core.js', 'js/progress.js', 'js/library.js',
   'js/train.js', 'js/drills-ear.js', 'js/drills-neck.js', 'js/drills-keys.js', 'js/tools.js', 'js/pages.js', 'js/app.js'
 ];

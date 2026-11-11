@@ -180,7 +180,7 @@
     const parent = T.parentMajor(r, scale.id);
     if (parent && scale.id !== 'major') link('major', parent, `Same notes as ${parent} major`);
     if (parent) {
-      const modes = T.SCALE_GROUPS[0].items.filter(m => m.id !== scale.id);
+      const modes = T.SCALE_GROUPS[0].items.filter(m => m.id !== scale.id && m.id !== 'major');
       for (const m of modes) {
         const idx = T.MODE_INDEX[m.id];
         const modeRoot = T.spell(parent, T.scaleById('major').toneList[idx].label);
@@ -191,7 +191,10 @@
     if (scale.id === 'major-pentatonic') { const rel = T.spell(r, '6'); link('minor-pentatonic', rel, `Same notes as ${rel} minor pentatonic`); link('major-blues', r, `${r} major blues`); }
     if (scale.id === 'blues') link('minor-pentatonic', r, `${r} minor pentatonic without the ♭5`);
     if (['minor', 'harmonic-minor', 'melodic-minor'].includes(scale.id)) for (const id of ['minor', 'harmonic-minor', 'melodic-minor'].filter(x => x !== scale.id)) link(id, r, `${r} ${lowerName(T.scaleById(id).name)}`);
-    out.push({ href: `library/keys/${rootSlug(rootForLink(r))}/${scale.id === 'minor' ? 'minor' : 'major'}`, text: `${r} ${scale.id === 'minor' ? 'minor' : 'major'} on the circle of fifths` });
+    // The key on the circle: a mode of the major scale points to its parent key, any other scale to the key that its third names.
+    const keyRoot = parent && scale.id !== 'minor' ? parent : r;
+    const keyMode = keyRoot === parent || scale.toneList.some(t => t.label === '3') ? 'major' : 'minor';
+    out.push({ href: `library/keys/${rootSlug(rootForLink(keyRoot))}/${keyMode}`, text: `${keyRoot} ${keyMode} on the circle of fifths` });
     return out;
   }
 
@@ -555,6 +558,9 @@
         view.side(state)));
     const body = h('div', { class: 'lib-main' }, hasRoot ? h('div', { style: 'margin-bottom:16px' }, rootRow(state.root, rootLink)) : null, view.render(state));
     main.append(h('div', { class: 'lib' }, side, body));
+    // On a phone the root row scrolls sideways: bring the chosen root to the middle.
+    const chosen = body.querySelector('.roots [aria-current="true"]');
+    if (chosen) { const row = chosen.parentNode; row.scrollLeft += chosen.getBoundingClientRect().left - row.getBoundingClientRect().left - (row.clientWidth - chosen.offsetWidth) / 2; }
     document.title = `${view.title(state)} · ${GT.siteName}`;
     lastRender = rerender;
   }

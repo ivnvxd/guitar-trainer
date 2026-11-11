@@ -39,15 +39,15 @@
       h('div', { class: 'prompt', style: 'margin-top:18px;display:grid;gap:18px;justify-items:center;text-align:center' },
         h('div', null, bpmOut, h('div', { class: 'muted small' }, 'beats per minute')),
         dots,
-        h('div', { class: 'row', style: 'justify-content:center' },
+        h('div', { class: 'tempo-row' },
           h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => setBpm(saved.bpm - 5) }, '−5'),
-          h('div', { style: 'width:min(420px,60vw)' }, slider),
+          slider,
           h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => setBpm(saved.bpm + 5) }, '+5')),
         h('div', { class: 'row', style: 'justify-content:center' },
           GT.segmented('Beats per bar', [[2, '2'], [3, '3'], [4, '4'], [6, '6']], saved.beats, v => { saved.beats = v; save(); const was = A.metronomeRunning; stop(); GT.render(); if (was) setTimeout(() => document.querySelector('.btn-primary').click(), 0); }),
           h('button', { type: 'button', class: 'btn', onclick: tap }, 'Tap tempo', h('span', { class: 'kbd' }, 'T'))),
         toggle),
-      h('p', { class: 'small muted', style: 'margin-top:14px' }, 'Keys: ', h('span', { class: 'kbd' }, 'Space'), ' start or stop, ', h('span', { class: 'kbd' }, '↑'), h('span', { class: 'kbd' }, '↓'), ' tempo, ', h('span', { class: 'kbd' }, 'T'), ' tap the tempo.')));
+      h('p', { class: 'small muted drill-keys', style: 'margin-top:14px' }, 'Keys: ', h('span', { class: 'kbd' }, 'Space'), ' start or stop, ', h('span', { class: 'kbd' }, '↑'), h('span', { class: 'kbd' }, '↓'), ' tempo, ', h('span', { class: 'kbd' }, 'T'), ' tap the tempo.')));
     return () => { document.removeEventListener('keydown', onKey); A.stopMetronome(); };
   }
 
@@ -76,7 +76,8 @@
       redrawBest();
     } }, 'Save count');
     const bestList = h('div', { class: 'chips' });
-    const redrawBest = () => bestList.replaceChildren(...Object.entries(saved.best).sort((x, y) => x[1] - y[1]).map(([pair, n]) => h('span', { class: 'chip', style: 'cursor:default' }, pair.replace('-', ' ↔ '), h('small', null, n))));
+    const redrawBest = () => bestList.replaceChildren(...Object.entries(saved.best).sort((x, y) => x[1] - y[1]).map(([pair, n]) => h('span', { class: 'chip', style: 'cursor:default' }, pair.replace('-', ' ↔ '), h('small', null, n))),
+      Object.keys(saved.best).length ? '' : h('p', { class: 'muted small' }, 'No counts yet. Save your first count above.'));
     const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => {
       if (timer) { clearInterval(timer); timer = null; startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
       // A count-in of four clicks, then 60 seconds.
