@@ -5,7 +5,7 @@ Guitar Trainer is a guitar study site in two parts. Train has short daily drills
 ## Use it
 
 1. Open `index.html` in a current browser. A local file works, but offline use and the home-screen icon need HTTPS.
-2. To publish, copy the files below to any static web host. The site works at the domain root and in a subfolder, such as `ivnv.dev/guitar/`.
+2. To publish, copy the files below to any static web host. The site works at the domain root, such as `guitar.ivnv.dev`, and in a subfolder.
 3. Browsers play sound only after a click or a key press. If a drill is silent at first, press Replay or Space.
 
 Upload these files and folders:

@@ -13,6 +13,8 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 7. Review of misses: slow or missed items come back sooner, and missed items return 3 to 5 questions later.
 8. Library: scales with positions, chords with CAGED and movable shapes, open chords, intervals, triads on four string sets, the circle of fifths, and the note map.
 9. Tools: a metronome and one-minute chord changes.
+10. Circle of fifths: a frame holds the seven chords of the key with their numerals, in major and in minor. Progressions light up on the circle as they play.
+11. Light and dark themes. Automatic follows the device.
 
 ## Next
 

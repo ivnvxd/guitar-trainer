@@ -190,6 +190,17 @@
     });
   }
 
+  // Where the chords of a key sit on the circle of fifths. Ring 'major' holds the major keys,
+  // 'minor' their relative minors and 'dim' the vii° of the major key at that position.
+  // Position 0 is C at the top; each step clockwise is a fifth up.
+  function keyCells(keyName, mode = 'major') {
+    const shift = { major: 0, minor: 3, dim: 1 };
+    return diatonic(keyName, mode).map(c => {
+      const ring = c.chord.id === 'major' || c.chord.id === 'minor' ? c.chord.id : 'dim';
+      return Object.assign({}, c, { ring, pos: mod((c.pc + shift[ring]) * 7) });
+    });
+  }
+
   // Open chord shapes, low E string first; null means the string is muted.
   const OPEN_CHORDS = [
     { root: 'C', chord: 'major', frets: [null, 3, 2, 0, 1, 0] },
@@ -419,7 +430,7 @@
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, scaleById, chordById,
-    tonesOn, chordName, signature, diatonic, cagedShapes, triadVoicings, positions,
+    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, triadVoicings, positions,
     placeShape, chordShapes, identifyChord, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)

@@ -112,4 +112,26 @@ for (const root of T.ROOTS) {
   }
 }
 
+// The chords of every key fill one block on the circle: three positions side by side,
+// three major, three minor and one diminished chord, spelled as in the key.
+for (const k of T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean))) {
+  for (const mode of ['major', 'minor']) {
+    const key = mode === 'major' ? k.major : k.minor;
+    const home = T.CIRCLE.findIndex(e => e === k || e.alt === k);
+    const cells = T.keyCells(key, mode);
+    const names = T.diatonic(key, mode).map(c => c.name);
+    eq(cells.map(c => c.name), names, `${key} ${mode} names`);
+    eq(cells.filter(c => c.ring === 'major').length, 3, `${key} ${mode} majors`);
+    eq(cells.filter(c => c.ring === 'minor').length, 3, `${key} ${mode} minors`);
+    eq(cells.filter(c => c.ring === 'dim').map(c => c.pos), [home], `${key} ${mode} diminished`);
+    for (const ring of ['major', 'minor']) {
+      eq(cells.filter(c => c.ring === ring).map(c => T.mod(c.pos - home + 1)).sort(), [0, 1, 2], `${key} ${mode} ${ring} block`);
+    }
+    const tonic = cells[0];
+    eq([tonic.ring, tonic.pos], [mode, home], `${key} ${mode} tonic cell`);
+  }
+}
+eq(T.keyCells('G♭').map(c => c.name), ['G♭', 'A♭m', 'B♭m', 'C♭', 'D♭', 'E♭m', 'F°']);
+eq(T.keyCells('A', 'minor').map(c => c.roman), ['i', 'ii°', '♭III', 'iv', 'v', '♭VI', '♭VII']);
+
 console.log(`theory: ${checks} checks passed`);

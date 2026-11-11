@@ -58,7 +58,7 @@
       const markers = [];
       for (let s = 0; s < 6; s++) for (let f = from; f <= to; f++) if (T.mod(t[s] + f) === T.mod(q.midi)) markers.push({ string: s, fret: f, kind: s === q.string && f === q.fret ? 'correct' : 'ghost', label: T.PC_PLAIN[T.mod(q.midi)] });
       ui.board.replaceChildren(ui.neck(markers, { from, to, label: 'The same note in other places' }));
-      return { hold: 0.8, text: `${correct ? '' : `You chose ${DUAL[Number(v)]}. `}It is ${DUAL[T.mod(q.midi)]} on the ${where(q.string, q.fret)}. The other places of this note are shown in brown.` };
+      return { hold: 0.8, text: `${correct ? '' : `You chose ${DUAL[Number(v)]}. `}It is ${DUAL[T.mod(q.midi)]} on the ${where(q.string, q.fret)}. The faint dots show the other places of this note.` };
     },
     options(c, set) {
       return h('div', { style: 'display:grid;gap:14px' },

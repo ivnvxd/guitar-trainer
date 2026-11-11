@@ -3,8 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0b1016">
+  <script>
+    // Set the theme before the first paint, so a light page does not flash dark.
+    try {
+      var theme = JSON.parse(localStorage.getItem('gt.settings') || '{}').theme || 'auto';
+      if (theme === 'auto') theme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      document.documentElement.dataset.theme = theme;
+      if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '#f3f6f9';
+    } catch (e) { /* the dark theme stays */ }
+  </script>
   <meta name="description" content="Guitar ear training and fretboard drills, with a library of scales, chords, triads, intervals and keys.">
   <title>Guitar Trainer</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">

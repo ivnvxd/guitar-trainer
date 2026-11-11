@@ -42,14 +42,24 @@
     }
   };
 
-  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, tuning: 'standard', orientation: 'auto' };
+  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, tuning: 'standard', orientation: 'auto', theme: 'auto' };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   function saveSettings(patch) {
     Object.assign(settings, patch);
     store.set('settings', settings);
     GT.audio.setVoice(settings.voice);
     GT.audio.setVolume(settings.volume);
+    applyTheme();
   }
+  // Theme: 'auto' follows the device. index.html sets it once before the first paint.
+  const lightQuery = root.matchMedia ? root.matchMedia('(prefers-color-scheme: light)') : null;
+  function applyTheme() {
+    const theme = settings.theme === 'auto' ? (lightQuery && lightQuery.matches ? 'light' : 'dark') : settings.theme;
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === 'light' ? '#f3f6f9' : '#0b1016';
+  }
+  if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
   const tuning = () => (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;
 
   // Root names in links: "a", "c-sharp", "e-flat".
@@ -117,5 +127,5 @@
   }
 
   GT.siteName = 'Guitar Trainer';
-  Object.assign(GT, { h, store, settings, saveSettings, tuning, rootSlug, rootFromSlug, route, go, render, shuffle, pick, segmented });
+  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, tuning, rootSlug, rootFromSlug, route, go, render, shuffle, pick, segmented });
 })(window);

@@ -376,6 +376,10 @@
       const scale = T.scaleById(mode === 'major' ? 'major' : 'minor');
       const tones = T.tonesOn(key, scale);
       const triads = T.diatonic(key, mode), sevenths = T.diatonic(key, mode, true);
+      const cells = T.keyCells(key, mode);
+      const circle = circleOfFifths(state, cells);
+      // Hovering or focusing a chord marks it on the circle.
+      const mark = i => ({ onmouseenter: () => circle.hot(cells[i]), onfocus: () => circle.hot(cells[i]), onmouseleave: () => circle.hot(null), onblur: () => circle.hot(null) });
       const idx = T.CIRCLE.findIndex(k => k === entry || k.alt === entry);
       const relName = mode === 'major' ? entry.minor : entry.major;
       const next = T.CIRCLE[(idx + 1) % 12], prev = T.CIRCLE[(idx + 11) % 12];
@@ -391,9 +395,14 @@
         ? [['I–IV–V–I', [1, 4, 5, 1]], ['I–V–vi–IV', [1, 5, 6, 4]], ['ii–V–I', [2, 5, 1]], ['I–vi–IV–V', [1, 6, 4, 5]], ['vi–IV–I–V', [6, 4, 1, 5]]]
         : [['i–iv–v–i', [1, 4, 5, 1]], ['i–♭VI–♭III–♭VII', [1, 6, 3, 7]], ['i–♭VII–♭VI–♭VII', [1, 7, 6, 7]], ['ii°–v–i', [2, 5, 1]]];
       const playProgression = degrees => {
+        A.silence();
         let v = null;
         const chords = degrees.map(d => { const c = triads[d - 1]; const pcs = c.chord.toneList.map(t => T.mod(c.pc + t.semi)); v = T.voiceLead(pcs, v); return [36 + T.mod(c.pc - 36)].concat(v); });
         A.chordSequence(chords, 84, 2);
+        // Each chord lights up on the circle while it plays.
+        const each = 60 / 84 * 2 * 1000;
+        degrees.forEach((d, i) => A.later(() => circle.hot(cells[d - 1]), i * each));
+        A.later(() => circle.hot(null), degrees.length * each);
       };
       const details = h('div', null,
         h('div', { class: 'crumb' }, 'Keys'),
@@ -407,14 +416,15 @@
           h('div', { class: 'formula' }, tones.map(t => h('button', { type: 'button', class: 'tone', onclick: () => A.note(48 + T.mod(T.pcOf(key) - 48) + t.semi) }, h('b', null, t.name), h('span', null, t.label)))),
           h('p', { style: 'margin-top:10px' }, h('a', { href: `#/library/scales/${scale.id}/${rootSlug(rootForLink(key))}` }, `Show ${key} ${lowerName(scale.name)} on the neck`))),
         h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), h('p', null, 'Tap a chord to hear it.'),
-          h('div', { class: 'chord-row' }, triads.map(c => h('button', { type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, h('small', null, c.roman), h('b', null, c.name)))),
-          h('div', { class: 'chord-row', style: 'margin-top:8px' }, sevenths.map(c => h('button', { type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, h('small', null, c.roman), h('b', null, c.name)))),
+          h('div', { class: 'chord-row' }, triads.map((c, i) => h('button', Object.assign({ type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, mark(i)), h('small', null, c.roman), h('b', null, c.name)))),
+          h('div', { class: 'chord-row', style: 'margin-top:8px' }, sevenths.map((c, i) => h('button', Object.assign({ type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, mark(i)), h('small', null, c.roman), h('b', null, c.name)))),
           mode === 'minor' ? h('p', { class: 'small muted', style: 'margin-top:10px' }, `Songs in minor keys often make v a major chord (${T.spell(key, '5')}), borrowed from the harmonic minor.`) : null),
         h('div', { class: 'lib-section' }, h('h2', null, 'Common progressions'),
           h('table', { class: 'table' }, h('tbody', null, progressions.map(([name, degrees]) => h('tr', null,
             h('td', null, name), h('td', null, degrees.map(d => triads[d - 1].name).join('  ')),
             h('td', { style: 'text-align:right' }, h('button', { type: 'button', class: 'btn', onclick: () => playProgression(degrees) }, '▶ Play'))))))));
-      return [h('div', { class: 'circle-wrap' }, circleOfFifths(state), details)];
+      const note = h('p', { class: 'circle-note' }, `The frame holds the seven chords of ${key} ${mode}. Clockwise is a fifth up. Tap a key to open it.`);
+      return [h('div', { class: 'circle-wrap' }, h('div', null, circle, note), details)];
     }
   };
   function sigText(count, short) {
@@ -423,38 +433,68 @@
     if (short) return `${Math.abs(count)}${count > 0 ? '♯' : '♭'}`;
     return `${Math.abs(count)} ${count > 0 ? 'sharp' : 'flat'}${Math.abs(count) > 1 ? 's' : ''}: ${list.join(' ')}`;
   }
-  function circleOfFifths(state) {
+  // Sharps (plus) or flats (minus) in the major scale of a key name, also for names such as C♭.
+  const sigCount = name => T.tonesOn(name, T.scaleById('major')).reduce((n, t) => n + (t.name.match(/♯/g) || []).length - (t.name.match(/♭/g) || []).length, 0);
+  // Three rings: major keys, their relative minors, and the vii° of the major key at each position.
+  // A frame holds the seven chords of the selected key, each with its Roman numeral.
+  function circleOfFifths(state, cells) {
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '-210 -210 420 420');
+    svg.setAttribute('viewBox', '-212 -212 424 424');
     svg.setAttribute('class', 'circle');
     svg.setAttribute('role', 'group');
-    svg.setAttribute('aria-label', 'Circle of fifths. Clockwise is a fifth up.');
+    svg.setAttribute('aria-label', `Circle of fifths with the chords of ${state.key} ${state.mode} in a frame. Clockwise is a fifth up.`);
     const el = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); (parent || svg).appendChild(n); return n; };
-    const arc = (r1, r2, a1, a2) => {
-      const p = (r, a) => `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
-      return `M ${p(r2, a1)} A ${r2} ${r2} 0 0 1 ${p(r2, a2)} L ${p(r1, a2)} A ${r1} ${r1} 0 0 0 ${p(r1, a1)} Z`;
-    };
-    const current = T.CIRCLE.findIndex(k => k === state.entry || k.alt === state.entry);
+    const STEP = Math.PI / 6;
+    const RINGS = { major: [148, 208, 178], minor: [100, 148, 124], dim: [62, 100, 81] };
+    const pt = (r, a) => `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
+    const arc = (r1, r2, a1, a2) => `M ${pt(r2, a1)} A ${r2} ${r2} 0 0 1 ${pt(r2, a2)} L ${pt(r1, a2)} A ${r1} ${r1} 0 0 0 ${pt(r1, a1)} Z`;
+    const tonic = cells[0];
+    const inKey = new Map(cells.map(c => [`${c.ring}:${c.pos}`, c]));
+    const paths = new Map();
+    // Text lines per ring: numeral, name, signature (offsets from the middle of the cell).
+    const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 5], [-7, 10]], dim: [[null, 4], [-5, 9]] };
     T.CIRCLE.forEach((k, i) => {
-      const a = i * Math.PI / 6, a1 = a - Math.PI / 12, a2 = a + Math.PI / 12;
-      const near = (i === (current + 1) % 12 || i === (current + 11) % 12);
-      for (const mode of ['major', 'minor']) {
-        const name = mode === 'major' ? k.major : k.minor;
-        const g = el('g', { role: 'link', tabindex: '0', 'aria-label': `${name} ${mode}${k.alt ? ', also ' + (mode === 'major' ? k.alt.major : k.alt.minor) : ''}, ${sigText(k.count)}`, class: [i === current && state.mode === mode ? 'is-key' : '', near && state.mode === mode ? 'is-near' : '', i === current && state.mode !== mode ? 'is-rel' : ''].join(' ') });
-        el('path', { d: mode === 'major' ? arc(130, 205, a1, a2) : arc(78, 128, a1, a2), class: mode === 'major' ? 'seg-major' : 'seg-minor' }, g);
-        const r = mode === 'major' ? 168 : 104;
-        const t = el('text', { x: (r * Math.sin(a)).toFixed(1), y: (-r * Math.cos(a) + (mode === 'major' ? 2 : 4)).toFixed(1), class: mode === 'major' ? 't-major' : 't-minor' }, g);
-        t.textContent = mode === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : `${k.minor}m`;
-        if (mode === 'major') { const s = el('text', { x: (r * Math.sin(a)).toFixed(1), y: (-r * Math.cos(a) + 19).toFixed(1), class: 't-sig' }, g); s.textContent = sigText(k.count, true); }
-        const open = () => GT.go(keysView.link({ key: name, mode }));
+      const a = i * STEP;
+      for (const ring of ['major', 'minor', 'dim']) {
+        const c = inKey.get(`${ring}:${i}`);
+        const [r1, r2, mid] = RINGS[ring];
+        const d = arc(r1, r2, a - STEP / 2, a + STEP / 2);
+        paths.set(`${ring}:${i}`, d);
+        const g = el('g', { class: `cell ring-${ring}${c ? ' in-key' : ''}${c === tonic ? ' is-tonic' : ''}` });
+        el('path', { d }, g);
+        const x = (mid * Math.sin(a)).toFixed(1), y = -mid * Math.cos(a);
+        const text = (cls, dy, value) => { el('text', { x, y: (y + dy).toFixed(1), class: cls }, g).textContent = value; };
+        const [numY, nameY, sigY] = LAYOUT[ring][c ? 1 : 0];
+        if (c) text('t-num', numY, c.roman);
+        text('t-name', nameY, c ? c.name : ring === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : ring === 'minor' ? `${k.minor}m` : `${T.spell(k.major, '7')}°`);
+        // Keys such as G♯ major (8♯) exist only in theory, so their cell shows no signature.
+        if (ring === 'major' && !(c && Math.abs(sigCount(c.root)) > 7)) text('t-sig', sigY, c ? sigText(sigCount(c.root), true) : k.alt ? `${sigText(k.count, true)}/${sigText(k.alt.count, true)}` : sigText(k.count, true));
+        if (ring === 'dim') continue;
+        // Diminished chords are not keys. Major and minor cells open their key.
+        const pick = e => ring === 'major' ? e.major : e.minor;
+        const entry = c && k.alt && pick(k.alt) === c.root ? k.alt : k;
+        const target = pick(entry);
+        g.setAttribute('role', 'link');
+        g.setAttribute('tabindex', '0');
+        g.setAttribute('aria-label', `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}`);
+        const open = () => GT.go(keysView.link({ key: target, mode: ring }));
         g.addEventListener('click', open);
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-        svg.appendChild(g);
       }
     });
-    el('circle', { r: 76, class: 'hub' });
-    const center = el('text', { y: 6, class: 't-major' }); center.textContent = `${state.key}${state.mode === 'minor' ? 'm' : ''}`;
+    el('circle', { r: 60, class: 'hub' });
+    el('text', { y: 4, class: 't-hub' }).textContent = state.key;
+    el('text', { y: 24, class: 't-hub-sub' }).textContent = state.mode;
+    const A = steps => (tonic.pos + steps) * STEP;
+    el('path', { class: 'key-frame', d: `M ${pt(208, A(-1.5))} A 208 208 0 0 1 ${pt(208, A(1.5))} L ${pt(100, A(1.5))} A 100 100 0 0 0 ${pt(100, A(0.5))} L ${pt(62, A(0.5))} A 62 62 0 0 0 ${pt(62, A(-0.5))} L ${pt(100, A(-0.5))} A 100 100 0 0 0 ${pt(100, A(-1.5))} Z` });
+    // Marks one chord of the key, for example while it plays.
+    const hot = el('path', { class: 'hot', visibility: 'hidden' });
+    svg.hot = c => {
+      if (!c) { hot.setAttribute('visibility', 'hidden'); return; }
+      hot.setAttribute('d', paths.get(`${c.ring}:${c.pos}`));
+      hot.setAttribute('visibility', 'visible');
+    };
     return svg;
   }
 

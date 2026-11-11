@@ -105,6 +105,9 @@
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
     main.append(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Settings'), h('p', null, 'Saved in this browser. They apply to the library and to every drill.'))),
+      block('Look',
+        D.field('Theme', GT.segmented('Theme', [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']], settings.theme, v => set({ theme: v }))),
+        h('p', { class: 'small muted' }, 'Automatic follows the light or dark setting of your device.')),
       block('Neck',
         D.field('Hand', GT.segmented('Hand', [[false, 'Right-handed'], [true, 'Left-handed']], settings.leftHanded, v => set({ leftHanded: v }))),
         D.field('Direction', GT.segmented('Direction', [['auto', 'Automatic'], ['horizontal', 'Flat'], ['vertical', 'Upright']], settings.orientation, v => set({ orientation: v }))),
