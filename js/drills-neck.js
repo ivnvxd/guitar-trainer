@@ -362,7 +362,7 @@
           markers.push({ string: s, fret: f, kind: FB.degreeKind(t.label), label: t.label, ring: pic.ring(s, f) });
         });
         const lo = Math.min(...both.map(b => b.low)), hi = Math.max(...both.map(b => b.high));
-        visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(17, Math.max(hi + 1, lo + 5)), tuning: T.STANDARD, orientation: 'horizontal', regions: pic.regions, links: pic.links, label: 'The two shapes from this root' });
+        visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(17, Math.max(hi + 1, lo + 5)), tuning: T.STANDARD, turn: false, regions: pic.regions, links: pic.links, label: 'The two shapes from this root' });
       }
       return { title: `${q.expected.join(' and ')} shapes`, text: `From a root on the ${ord(q.string)} string, ${q.rootName} at fret ${q.fret}. The two shapes overlap where they share notes.`, visual, actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}`)]] };
     },

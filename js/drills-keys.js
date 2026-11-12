@@ -134,10 +134,10 @@
       ui.actions([['▶ Hear it', () => this.play(q)]]);
       ui.noChoices();
       const names = q.flats ? T.PC_FLAT : T.PC_SHARP;
-      const slots = h('div', { class: 'chips', style: 'margin-top:16px;gap:8px' });
+      const slots = h('div', { class: 'chips slots' });
       const draw = () => {
         ui.sub(`Chord ${Math.min(q.entered.length + 1, q.prog.length)} of ${q.prog.length}.`);
-        slots.replaceChildren(...q.prog.map((d, i) => h('span', { class: 'chip', style: 'min-width:64px;justify-content:center;font-weight:700;font-size:17px', 'aria-current': String(i === q.entered.length) }, q.entered[i] !== undefined ? names[q.entered[i]] : d)));
+        slots.replaceChildren(...q.prog.map((d, i) => h('span', { class: 'chip', 'aria-current': String(i === q.entered.length) }, q.entered[i] !== undefined ? names[q.entered[i]] : d)));
       };
       const add = pc => {
         if (q.done) return;
@@ -147,8 +147,10 @@
       q.add = add;
       q.back = () => { if (!q.done) { q.entered.pop(); draw(); } };
       draw();
-      ui.board.replaceChildren(slots, h('div', { class: 'answers' }, names.map((n, pc) => h('button', { type: 'button', class: 'answer', onclick: () => add(pc) }, h('b', null, n), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[pc])))),
+      const tiles = h('div', { class: 'answers' }, names.map((n, pc) => h('button', { type: 'button', class: 'answer', onclick: () => add(pc) }, h('b', null, n), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[pc]))));
+      ui.board.replaceChildren(slots, tiles,
         h('button', { type: 'button', class: 'btn', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
+      ui.even(tiles);
     },
     onKey(e, q) {
       if (!q || q.done) return;
@@ -159,7 +161,7 @@
     play(q) {
       if (!q) return 0;
       let v = null;
-      const seq = q.chords.map(c => { v = T.voiceLead(c.chord.toneList.map(t => T.mod(c.pc + t.semi)), v, 52, 72); return [36 + T.mod(c.pc - 36)].concat(v); });
+      const seq = q.chords.map(c => { v = T.voiceLead(c.chord.toneList.map(t => T.mod(c.pc + t.semi)), v, 52, 72); return [A.bass(c.pc)].concat(v); });
       return A.chordSequence(seq, 96, 2);
     },
     check: (q, v) => v === q.chords.map(c => c.pc).join('-'),
@@ -167,7 +169,7 @@
       const given = String(v).split('-').map(Number);
       const names = q.flats ? T.PC_FLAT : T.PC_SHARP;
       ui.board.querySelectorAll('.answer').forEach(b => { b.disabled = true; });
-      ui.board.querySelector('.chips').replaceChildren(...q.chords.map((c, i) => h('span', { class: 'chip', style: `min-width:64px;justify-content:center;font-weight:700;font-size:17px;border-color:${given[i] === c.pc ? 'var(--ok)' : 'var(--bad)'}` }, given[i] === c.pc ? c.name : `${names[given[i]]} → ${c.name}`)));
+      ui.board.querySelector('.chips').replaceChildren(...q.chords.map((c, i) => h('span', { class: 'chip', style: `border-color:${given[i] === c.pc ? 'var(--ok)' : 'var(--bad)'}` }, given[i] === c.pc ? c.name : `${names[given[i]]} → ${c.name}`)));
       const seconds = this.play(q);
       return { hold: seconds, text: `${q.prog.join(' ')} in ${q.key}: ${q.chords.map(c => c.name).join(' ')}.`, actions: [['▶ Hear it', () => { A.silence(); this.play(q); }]] };
     },

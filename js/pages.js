@@ -64,11 +64,11 @@
       const [string, fret] = item.split(':').map(Number);
       const med = P.median(s.times);
       const recentMiss = (s.recent || []).slice(-3).includes(0);
-      const kind = recentMiss || !med ? 'wrong' : med <= 2500 ? 'correct' : 'third';
+      const kind = recentMiss || !med ? 'wrong' : med <= 2500 ? 'correct' : 'slow';
       return { string, fret, kind, label: T.PC_PLAIN[T.mod(GT.tuning()[string] + fret)], title: `${secs(med)}, ${pct(s.ok, s.n)} right` };
     });
     const box = h('div', { class: 'neck' });
-    GT.fretboard.render(box, { from: 0, to: 15, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, label: 'Note speed map' });
+    GT.fretboard.render(box, { from: 0, to: 15, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true, label: 'Note speed map' });
     return h('section', { class: 'lib-section' }, h('h2', null, 'Note names: speed map'),
       h('p', null, 'Green: under 2.5 seconds. Yellow: slower. Red: missed in the last three answers. Positions you have not practiced stay empty.'), box);
   }
@@ -90,6 +90,11 @@
     const reset = () => {
       if (!confirm('Delete all progress in this browser? Your settings stay. This cannot be undone unless you saved a file.')) return;
       for (const k of store.keys()) if (k.startsWith('stats.') || k.startsWith('stage.') || k === 'days' || k === 'lastDrill') { try { localStorage.removeItem('gt.' + k); } catch { /* storage blocked */ } }
+      // A set that the automatic mode grew goes back to the first group.
+      for (const d of D.list) {
+        const config = d.stages && store.get('config.' + d.id);
+        if (config && config.auto !== false) store.set('config.' + d.id, Object.assign(config, { set: d.defaults.set }));
+      }
       status.textContent = 'Progress deleted.';
       setTimeout(() => GT.render(), 600);
     };
@@ -119,8 +124,8 @@
         h('p', { class: 'small muted' }, 'Automatic follows the light or dark setting of your device.')),
       block('Neck',
         D.field('Hand', GT.segmented('Hand', [[false, 'Right-handed'], [true, 'Left-handed']], settings.leftHanded, v => set({ leftHanded: v }))),
-        D.field('Direction', GT.segmented('Direction', [['auto', 'Automatic'], ['horizontal', 'Flat'], ['vertical', 'Upright']], settings.orientation, v => set({ orientation: v }))),
-        h('p', { class: 'small muted' }, 'Automatic shows the neck flat on wide screens and upright on phones.'),
+        D.field('Direction', GT.segmented('Direction', [['horizontal', 'Flat'], ['vertical', 'Upright']], GT.fretboard.isUpright(settings.orientation) ? 'vertical' : 'horizontal', v => set({ orientation: v }))),
+        h('p', { class: 'small muted' }, 'Flat: the nut on the left and the high e on top, like tab. On a phone a long neck scrolls sideways. Upright: the nut on top and the low E on the left, like a chord chart. On a phone, a switch under each neck changes this too.'),
         D.field('Frets in the library', GT.segmented('Frets', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => set({ frets: v }))),
         D.field('Tuning', tuning),
         preview),

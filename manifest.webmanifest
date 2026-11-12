@@ -1,7 +1,7 @@
 {
   "name": "Guitar Trainer",
   "short_name": "Guitar",
-  "description": "Guitar ear training and fretboard drills, with a library of scales, chords, triads, intervals and keys.",
+  "description": "Guitar theory on the neck: notes, intervals, scales, chords, triads and keys, with ear training and fretboard drills.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

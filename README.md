@@ -1,6 +1,6 @@
 # Guitar Trainer
 
-Guitar Trainer is a guitar study site in two parts. Train has short daily drills for the ear, the neck and keys. Library shows scales, chords, intervals, triads, keys and notes on the neck. Everything runs in the browser. The site has no server code, no build step and no downloads from other sites.
+Guitar Trainer is a guitar study site in two parts. Library shows notes, intervals, scales, chords, triads and keys on the neck. Train has short daily drills for the ear, the neck and keys. Everything runs in the browser. The site has no server code, no build step and no downloads from other sites.
 
 ## Use it
 
@@ -26,6 +26,10 @@ When you publish a new version, change `VERSION` in `sw.js`. Browsers then repla
 
 ## What is in it
 
+Library opens first. Its start page has a search box and six topics in the order you learn them: notes, intervals, scales, chords with the CAGED shapes, triads, and keys with the circle of fifths. On each topic page, the root, the type and the position are one tap away, above the neck. A keyboard folds out under the neck to show the same notes on a piano.
+
+The neck is a flat diagram: the nut on the left and the high e on top. On a phone a long neck scrolls sideways. A switch under each neck turns it upright, and so does Settings.
+
 Train has three tracks and two tools:
 
 - Ear: intervals, scale degrees in a key, chord quality and chord progressions.
@@ -33,7 +37,7 @@ Train has three tracks and two tools:
 - Keys and progressions: key facts, chords in a key, and numbers to chords.
 - Tools: a metronome and one-minute chord changes.
 
-Each drill asks again what you miss or answer slowly. When you answer about 85 percent right, the ear drills add new material. `docs/research.md` lists the research behind these choices.
+Each drill asks again what you miss or answer slowly. In the ear drills you choose the set you start with. When you answer about 85 percent right, the drill adds the next group to your set. `docs/research.md` lists the research behind these choices.
 
 Library has one link for each view, for example `#/library/scales/blues/a` or `#/library/chords/maj7/c/caged-E`. You can bookmark a view or send its link.
 

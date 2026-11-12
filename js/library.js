@@ -1,4 +1,5 @@
-/* Library: scales, chords, intervals, triads, keys and notes. Every view has its own link,
+/* Library: the reference part of the site. A start page with search, then six topics in the order
+   you learn them: notes, intervals, scales, chords, triads and keys. Every view has its own link,
    for example #/library/scales/blues/a or #/library/chords/maj7/c/caged-e. */
 (function (root) {
   'use strict';
@@ -8,42 +9,98 @@
 
   const lib = Object.assign({ labels: 'notes' }, store.get('library', {}));
   const saveLib = patch => { Object.assign(lib, patch); store.set('library', lib); };
-  const TABS = [['scales', 'Scales'], ['chords', 'Chords'], ['intervals', 'Intervals'], ['triads', 'Triads'], ['keys', 'Keys'], ['notes', 'Notes']];
+  const TOPICS = [
+    { id: 'notes', name: 'Notes', title: 'Notes on the neck', line: 'Where every note is. Start with the natural notes.' },
+    { id: 'intervals', name: 'Intervals', title: 'Intervals', line: 'The distance between two notes, and its shape on the neck.' },
+    { id: 'scales', name: 'Scales', title: 'Scales', line: 'Major, minor, pentatonic and modes, in positions over the whole neck.' },
+    { id: 'chords', name: 'Chords', title: 'Chords and CAGED', line: 'The notes of a chord, its shapes, and how the five CAGED shapes join.' },
+    { id: 'triads', name: 'Triads', title: 'Triads', line: 'Three-note chords on each set of strings, with their inversions.' },
+    { id: 'keys', name: 'Keys', title: 'Keys and the circle of fifths', line: 'The seven chords of a key, its signature and common progressions.' }
+  ];
   const PROPER = /^(Dorian|Phrygian|Lydian|Mixolydian|Locrian|Hungarian|Ionian|Aeolian)/;
   const lowerName = name => PROPER.test(name) ? name : name[0].toLowerCase() + name.slice(1);
   const stringOrdinal = s => FB.ordinal(6 - s);
   let lastRender = null;
 
   // ---------- shared pieces ----------
-  function rootRow(current, hrefFor, roots = T.ROOTS) {
-    return h('nav', { class: 'chips roots', 'aria-label': 'Root note' },
-      roots.map(r => h('a', { class: 'chip', href: '#/' + hrefFor(r), 'aria-current': String(r === current) }, r)));
-  }
-  // The control panel above the neck: every choice of a page in one place.
+  // The control panel above the neck: every choice of a page in one place, one tap each.
+  // A plain control needs no label on a phone, because its buttons say what it is.
   function ctl(label, control, cls = '') { return h('div', { class: 'ctl ' + cls }, h('span', { class: 'ctl-label' }, label), control); }
   function controls(...items) { return h('div', { class: 'controls', role: 'group', 'aria-label': 'Choices' }, items.flat().filter(Boolean)); }
-  function rootCtl(state, view) { return ctl('Root', rootRow(state.root, r => view.link(Object.assign({}, state, { root: r, pos: null }))), 'ctl-wide'); }
-  // A drop-down list with groups: [{ name, items: [[value, text]] }].
-  function pickList(label, groups, value, onChange) {
-    return h('select', { 'aria-label': label, onchange: e => onChange(e.target.value) },
-      groups.map(g => h('optgroup', { label: g.name }, g.items.map(([v, t]) => h('option', { value: v, selected: v === value }, t)))));
+  // Root: seven letters and a sharp or flat. Every root is in view and at most two taps away.
+  // A letter gives the natural note. The sharp or flat then changes it.
+  function rootCtl(state, view) {
+    const current = state.root, letter = current[0], acc = current.slice(1);
+    const go = name => { if (name !== current) GT.go(view.link(Object.assign({}, state, { root: name, pos: null })), true); };
+    const letters = h('div', { class: 'letters', role: 'radiogroup', 'aria-label': 'Root letter' }, 'CDEFGAB'.split('').map(l =>
+      h('button', { type: 'button', class: 'chip', role: 'radio', 'aria-checked': String(l === letter), onclick: () => go(l === letter ? current : l) }, l)));
+    const accs = h('div', { class: 'seg accs', role: 'radiogroup', 'aria-label': 'Sharp or flat' }, [['♭', 'Flat'], ['', 'Natural'], ['♯', 'Sharp']].map(([a, name]) =>
+      h('button', { type: 'button', role: 'radio', 'aria-checked': String(a === acc), 'aria-label': name, disabled: !T.ROOTS.includes(letter + a), onclick: () => go(letter + a) }, a || '♮')));
+    return [ctl('Root', letters, 'ctl-root ctl-plain'), ctl('Sharp or flat', accs, 'ctl-plain ctl-quiet')];
   }
-  function labelsSeg(onChange) {
-    return ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees']], lib.labels, v => { saveLib({ labels: v }); onChange(); }));
+  // A type picker: the common types as chips, one tap each, and a list for the rest.
+  // quick: [[value, text]]; groups: [{ name, items: [[value, text]] }].
+  function typePick(label, quick, groups, value, onChange) {
+    const isQuick = v => quick.some(q => q[0] === v);
+    const rest = groups.map(g => ({ name: g.name, items: g.items.filter(([v]) => !isQuick(v)) })).filter(g => g.items.length);
+    const more = `More ${label.toLowerCase()}s`;
+    const select = h('select', { class: 'more' + (isQuick(value) ? '' : ' is-on'), 'aria-label': more, onchange: e => onChange(e.target.value) },
+      h('option', { value: '', selected: isQuick(value), disabled: true }, more),
+      rest.map(g => h('optgroup', { label: g.name }, g.items.map(([v, t]) => h('option', { value: v, selected: v === value }, t)))));
+    return h('div', { class: 'types', role: 'group', 'aria-label': label },
+      quick.map(([v, t]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(v === value), onclick: () => { if (v !== value) onChange(v); } }, t)), select);
   }
-  function fretsSeg(onChange) {
-    return ctl('Frets', GT.segmented('Frets shown', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => { GT.saveSettings({ frets: v }); onChange(); }));
+  function labelsCtl(onChange) {
+    return ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees']], lib.labels, v => { saveLib({ labels: v }); onChange(); }), 'ctl-plain');
   }
-  function legend(kinds) {
-    const names = { root: 'Root', third: 'Third', fifth: 'Fifth', seventh: 'Seventh', other: 'Other tones' };
-    const colors = { root: 'var(--root)', third: 'var(--third)', fifth: 'var(--fifth)', seventh: 'var(--seventh)', other: 'var(--other)' };
-    return h('div', { class: 'legend', 'aria-hidden': 'true' }, kinds.map(k => h('span', null, h('i', { style: `background:${colors[k]}` }), names[k])));
+  // On a phone the neck scrolls, so the number of frets matters less: this control shows on wide screens only.
+  function fretsCtl(onChange) {
+    return ctl('Frets', GT.segmented('Frets shown', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => { GT.saveSettings({ frets: v }); onChange(); }), 'ctl-wide-only');
   }
-  function kindsOf(tones) {
-    const order = ['root', 'third', 'fifth', 'seventh', 'other'];
-    const set = new Set(tones.map(t => FB.degreeKind(t.label)));
-    return order.filter(k => set.has(k));
+  const kindOf = t => t.kind || FB.degreeKind(t.label);
+  // The tones of a scale or chord as a row of equal tiles. The row is also the color key of the neck.
+  function toneRow(tones, tile, label) {
+    const n = tones.length;
+    return h('div', { class: 'formula', role: label ? 'group' : null, 'aria-label': label, style: `--n:${n};--cols:${n <= 7 ? n : Math.ceil(n / 2)}` }, tones.map(tile));
   }
+  const toneInside = t => [
+    h('i', { class: 'swatch' + (kindOf(t) === 'root' ? ' is-root' : ''), style: `background:var(--${kindOf(t)})` }),
+    h('b', null, lib.labels === 'notes' ? t.name : t.label), h('span', null, lib.labels === 'notes' ? t.label : t.name)];
+  // A two-octave keyboard from C, with the tones of the page from the root up. A key plays its note.
+  // On a keyboard a semitone is the very next key, so the steps of a scale or chord are easy to see.
+  function piano(tones, rootName) {
+    const el = FB.el, WHITE = [0, 2, 4, 5, 7, 9, 11], KW = 24, KH = 88, BW = 15, BH = 54;
+    const svg = el('svg', { viewBox: `0 0 ${14 * KW + 2} ${KH + 2}`, class: 'piano', role: 'group', 'aria-label': 'Piano keyboard, two octaves from C' });
+    const base = T.pcOf(rootName);
+    const at = new Map(tones.map(t => { let k = base + t.semi; while (k > 23) k -= 12; return [k, t]; }));
+    const key = (k, x, w, height, cls) => {
+      const t = at.get(k);
+      const g = el('g', { class: `pkey ${cls}${t ? ' is-on fb-' + kindOf(t) : ''}`, role: 'button', tabindex: '0', 'aria-label': t ? `${t.name}, ${t.label}` : T.PC_PLAIN[k % 12] }, svg);
+      el('rect', { x, y: 1, width: w, height, rx: 3 }, g);
+      if (t) {
+        const text = lib.labels === 'notes' || t.kind ? t.name : t.label;
+        const cx = x + w / 2, cy = height - 13, r = cls === 'black' ? 7 : 8.5;
+        if (kindOf(t) === 'root') el('rect', { x: cx - r, y: cy - r, width: r * 2, height: r * 2, rx: r * 0.42, class: 'pdot' }, g);
+        else el('circle', { cx, cy, r, class: 'pdot' }, g);
+        el('text', { x: cx, y: cy + 3.2, class: 'plabel' + (text.length > 1 ? ' plabel-long' : '') }, g).textContent = text;
+      }
+      const play = () => A.note(48 + k, 0, 0.9, 0.5);
+      g.addEventListener('click', play);
+      g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); play(); } });
+    };
+    for (let o = 0; o < 2; o++) WHITE.forEach((semi, i) => key(o * 12 + semi, 1 + (o * 7 + i) * KW, KW, KH, 'white'));
+    for (let o = 0; o < 2; o++) [0, 1, 3, 4, 5].forEach(i => key(o * 12 + WHITE[i] + 1, 1 + (o * 7 + i + 1) * KW - BW / 2, BW, BH, 'black'));
+    return svg;
+  }
+  // The keyboard folds away. Each topic remembers whether you opened it. Intervals show it from the start.
+  function pianoBox(topic, tones, rootName, note) {
+    const saved = lib.piano || {};
+    const box = h('details', { class: 'piano-box', open: topic in saved ? saved[topic] : topic === 'intervals' },
+      h('summary', null, 'On a piano'), h('div', { class: 'piano-wrap' }, piano(tones, rootName)), note ? h('p', { class: 'small muted' }, note) : null);
+    box.addEventListener('toggle', () => saveLib({ piano: Object.assign({}, lib.piano, { [topic]: box.open }) }));
+    return box;
+  }
+  const head = (title, sub, buttons) => h('div', { class: 'lib-title' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
   // A caption under the neck that names the note you pressed.
   function caption() { return h('p', { class: 'small muted', 'aria-live': 'polite', style: 'min-height:1.5em;margin-top:6px' }, 'Tap a note on the neck to hear it.'); }
   function pressPlayer(capEl, describe) {
@@ -67,7 +124,7 @@
   }
   function neck(markers, extra = {}) {
     const box = h('div', { class: 'neck' });
-    FB.render(box, Object.assign({ from: 0, to: settings.frets, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation }, extra));
+    FB.render(box, Object.assign({ from: 0, to: settings.frets, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true }, extra));
     return box;
   }
   function miniNeck(markers, low, high, label, muted, extra = {}) {
@@ -118,39 +175,42 @@
         } else markers = toneMarkers(tones, { focus });
         neckSlot.replaceChildren(neck(markers, { onPress: pressPlayer(cap, describeNote(tones)), pressMarkersOnly: false, dimOutside: pos ? [pos.low, pos.high] : null, label: `${scalesView.title(state)} on the neck` }));
       };
-      const formula = h('div', { class: 'formula', role: 'group', 'aria-label': 'Scale tones. Select one to highlight it.' }, tones.map(t => {
+      const formula = toneRow(tones, t => {
         const b = h('button', { type: 'button', class: 'tone', 'aria-pressed': 'false', onclick: () => {
           focus = focus === t.label ? null : t.label;
           formula.querySelectorAll('.tone').forEach(x => x.setAttribute('aria-pressed', String(x === b && focus !== null)));
           A.note(48 + T.mod(T.pcOf(r) - 48) + t.semi);
           drawNeck();
-        } }, h('i', { class: 'swatch', style: `background:var(--${FB.degreeKind(t.label)})` }), h('b', null, lib.labels === 'notes' ? t.name : t.label), h('span', null, lib.labels === 'notes' ? t.label : t.name));
+        } }, toneInside(t));
         return b;
-      }));
+      }, 'Scale tones. Select one to highlight it.');
       const play = () => {
         const base = 48 + T.mod(T.pcOf(r) - 48);
         const up = tones.map(t => base + t.semi).concat(base + 12);
         A.notes(up.concat(up.slice(0, -1).reverse()), 'up', 0.32, 0.4);
       };
       drawNeck();
-      const posOptions = [[0, 'Whole neck']].concat(positions.map(p => [p.index, `${p.index}`]));
+      const posOptions = [[0, 'All positions']].concat(positions.slice().sort((a, b) => a.index - b.index).map(p => [p.index, `${p.index}`]));
+      const groups = T.SCALE_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, i.name]) }));
       const out = [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, scalesView.title(state)), h('p', { class: 'muted lib-sub' }, T.SCALE_GROUPS.find(g => g.id === scale.group).name)), h('div', { class: 'row' }, playButton('Play', play))),
-        formula,
+        head(scalesView.title(state), null, playButton('Play', play)),
         controls(
           rootCtl(state, scalesView),
-          ctl('Scale', pickList('Scale', T.SCALE_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, i.name]) })), scale.id, v => GT.go(scalesView.link(Object.assign({}, state, { scale: T.scaleById(v), pos: null })), true))),
-          positions.length ? ctl('Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true))) : null,
-          labelsSeg(rerender),
-          fretsSeg(rerender)),
+          labelsCtl(rerender),
+          ctl('Scale', typePick('Scale', SCALE_QUICK, groups, scale.id, v => GT.go(scalesView.link(Object.assign({}, state, { scale: T.scaleById(v), pos: null })), true)), 'ctl-wide ctl-plain'),
+          positions.length ? ctl('Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true)), 'ctl-plain') : null,
+          fretsCtl(rerender)),
         neckSlot, cap,
-        h('div', { class: 'row', style: 'justify-content:space-between' }, legend(kindsOf(tones)), pos ? h('span', { class: 'small muted' }, `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}.`) : null)
+        formula,
+        h('p', { class: 'small muted lib-note' }, pos ? `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}. ` : '', 'Tap a tone to light it on the neck.'),
+        pianoBox('scales', tones.concat(Object.assign({}, tones[0], { semi: 12 })), r, 'On a keyboard, a half step (H) is the very next key and a whole step (W) skips one. On the guitar that is 1 fret and 2 frets.')
       ];
-      out.push(section('Steps', 'W is a whole step (2 frets), H is a half step (1 fret).', h('div', { class: 'chips' }, stepNames(scale).map(s => h('span', { class: 'chip', style: 'cursor:default' }, s)))));
+      const steps = stepNames(scale);
+      out.push(section('Steps', 'W is a whole step (2 frets), H is a half step (1 fret).', h('div', { class: 'grid-chips', style: `--n:${steps.length};--cols:${steps.length <= 7 ? steps.length : Math.ceil(steps.length / 2)}` }, steps.map(s => h('span', { class: 'chip' }, s)))));
       if (scale.toneList.length === 7) {
         const triads = T.scaleChords(r, scale), sevenths = T.scaleChords(r, scale, true);
         out.push(section('Chords in this scale', 'Built by stacking every other note of the scale. Open one to see its shapes.',
-          h('div', { class: 'chord-row' }, triads.map(c => chordLink(c))),
+          h('div', { class: 'chord-strip' }, triads.map(c => chordLink(c))),
           h('div', { class: 'chord-row', style: 'margin-top:8px' }, sevenths.map(c => chordLink(c)))));
       }
       const related = relatedScales(r, scale);
@@ -158,6 +218,7 @@
       return out;
     }
   };
+  const SCALE_QUICK = [['major', 'Major'], ['minor', 'Minor'], ['minor-pentatonic', 'Minor pent.'], ['major-pentatonic', 'Major pent.'], ['blues', 'Blues']];
   function chordLink(c) {
     const href = c.chord ? `#/library/chords/${c.chord.id}/${rootSlug(rootForLink(c.root))}` : null;
     return h(href ? 'a' : 'span', { class: 'chord-btn', href, style: 'text-decoration:none;color:inherit' }, h('small', null, c.label), h('b', null, c.name));
@@ -218,7 +279,7 @@
         const match = shapes.find(s => s.frets.every((f, i) => f === c.frets[i]));
         return '#/' + chordsView.link({ chord: T.chordById(c.chord), root: c.root, shape: match ? match.id : null });
       };
-      return h('div', { class: 'chips' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c) }, T.chordName(c.root, T.chordById(c.chord)))));
+      return h('div', { class: 'chip-grid' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c) }, T.chordName(c.root, T.chordById(c.chord)))));
     },
     title: s => T.chordName(s.root, s.chord),
     render(state) {
@@ -254,24 +315,28 @@
       } else markers = toneMarkers(tones);
       const strum = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'strum');
       const arpeggio = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'up', 0.28, 0.5);
-      const shapeOptions = (caged ? [['caged', 'All five']] : []).concat([['neck', 'Whole neck']], shapes.map(s => [s.id, s.name]));
+      // Short names for the buttons: "C" for the C shape, and "Root on 6th", "5th", "4th" for the movable shapes.
+      const firstRoot = shapes.find(s => s.id.startsWith('root-'));
+      const shortName = s => s.id.startsWith('root-') ? (s === firstRoot ? 'Root on ' : '') + s.name.replace('-string root', '') : s.name.replace(' shape', '');
+      const shapeOptions = (caged ? [['caged', 'CAGED']] : []).concat([['neck', 'All notes']], shapes.map(s => [s.id, shortName(s)]));
       const current = showMap ? 'caged' : shape ? shape.id : 'neck';
       const atShape = shape && map.findIndex(sh => sh.frets.every((f, k) => f === shape.frets[k]));
       const mapNote = showMap ? 'Five shapes cover the neck, and each one overlaps the next. A ringed note belongs to two shapes: that is where they join. Pick a shape to see it alone.'
         : shape && caged && atShape >= 0 ? `Lines join the notes of the ${shape.name}. The outlines beside it are the ${[map[atShape - 1], map[atShape + 1]].filter(Boolean).map(n => n.shape + ' shape').join(' and the ')}, and the ringed notes are the ones they share.` : null;
+      const groups = T.CHORD_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, `${i.name} (${r}${i.symbol})`]) }));
       const out = [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, chordsView.title(state)), h('p', { class: 'muted lib-sub' }, `${r} ${lowerName(chord.name)}`)),
-          h('div', { class: 'row' }, playButton('Strum', strum), playButton('Arpeggio', arpeggio))),
-        h('div', { class: 'formula' }, tones.map(t => h('div', { class: 'tone', style: 'cursor:default' }, h('i', { class: 'swatch', style: `background:var(--${FB.degreeKind(t.label)})` }), h('b', null, lib.labels === 'notes' ? t.name : t.label), h('span', null, lib.labels === 'notes' ? t.label : t.name)))),
+        head(chordsView.title(state), `${r} ${lowerName(chord.name)}`, [playButton('Strum', strum), playButton('Arpeggio', arpeggio)]),
         controls(
           rootCtl(state, chordsView),
-          ctl('Chord', pickList('Chord', T.CHORD_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, `${i.name} (${r}${i.symbol})`]) })), chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r }), true))),
-          shapes.length ? ctl('Shape', GT.segmented('Shape', shapeOptions, current, v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true))) : null,
-          labelsSeg(rerender),
-          fretsSeg(rerender)),
+          labelsCtl(rerender),
+          ctl('Chord', typePick('Chord', CHORD_QUICK.map(id => [id, T.chordName(r, T.chordById(id))]), groups, chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r }), true)), 'ctl-wide ctl-plain'),
+          shapes.length ? ctl('Shape', GT.segmented('Shape', shapeOptions, current, v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true)), 'ctl-plain') : null,
+          fretsCtl(rerender)),
         neck(markers, Object.assign({ onPress: pressPlayer(cap, describeNote(tones)), label: `${chordsView.title(state)} on the neck` }, extra)),
         cap,
-        h('div', { class: 'row', style: 'justify-content:space-between;align-items:flex-start' }, legend(kindsOf(tones)), mapNote ? h('p', { class: 'small muted', style: 'max-width:60ch' }, mapNote) : null)
+        toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
+        mapNote ? h('p', { class: 'small muted lib-note' }, mapNote) : null,
+        pianoBox('chords', tones, r, 'A chord takes every other note of its scale. On a keyboard you see the gaps: 4 keys up for a major third, 3 for a minor third.')
       ];
       if (shapes.length) {
         out.push(section(CAGEDnote(chord) ? 'The five CAGED shapes' : 'Shapes', CAGEDnote(chord),
@@ -286,10 +351,13 @@
               miniNeck(m, s.low, s.high, `${s.name} of ${chordsView.title(state)}`, mutedStrings, { links: [{ points: placesOf(s), cls: 'is-shape' }] }));
           }))));
       }
+      if (TRIAD_QUALITIES.includes(chord.id)) out.push(section('Related', null, h('div', { class: 'chips' },
+        h('a', { class: 'chip', href: '#/' + triadsView.link({ quality: chord.id, root: r, set: '123' }) }, `${chordsView.title(state)} triads on three strings`))));
       out.push(section('Open chords', 'The chords in the first frets. A chord that is also a CAGED shape opens as that shape.', chordsView.openChords()));
       return out;
     }
   };
+  const CHORD_QUICK = ['major', 'minor', '7', 'maj7', 'm7'];
   const CAGEDnote = chord => ['major', 'minor'].includes(chord.id) ? 'Each shape is an open chord moved up the neck. In order up the neck they repeat C, A, G, E, D. Neighbor shapes share notes, so the five join into one map of the neck.' : null;
 
   // ---------- intervals ----------
@@ -304,21 +372,25 @@
       const { interval, root: r } = state;
       const label = interval.semi === 12 ? '8' : interval.label;
       const target = T.spell(r, interval.semi === 12 ? '8' : interval.semi === 6 ? '♭5' : label);
-      const tones = [{ label: '1', name: r, pc: T.pcOf(r) }, { label, name: target, pc: T.mod(T.pcOf(r) + interval.semi) }];
-      if (interval.semi === 0 || interval.semi === 12) tones.pop();
+      const both = [{ label: '1', name: r, pc: T.pcOf(r), semi: 0 }, { label, name: target, pc: T.mod(T.pcOf(r) + interval.semi), semi: interval.semi }];
+      // A unison and an octave have one note name: the neck shows it once.
+      const tones = interval.semi === 0 || interval.semi === 12 ? both.slice(0, 1) : both;
       const cap = caption();
       const base = 48 + T.mod(T.pcOf(r) - 48);
       const inv = T.INTERVALS.find(i => i.semi === 12 - interval.semi);
       const songs = T.INTERVAL_SONGS[interval.semi] || {};
       const out = [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, interval.name), h('p', { class: 'muted lib-sub' }, `${r} to ${target}: ${interval.semi} ${interval.semi === 1 ? 'semitone' : 'semitones'} (frets on one string). Turned upside down it is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`)),
-          h('div', { class: 'row' }, playButton('Up', () => A.notes([base, base + interval.semi], 'up')), playButton('Down', () => A.notes([base, base + interval.semi], 'down')), playButton('Together', () => A.notes([base, base + interval.semi], 'together')))),
+        head(interval.name, `${r} to ${target}, ${interval.semi} ${interval.semi === 1 ? 'fret' : 'frets'} on one string`,
+          [playButton('Up', () => A.notes([base, base + interval.semi], 'up')), playButton('Down', () => A.notes([base, base + interval.semi], 'down')), playButton('Together', () => A.notes([base, base + interval.semi], 'together'))]),
         controls(
           rootCtl(state, intervalsView),
-          ctl('Interval', h('nav', { class: 'chips', 'aria-label': 'Interval' }, T.INTERVALS.map(i => h('a', { class: 'chip', href: '#/' + intervalsView.link({ interval: i, root: r }), 'aria-current': String(i.id === interval.id), title: i.name }, i.short))), 'ctl-wide'),
-          labelsSeg(rerender), fretsSeg(rerender)),
+          labelsCtl(rerender),
+          ctl('Interval', h('div', { class: 'grid-chips', style: '--cols:7;--n:13', role: 'group', 'aria-label': 'Interval' }, T.INTERVALS.map(i => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(i.id === interval.id), title: i.name, 'aria-label': i.name, onclick: () => GT.go(intervalsView.link({ interval: i, root: r }), true) }, i.short))), 'ctl-wide ctl-plain'),
+          fretsCtl(rerender)),
         neck(toneMarkers(tones), { onPress: pressPlayer(cap, describeNote(tones)), label: `${interval.name} from ${r}` }),
         cap,
+        pianoBox('intervals', both, r, `Count the keys from ${r} up to ${target}, black keys too: ${interval.semi}. Each key is one semitone, the same as one fret.`),
+        h('p', { class: 'small muted lib-note' }, `Turned upside down, ${/^[aeiou]/i.test(interval.name) ? 'an' : 'a'} ${interval.name.toLowerCase()} is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`),
         songs.up || songs.down ? section('Songs that start with it', 'A song you know makes the sound easy to recall. Sing the start of it, then check with the buttons above.',
           h('dl', { class: 'facts' }, songs.up ? [h('dt', null, 'Going up'), h('dd', null, songs.up)] : null, songs.down ? [h('dt', null, 'Going down'), h('dd', null, songs.down)] : null)) : null,
         section('Shapes on the neck', 'Where the upper note sits when you start on one string. The B string is tuned a semitone lower than the pattern, so shapes that cross it move one fret up.', intervalShapes(interval.semi))
@@ -359,16 +431,16 @@
       const cap = caption();
       const onSet = (s) => set.strings.includes(s);
       const out = [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, triadsView.title(state)), h('p', { class: 'muted lib-sub' }, `${tones.map(t => t.name).join(' ')} (${tones.map(t => t.label).join(' ')}) on ${set.name.toLowerCase()}`)),
-          h('div', { class: 'row' }, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum')))),
+        head(triadsView.title(state), `${tones.map(t => t.name).join(' ')} on ${set.name.replace('Strings', 'strings')}`, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum'))),
         controls(
           rootCtl(state, triadsView),
-          ctl('Quality', GT.segmented('Quality', TRIAD_QUALITIES.map(q => [q, { major: 'Major', minor: 'Minor', dim: 'Dim', aug: 'Aug' }[q]]), state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true))),
-          ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map(s => [s.id, s.id.split('').reverse().join('–')]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true))),
-          labelsSeg(rerender), fretsSeg(rerender)),
+          labelsCtl(rerender),
+          ctl('Quality', GT.segmented('Quality', TRIAD_QUALITIES.map(q => [q, { major: 'Major', minor: 'Minor', dim: 'Dim', aug: 'Aug' }[q]]), state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true)), 'ctl-plain'),
+          ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map((s, i) => [s.id, [i ? null : h('span', { class: 'seg-word' }, 'Strings '), s.id.split('').reverse().join('–')]]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true)), 'ctl-plain'),
+          fretsCtl(rerender)),
         neck(toneMarkers(tones, { only: s => onSet(s) }), { onPress: pressPlayer(cap, describeNote(tones)), label: `${triadsView.title(state)} on ${set.name}` }),
         cap,
-        legend(kindsOf(tones)),
+        toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
         section('Inversions', 'The same three notes with a different note in the bass. Tap a card to hear it. Up the neck the order repeats: root position, first inversion, second inversion.',
           h('div', { class: 'cards' }, voicings.map((list, inversion) => {
             const v = list[0];
@@ -381,7 +453,9 @@
             const low = Math.min(...v.frets), high = Math.max(...v.frets);
             return h('button', { type: 'button', class: 'card', onclick: () => A.notes(midis, 'strum') },
               h('h3', null, T.INVERSIONS[inversion]), h('p', null, `${v.tones[0]} in the bass, frets ${low}–${high}`), miniNeck(markers, low, high, `${T.INVERSIONS[inversion]}`));
-          })))
+          }))),
+        section('Related', null, h('div', { class: 'chips' },
+          h('a', { class: 'chip', href: '#/' + chordsView.link({ chord, root: r }) }, `All ${T.chordName(r, chord)} chord shapes`)))
       ];
       return out;
     }
@@ -389,6 +463,8 @@
 
   // ---------- keys and the circle of fifths ----------
   const KEY_NAMES = T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean));
+  // The angle of the wheel, kept between drawings: a new key turns into place from the last one.
+  let lastTurn = null;
   const keysView = {
     parse(p) {
       const mode = p[1] === 'minor' ? 'minor' : 'major';
@@ -405,56 +481,85 @@
       const triads = T.diatonic(key, mode), sevenths = T.diatonic(key, mode, true);
       const cells = T.keyCells(key, mode);
       const circle = circleOfFifths(state, cells);
-      // Hovering or focusing a chord marks it on the circle.
-      const mark = i => ({ onmouseenter: () => circle.hot(cells[i]), onfocus: () => circle.hot(cells[i]), onmouseleave: () => circle.hot(null), onblur: () => circle.hot(null) });
       const idx = T.CIRCLE.findIndex(k => k === entry || k.alt === entry);
       const relName = mode === 'major' ? entry.minor : entry.major;
       const next = T.CIRCLE[(idx + 1) % 12], prev = T.CIRCLE[(idx + 11) % 12];
+      // The same key under its other name, for example F♯ major and G♭ major.
+      const twin = T.CIRCLE[idx].alt === entry ? T.CIRCLE[idx] : T.CIRCLE[idx].alt;
       const pick = k => mode === 'major' ? k.major : k.minor;
       const keyLink = (name, m) => h('a', { href: '#/' + keysView.link({ key: name, mode: m }) }, `${name} ${m}`);
-      const playChord = (c, prevVoicing) => {
+      const playChord = c => {
         const pcs = c.chord.toneList.map(t => T.mod(c.pc + t.semi));
-        const v = T.voiceLead(pcs, prevVoicing);
-        A.notes([36 + T.mod(c.pc - 36)].concat(v), 'strum');
-        return v;
+        A.silence();
+        A.notes([A.bass(c.pc)].concat(T.voiceLead(pcs, null)), 'strum');
       };
       const progressions = mode === 'major'
         ? [['I–IV–V–I', [1, 4, 5, 1]], ['I–V–vi–IV', [1, 5, 6, 4]], ['ii–V–I', [2, 5, 1]], ['I–vi–IV–V', [1, 6, 4, 5]], ['vi–IV–I–V', [6, 4, 1, 5]]]
         : [['i–iv–v–i', [1, 4, 5, 1]], ['i–♭VI–♭III–♭VII', [1, 6, 3, 7]], ['i–♭VII–♭VI–♭VII', [1, 7, 6, 7]], ['ii°–v–i', [2, 5, 1]]];
+
+      // The seven chords in one row. A tap plays the chord, marks it on the circle and shows how to play it.
+      const panel = h('div', { class: 'chord-panel', 'aria-live': 'polite' });
+      const strip = h('div', { class: 'chord-strip', role: 'group', 'aria-label': `The chords of ${key} ${mode}` }, triads.map((c, i) =>
+        h('button', { type: 'button', class: 'chord-btn', 'aria-pressed': String(i === 0), onclick: () => { choose(i); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name))));
+      const light = i => {
+        strip.querySelectorAll('.chord-btn').forEach((b, k) => b.classList.toggle('is-playing', k === i));
+        circle.hot(i === null ? null : cells[i]);
+      };
+      function choose(i) {
+        strip.querySelectorAll('.chord-btn').forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
+        circle.hot(cells[i]);
+        const c = triads[i], c7 = sevenths[i], chordTones = T.tonesOn(c.root, c.chord);
+        // The shape nearest to the nut: the open chord when there is one.
+        const shape = T.chordShapes(c.root, c.chord.id, GT.tuning()).slice().sort((a, b) => a.low - b.low)[0];
+        const dots = shape ? shape.frets.map((f, s) => {
+          if (f === null) return null;
+          const t = chordTones.find(x => x.pc === T.mod(GT.tuning()[s] + f));
+          return { string: s, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: FB.degreeKind(t.label) };
+        }).filter(Boolean) : [];
+        panel.replaceChildren(
+          h('div', { class: 'chord-panel-text' },
+            h('h3', null, c.name, h('small', null, ` ${c.roman} in ${key} ${mode}`)),
+            h('p', null, `${chordTones.map(t => t.name).join(' ')}. With a seventh it is ${c7.name}.`),
+            h('div', { class: 'row' }, playButton(c.name, () => playChord(c)), playButton(c7.name, () => playChord(c7)),
+              h('a', { class: 'btn', href: `#/library/chords/${c.chord.id}/${rootSlug(rootForLink(c.root))}` }, 'All shapes'))),
+          shape ? miniNeck(dots, shape.low, shape.high, `${c.name}, ${shape.name}`, shape.frets.map((f, s) => f === null ? s : null).filter(s => s !== null)) : null);
+      }
+      choose(0);
+      circle.hot(null);
       const playProgression = degrees => {
         A.silence();
         let v = null;
-        const chords = degrees.map(d => { const c = triads[d - 1]; const pcs = c.chord.toneList.map(t => T.mod(c.pc + t.semi)); v = T.voiceLead(pcs, v); return [36 + T.mod(c.pc - 36)].concat(v); });
+        const chords = degrees.map(d => { const c = triads[d - 1]; const pcs = c.chord.toneList.map(t => T.mod(c.pc + t.semi)); v = T.voiceLead(pcs, v); return [A.bass(c.pc)].concat(v); });
         A.chordSequence(chords, 84, 2);
-        // Each chord lights up on the circle while it plays.
+        // Each chord lights up on the circle and in the row while it plays.
         const each = 60 / 84 * 2 * 1000;
-        degrees.forEach((d, i) => A.later(() => circle.hot(cells[d - 1]), i * each));
-        A.later(() => circle.hot(null), degrees.length * each);
+        degrees.forEach((d, i) => A.later(() => light(d - 1), i * each));
+        A.later(() => light(null), degrees.length * each);
       };
-      const keyOf = (k, m) => m === 'major' ? k.major : k.minor;
-      const details = h('div', null,
-        h('h1', null, keysView.title(state)),
-        controls(
-          ctl('Key', pickList('Key', [{ name: mode === 'major' ? 'Major keys' : 'Minor keys', items: KEY_NAMES.map(k => [keyOf(k, mode), `${keyOf(k, mode)} ${mode}${k.count ? ` (${sigText(k.count, true)})` : ''}`]) }], key, v => GT.go(keysView.link({ key: v, mode }), true))),
-          ctl('Mode', GT.segmented('Mode', [['major', 'Major'], ['minor', 'Minor']], mode, v => GT.go(keysView.link({ key, mode: v }), true)))),
-        h('dl', { class: 'facts', style: 'margin-top:14px' },
-          h('dt', null, 'Key signature'), h('dd', null, sigText(entry.count)),
-          h('dt', null, mode === 'major' ? 'Relative minor' : 'Relative major'), h('dd', null, keyLink(relName, mode === 'major' ? 'minor' : 'major'), ', same notes'),
-          h('dt', null, 'One fifth up'), h('dd', null, keyLink(pick(next), mode), ', one step clockwise'),
-          h('dt', null, 'One fifth down'), h('dd', null, keyLink(pick(prev), mode), ', one step counterclockwise')),
-        h('div', { class: 'lib-section', style: 'margin-top:20px' }, h('h2', null, 'Scale'),
-          h('div', { class: 'formula' }, tones.map(t => h('button', { type: 'button', class: 'tone', onclick: () => A.note(48 + T.mod(T.pcOf(key) - 48) + t.semi) }, h('b', null, t.name), h('span', null, t.label)))),
-          h('p', { style: 'margin-top:10px' }, h('a', { href: `#/library/scales/${scale.id}/${rootSlug(rootForLink(key))}` }, `Show ${key} ${lowerName(scale.name)} on the neck`))),
-        h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), h('p', null, 'Tap a chord to hear it.'),
-          h('div', { class: 'chord-row' }, triads.map((c, i) => h('button', Object.assign({ type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, mark(i)), h('small', null, c.roman), h('b', null, c.name)))),
-          h('div', { class: 'chord-row', style: 'margin-top:8px' }, sevenths.map((c, i) => h('button', Object.assign({ type: 'button', class: 'chord-btn', onclick: () => playChord(c) }, mark(i)), h('small', null, c.roman), h('b', null, c.name)))),
-          mode === 'minor' ? h('p', { class: 'small muted', style: 'margin-top:10px' }, `Songs in minor keys often make v a major chord (${T.spell(key, '5')}), borrowed from the harmonic minor.`) : null),
-        h('div', { class: 'lib-section' }, h('h2', null, 'Common progressions'),
-          h('table', { class: 'table' }, h('tbody', null, progressions.map(([name, degrees]) => h('tr', null,
-            h('td', null, name), h('td', null, degrees.map(d => triads[d - 1].name).join('  ')),
-            h('td', { style: 'text-align:right' }, h('button', { type: 'button', class: 'btn', onclick: () => playProgression(degrees) }, '▶ Play'))))))));
-      const note = h('p', { class: 'circle-note' }, `The frame holds the seven chords of ${key} ${mode}. Clockwise is a fifth up. Tap a key to open it.`);
-      return [h('div', { class: 'circle-wrap' }, h('div', null, circle, note), details)];
+      const facts = h('dl', { class: 'facts' },
+        h('dt', null, 'Key signature'), h('dd', null, sigText(entry.count)),
+        h('dt', null, mode === 'major' ? 'Relative minor' : 'Relative major'), h('dd', null, keyLink(relName, mode === 'major' ? 'minor' : 'major'), ', the same notes'),
+        h('dt', null, 'One fifth up'), h('dd', null, keyLink(pick(next), mode), ', one step clockwise'),
+        h('dt', null, 'One fifth down'), h('dd', null, keyLink(pick(prev), mode), ', one step counterclockwise'),
+        twin ? [h('dt', null, 'Other name'), h('dd', null, keyLink(pick(twin), mode), `, ${sigText(twin.count)}`)] : null);
+      return [
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, keysView.title(state)), h('p', { class: 'muted lib-sub' }, sigText(entry.count))),
+          GT.segmented('Mode', [['major', 'Major'], ['minor', 'Minor']], mode, v => GT.go(keysView.link({ key, mode: v }), true))),
+        h('div', { class: 'circle-wrap' },
+          h('div', { class: 'circle-col' }, circle, h('p', { class: 'circle-note' }, 'Tap a key to turn the circle to it. The frame at the top holds the seven chords of the key.')),
+          h('div', { class: 'keys-main' },
+            h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel,
+              mode === 'minor' ? h('p', { class: 'small muted', style: 'margin-top:10px' }, `Songs in minor keys often make v a major chord (${T.spell(key, '5')}), borrowed from the harmonic minor.`) : null),
+            h('div', { class: 'lib-section' }, h('h2', null, 'Common progressions'),
+              h('div', { class: 'prog-list' }, progressions.map(([name, degrees]) => h('button', { type: 'button', class: 'prog', onclick: () => playProgression(degrees) },
+                h('span', { class: 'prog-play', 'aria-hidden': 'true' }, '▶'), h('b', null, name), h('span', null, degrees.map(d => triads[d - 1].name).join('  ')))))))),
+        h('div', { class: 'keys-more' },
+          h('div', { class: 'lib-section' }, h('h2', null, 'Scale'),
+            toneRow(tones, t => h('button', { type: 'button', class: 'tone', onclick: () => A.note(48 + T.mod(T.pcOf(key) - 48) + t.semi) }, h('b', null, t.name), h('span', null, t.label))),
+            h('p', { style: 'margin-top:12px' }, h('a', { href: `#/library/scales/${scale.id}/${rootSlug(rootForLink(key))}` }, `Show ${key} ${lowerName(scale.name)} on the neck`)),
+            pianoBox('keys', tones.concat(Object.assign({}, tones[0], { semi: 12 })), key, 'C major uses only the white keys. Each step around the circle changes one note of the scale.')),
+          h('div', { class: 'lib-section' }, h('h2', null, 'Facts'), facts))
+      ];
     }
   };
   function sigText(count, short) {
@@ -466,14 +571,15 @@
   // Sharps (plus) or flats (minus) in the major scale of a key name, also for names such as C♭.
   const sigCount = name => T.tonesOn(name, T.scaleById('major')).reduce((n, t) => n + (t.name.match(/♯/g) || []).length - (t.name.match(/♭/g) || []).length, 0);
   // Three rings: major keys, their relative minors, and the vii° of the major key at each position.
-  // A frame holds the seven chords of the selected key, each with its Roman numeral.
+  // The wheel turns, so the chosen key is always at the top. A frame there holds the seven chords of the key,
+  // each with its Roman numeral: IV, I and V outside, ii, vi and iii inside, vii° below.
   function circleOfFifths(state, cells) {
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('viewBox', '-212 -212 424 424');
     svg.setAttribute('class', 'circle');
     svg.setAttribute('role', 'group');
-    svg.setAttribute('aria-label', `Circle of fifths with the chords of ${state.key} ${state.mode} in a frame. Clockwise is a fifth up.`);
+    svg.setAttribute('aria-label', `Circle of fifths, turned to ${state.key} ${state.mode}. The frame at the top holds the chords of the key. Clockwise is a fifth up.`);
     const el = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); (parent || svg).appendChild(n); return n; };
     const STEP = Math.PI / 6;
     const RINGS = { major: [148, 208, 178], minor: [100, 148, 124], dim: [62, 100, 81] };
@@ -482,6 +588,7 @@
     const tonic = cells[0];
     const inKey = new Map(cells.map(c => [`${c.ring}:${c.pos}`, c]));
     const paths = new Map();
+    const wheel = el('g', { class: 'wheel' });
     // Text lines per ring: numeral, name, signature (offsets from the middle of the cell).
     const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 5], [-7, 10]], dim: [[null, 4], [-5, 9]] };
     T.CIRCLE.forEach((k, i) => {
@@ -491,40 +598,50 @@
         const [r1, r2, mid] = RINGS[ring];
         const d = arc(r1, r2, a - STEP / 2, a + STEP / 2);
         paths.set(`${ring}:${i}`, d);
-        const g = el('g', { class: `cell ring-${ring}${c ? ' in-key' : ''}${c === tonic ? ' is-tonic' : ''}` });
+        const g = el('g', { class: `cell ring-${ring}${c ? ' in-key' : ''}${c === tonic ? ' is-tonic' : ''}` }, wheel);
         el('path', { d }, g);
         const x = (mid * Math.sin(a)).toFixed(1), y = -mid * Math.cos(a);
-        const text = (cls, dy, value) => { el('text', { x, y: (y + dy).toFixed(1), class: cls }, g).textContent = value; };
+        // The words turn back by the angle of the wheel, around the middle of their cell, so they stay upright.
+        const words = el('g', { class: 'cell-text', style: `transform-origin:${x}px ${y.toFixed(1)}px` }, g);
+        const text = (cls, dy, value) => { el('text', { x, y: (y + dy).toFixed(1), class: cls }, words).textContent = value; };
         const [numY, nameY, sigY] = LAYOUT[ring][c ? 1 : 0];
         if (c) text('t-num', numY, c.roman);
         text('t-name', nameY, c ? c.name : ring === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : ring === 'minor' ? `${k.minor}m` : `${T.spell(k.major, '7')}°`);
         // Keys such as G♯ major (8♯) exist only in theory, so their cell shows no signature.
         if (ring === 'major' && !(c && Math.abs(sigCount(c.root)) > 7)) text('t-sig', sigY, c ? sigText(sigCount(c.root), true) : k.alt ? `${sigText(k.count, true)}/${sigText(k.alt.count, true)}` : sigText(k.count, true));
         if (ring === 'dim') continue;
-        // Diminished chords are not keys. Major and minor cells open their key.
+        // Diminished chords are not keys. Major and minor cells turn the circle to their key.
         const pick = e => ring === 'major' ? e.major : e.minor;
         const entry = c && k.alt && pick(k.alt) === c.root ? k.alt : k;
         const target = pick(entry);
         g.setAttribute('role', 'link');
         g.setAttribute('tabindex', '0');
         g.setAttribute('aria-label', `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}`);
-        const open = () => GT.go(keysView.link({ key: target, mode: ring }));
+        const open = () => GT.go(keysView.link({ key: target, mode: ring }), true);
         g.addEventListener('click', open);
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
       }
     });
-    el('circle', { r: 60, class: 'hub' });
-    el('text', { y: 4, class: 't-hub' }).textContent = state.key;
-    el('text', { y: 24, class: 't-hub-sub' }).textContent = state.mode;
-    const A = steps => (tonic.pos + steps) * STEP;
-    el('path', { class: 'key-frame', d: `M ${pt(208, A(-1.5))} A 208 208 0 0 1 ${pt(208, A(1.5))} L ${pt(100, A(1.5))} A 100 100 0 0 0 ${pt(100, A(0.5))} L ${pt(62, A(0.5))} A 62 62 0 0 0 ${pt(62, A(-0.5))} L ${pt(100, A(-0.5))} A 100 100 0 0 0 ${pt(100, A(-1.5))} Z` });
-    // Marks one chord of the key, for example while it plays.
-    const hot = el('path', { class: 'hot', visibility: 'hidden' });
+    // Marks one chord of the key, for example while it plays. It turns with the wheel.
+    const hot = el('path', { class: 'hot', visibility: 'hidden' }, wheel);
     svg.hot = c => {
       if (!c) { hot.setAttribute('visibility', 'hidden'); return; }
       hot.setAttribute('d', paths.get(`${c.ring}:${c.pos}`));
       hot.setAttribute('visibility', 'visible');
     };
+    el('circle', { r: 60, class: 'hub' });
+    el('text', { y: -2, class: 't-hub' }).textContent = state.key;
+    el('text', { y: 16, class: 't-hub-sub' }).textContent = state.mode;
+    el('text', { y: 34, class: 't-hub-sig' }).textContent = state.entry.count === 0 ? 'no ♯ or ♭' : sigText(state.entry.count, true);
+    // The frame stays at the top. The wheel turns under it.
+    const F = steps => steps * STEP;
+    el('path', { class: 'key-frame', d: `M ${pt(208, F(-1.5))} A 208 208 0 0 1 ${pt(208, F(1.5))} L ${pt(100, F(1.5))} A 100 100 0 0 0 ${pt(100, F(0.5))} L ${pt(62, F(0.5))} A 62 62 0 0 0 ${pt(62, F(-0.5))} L ${pt(100, F(-0.5))} A 100 100 0 0 0 ${pt(100, F(-1.5))} Z` });
+    // Turn the short way round from the last key.
+    const target = -tonic.pos * 30;
+    const turn = lastTurn === null ? target : lastTurn + (((target - lastTurn) % 360 + 540) % 360 - 180);
+    svg.style.setProperty('--turn', `${lastTurn === null ? turn : lastTurn}deg`);
+    if (lastTurn !== null && lastTurn !== turn) requestAnimationFrame(() => requestAnimationFrame(() => svg.style.setProperty('--turn', `${turn}deg`)));
+    lastTurn = turn;
     return svg;
   }
 
@@ -541,17 +658,23 @@
         const pc = T.mod(tuning[s] + f), name = T.PC_PLAIN[pc];
         if (state.mode === 'naturals' && name.length > 1) continue;
         if (state.mode === 'one' && pc !== T.pcOf(state.note)) continue;
-        markers.push({ string: s, fret: f, label: name, kind: state.mode === 'one' ? 'root' : name.length > 1 ? 'ghost' : 'other' });
+        markers.push({ string: s, fret: f, label: state.mode === 'one' ? state.note : name, kind: state.mode === 'one' ? 'root' : name.length > 1 ? 'ghost' : 'other' });
       }
+      const one = state.mode === 'one' ? T.pcOf(state.note) : -1;
+      // The keyboard shows the same choice: the natural notes are its white keys.
+      const keys = T.PC_PLAIN.map((name, pc) => ({ name, label: name, semi: pc, kind: state.mode === 'one' ? 'root' : name.length > 1 ? 'ghost' : 'other' }))
+        .filter(t => state.mode === 'all' || (state.mode === 'naturals' ? t.name.length === 1 : t.semi === one))
+        .flatMap(t => state.mode === 'one' ? [Object.assign({}, t, { name: state.note }), Object.assign({}, t, { name: state.note, semi: t.semi + 12 })] : [t]);
       return [
-        h('div', { class: 'lib-title' }, h('h1', null, notesView.title(state))),
+        head(notesView.title(state), state.mode === 'one' ? 'The same note repeats 12 frets higher on each string.' : 'Learn the natural notes first. The sharps and flats sit between them.'),
         controls(
-          ctl('Show', h('nav', { class: 'chips roots', 'aria-label': 'Note' },
-            [['naturals', 'Naturals'], ['all', 'All']].map(([m, t]) => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: m }), 'aria-current': String(state.mode === m) }, t)),
-            T.PC_PLAIN.map(n => h('a', { class: 'chip', href: '#/' + notesView.link({ mode: 'one', note: n }), 'aria-current': String(state.mode === 'one' && T.pcOf(state.note) === T.pcOf(n)) }, n))), 'ctl-wide'),
-          fretsSeg(rerender)),
+          ctl('Show', GT.segmented('Show', [['naturals', 'Natural notes'], ['all', 'All notes']], state.mode, v => GT.go(notesView.link({ mode: v }), true)), 'ctl-plain'),
+          ctl('One note', h('div', { class: 'grid-chips', style: '--cols:6;--n:12', role: 'group', 'aria-label': 'Show one note' },
+            T.PC_PLAIN.map((n, pc) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(pc === one), onclick: () => GT.go(notesView.link(pc === one ? { mode: 'naturals' } : { mode: 'one', note: n }), true) }, n))), 'ctl-wide'),
+          fretsCtl(rerender)),
         neck(markers, { onPress: pressPlayer(cap, describeNote(null)), label: notesView.title(state) }),
         cap,
+        pianoBox('notes', keys, 'C', 'B to C and E to F have no black key between them. On the guitar they are one fret apart, and all other natural notes are two frets apart.'),
         section('Ways to remember', null, h('dl', { class: 'facts' },
           h('dt', null, 'Octave shape'), h('dd', null, 'Two strings higher and two frets up. Across the B string it is three frets up.'),
           h('dt', null, 'Fret 12'), h('dd', null, 'Every string starts again: the notes repeat 12 frets higher.'),
@@ -561,27 +684,123 @@
     }
   };
 
-  const VIEWS = { scales: scalesView, chords: chordsView, intervals: intervalsView, triads: triadsView, keys: keysView, notes: notesView };
+  const VIEWS = { notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView };
   let rerender = () => {};
 
+  // ---------- start page ----------
+  // Search: "am7", "d dorian", "f sharp minor", "bb major key". Sharps and flats can be typed as # and b.
+  const plain = text => text.toLowerCase().replace(/♯/g, '#').replace(/♭/g, 'b').replace(/[()–,]/g, ' ').replace(/\s+/g, ' ').trim();
+  let index = null;
+  function searchIndex() {
+    if (index) return index;
+    index = [];
+    // rank: the place of a scale or chord in its list, so the plain major and minor come before the rare ones.
+    const add = (title, kind, href, more = '', rank = title.length) => index.push({ title, kind, href, rank, words: plain(`${title} ${more}`).split(' ') });
+    for (const r of T.ROOTS) {
+      T.SCALES.forEach((s, i) => add(`${r} ${lowerName(s.name)}`, 'Scale', scalesView.link({ scale: s, root: r }), 'scale', i));
+      T.CHORDS.forEach((c, i) => add(T.chordName(r, c), 'Chord', chordsView.link({ chord: c, root: r }), `${r} ${c.name} chord`, i));
+      for (const q of TRIAD_QUALITIES) add(`${T.chordName(r, T.chordById(q))} triads`, 'Triads', triadsView.link({ quality: q, root: r, set: '123' }), `${r} ${T.chordById(q).name} triad`);
+      add(`Every ${r} on the neck`, 'Notes', notesView.link({ mode: 'one', note: r }), `${r} note`);
+    }
+    for (const k of KEY_NAMES) for (const m of ['major', 'minor']) add(`${m === 'major' ? k.major : k.minor} ${m}`, 'Key', keysView.link({ key: m === 'major' ? k.major : k.minor, mode: m }), 'key circle of fifths');
+    for (const i of T.INTERVALS) add(i.name, 'Interval', intervalsView.link({ interval: i, root: 'C' }), `${i.short} interval`);
+    return index;
+  }
+  function find(query) {
+    const tokens = plain(query.replace(/\s*sharp\b/gi, '#').replace(/\s*flat\b/gi, 'b')).split(' ').filter(Boolean);
+    if (!tokens.length) return [];
+    const hits = [];
+    for (const entry of searchIndex()) {
+      // Every word you type must start its own word of the entry. A whole word counts more.
+      const free = entry.words.slice();
+      let score = 0;
+      for (const t of tokens) {
+        let at = free.indexOf(t), points = 2;
+        if (at < 0) { at = free.findIndex(w => w.startsWith(t)); points = 1; }
+        if (at < 0) { score = 0; break; }
+        free.splice(at, 1);
+        score += points;
+      }
+      if (score) hits.push({ entry, score: score * 100 - entry.rank });
+    }
+    hits.sort((a, b) => b.score - a.score);
+    // One of each kind first: "F sharp minor" is a chord, a key, a scale and a set of triads.
+    const byKind = new Map();
+    for (const x of hits) byKind.set(x.entry.kind, (byKind.get(x.entry.kind) || []).concat(x.entry));
+    const out = [];
+    for (let round = 0; out.length < 8 && round < 8; round++) for (const list of byKind.values()) if (list[round] && out.length < 8) out.push(list[round]);
+    return out;
+  }
+  // A small picture for each topic, drawn with the same neck as the pages.
+  function thumb(id) {
+    const box = h('div', { class: 'topic-thumb', 'aria-hidden': 'true' });
+    if (id === 'keys') {
+      const el = FB.el, svg = el('svg', { viewBox: '-50 -50 100 100', class: 'thumb-circle' });
+      for (let i = 0; i < 12; i++) {
+        const a = i * Math.PI / 6;
+        el('circle', { cx: (36 * Math.sin(a)).toFixed(1), cy: (-36 * Math.cos(a)).toFixed(1), r: i === 0 ? 9 : 7, class: i === 0 ? 'is-tonic' : i === 1 || i === 11 ? 'in-key' : '' }, svg);
+      }
+      box.append(svg);
+      return box;
+    }
+    const dot = (string, fret, kind) => ({ string, fret, kind });
+    const pictures = {
+      notes: { from: 0, to: 5, markers: [dot(1, 3, 'root'), dot(4, 1, 'root'), dot(0, 3, 'other'), dot(2, 2, 'other'), dot(3, 2, 'other'), dot(5, 5, 'other'), dot(2, 5, 'other')] },
+      intervals: { from: 1, to: 6, markers: [dot(1, 3, 'root'), dot(2, 5, 'fifth')], links: [{ points: [{ string: 1, fret: 3 }, { string: 2, fret: 5 }], cls: 'is-answer' }] },
+      scales: { from: 4, to: 9, markers: [[0, 5, 'root'], [0, 8], [1, 5], [1, 7], [2, 5], [2, 7, 'root'], [3, 5], [3, 7], [4, 5], [4, 8], [5, 5, 'root'], [5, 8]].map(([s, f, k]) => dot(s, f, k || 'other')) },
+      chords: { from: 0, to: 4, markers: [dot(1, 3, 'root'), dot(2, 2, 'third'), dot(3, 0, 'fifth'), dot(4, 1, 'root'), dot(5, 0, 'third')], links: [{ points: [[1, 3], [2, 2], [3, 0], [4, 1], [5, 0]].map(([string, fret]) => ({ string, fret })), cls: 'is-shape' }] },
+      triads: { from: 3, to: 9, markers: [dot(3, 5, 'root'), dot(4, 5, 'third'), dot(5, 3, 'fifth'), dot(3, 9, 'third'), dot(4, 8, 'fifth'), dot(5, 8, 'root')],
+        links: [[[3, 5], [4, 5], [5, 3]], [[3, 9], [4, 8], [5, 8]]].map(l => ({ points: l.map(([string, fret]) => ({ string, fret })), cls: 'is-shape' })) }
+    };
+    FB.render(box, Object.assign({ tuning: T.STANDARD, bare: true, orientation: 'horizontal' }, pictures[id]));
+    return box;
+  }
+  function home(main) {
+    const results = h('div', { class: 'found-list', role: 'listbox', 'aria-label': 'Search results' });
+    const input = h('input', { type: 'search', class: 'search', placeholder: 'Find a scale, chord or key', 'aria-label': 'Find a scale, chord or key', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'go' });
+    const show = () => {
+      const hits = find(input.value);
+      results.replaceChildren(...(hits.length ? hits.map(e => h('a', { class: 'found', href: '#/' + e.href, role: 'option' }, h('b', null, e.title), h('span', null, e.kind)))
+        : input.value.trim() ? [h('p', { class: 'small muted found-none' }, 'Nothing found. Try a root and a name, for example "A minor pentatonic", "F#m7" or "Bb major".')] : []));
+    };
+    input.addEventListener('input', show);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = results.querySelector('a'); if (first) location.hash = first.getAttribute('href'); } });
+    const last = lib.last || {};
+    main.append(h('div', { class: 'lib-home' },
+      h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Library'), h('p', null, 'Every note, scale, chord and key, shown on the neck. Choose a topic, then change the root and the type with one tap.'))),
+      h('div', { class: 'search-box' }, input, h('p', { class: 'small muted search-hint' }, 'For example: Am7, D dorian, F# minor, E major triads.'), results),
+      h('ol', { class: 'topics' }, TOPICS.map((t, i) => h('li', null,
+        h('a', { class: 'topic', href: '#/' + (last[t.id] ? last[t.id].href : 'library/' + t.id) },
+          thumb(t.id),
+          h('div', { class: 'topic-text' },
+            h('h2', null, h('span', { class: 'topic-no' }, i + 1), t.title, i === 0 ? h('span', { class: 'topic-start' }, 'Start here') : null),
+            h('p', null, t.line),
+            last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null)))))));
+    document.title = `Library · ${GT.siteName}`;
+  }
+
   function render(main, parts) {
-    const tab = VIEWS[parts[0]] ? parts[0] : 'scales';
+    main.replaceChildren();
+    if (!VIEWS[parts[0]]) { rerender = () => {}; lastRender = null; home(main); return; }
+    const tab = parts[0];
     const view = VIEWS[tab];
     const state = view.parse(parts.slice(1));
     rerender = () => render(main, parts);
-    main.replaceChildren();
-    // Section tabs. A section with roots opens on the root you look at now.
+    // Topic row. A topic with roots opens on the root you look at now.
     const tabLink = id => {
       const target = VIEWS[id], base = target.parse([]);
       return '#/' + (state.root && base.root ? target.link(Object.assign(base, { root: state.root })) : 'library/' + id);
     };
-    const tabs = h('nav', { class: 'lib-tabs', 'aria-label': 'Library sections' }, TABS.map(([id, name]) => h('a', { href: tabLink(id), 'aria-current': String(id === tab) }, name)));
+    const tabs = h('nav', { class: 'lib-tabs', 'aria-label': 'Library topics' },
+      h('a', { href: '#/library', class: 'lib-home-link', 'aria-label': 'Library start page', title: 'Library start page' }, GT.drills.icon('grid')),
+      TOPICS.map(t => h('a', { href: tabLink(t.id), 'aria-current': String(t.id === tab) }, t.name)));
     const body = h('div', { class: 'lib-main' }, view.render(state));
     main.append(h('div', { class: 'lib' }, tabs, body));
-    // On a phone the root row scrolls sideways: bring the chosen root to the middle.
-    const chosen = body.querySelector('.roots [aria-current="true"]');
-    if (chosen) { const row = chosen.parentNode; row.scrollLeft += chosen.getBoundingClientRect().left - row.getBoundingClientRect().left - (row.clientWidth - chosen.offsetWidth) / 2; }
+    const chosen = tabs.querySelector('[aria-current="true"]');
+    if (chosen) tabs.scrollLeft += chosen.getBoundingClientRect().left - tabs.getBoundingClientRect().left - (tabs.clientWidth - chosen.offsetWidth) / 2;
     document.title = `${view.title(state)} · ${GT.siteName}`;
+    // The start page opens each topic where you left it.
+    saveLib({ last: Object.assign({}, lib.last, { [tab]: { href: view.link(state), title: view.title(state) } }) });
     lastRender = rerender;
   }
 

@@ -20,13 +20,27 @@
     check: 'M5 12.5l4.5 4.5L19 7.5',
     cross: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
     plus: 'M12 5v14M5 12h14',
-    sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4'
+    sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
+    grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z'
   };
   function icon(name, cls = '') {
     const el = GT.fretboard.el;
     const svg = el('svg', { viewBox: '0 0 24 24', class: 'icon ' + cls, 'aria-hidden': 'true' });
     el('path', { d: ICONS[name] }, svg);
     return svg;
+  }
+
+  // Answer tiles in even rows: five tiles are three and two, not four and one.
+  // Fewer rows first, then the fewest columns that keep that number of rows.
+  function even(box) {
+    const n = box.children.length;
+    if (!n || !box.clientWidth) return;
+    const style = getComputedStyle(box);
+    const min = parseFloat(style.getPropertyValue('--min')) || 124, gap = parseFloat(style.columnGap) || 8;
+    const fit = Math.max(1, Math.floor((box.clientWidth + gap) / (min + gap)));
+    const rows = Math.ceil(n / fit);
+    box.style.setProperty('--cols', rows === 1 ? fit : Math.ceil(n / rows));
+    box.dataset.rows = rows === 1 ? 'one' : 'many';
   }
 
   // ---------- hub ----------
@@ -58,7 +72,7 @@
     const svg = el('svg', { viewBox: `-4 0 ${goal * W + 6} ${H}`, class: 'goal-neck' + (minutes >= goal ? ' is-done' : ''), style: `max-width:${goal * W + 6}px`, role: 'img', 'aria-label': `${Math.min(minutes, goal)} of ${goal} minutes done today` });
     el('rect', { x: 0, y: 2, width: goal * W, height: H - 4, rx: 3, class: 'fb-board' }, svg);
     for (let f = 0; f <= goal; f++) el('line', { x1: f * W, y1: 3, x2: f * W, y2: H - 3, class: f === 0 ? 'fb-nut' : 'fb-fret' }, svg);
-    el('line', { x1: 0, y1: H / 2, x2: goal * W, y2: H / 2, class: 'fb-string fb-wound', 'stroke-width': 2 }, svg);
+    el('line', { x1: 0, y1: H / 2, x2: goal * W, y2: H / 2, class: 'fb-string', 'stroke-width': 2 }, svg);
     for (let m = 0; m < Math.min(minutes, goal); m++) el('circle', { cx: m * W + W / 2, cy: H / 2, r: 9, class: 'goal-dot' }, svg);
     return svg;
   }
@@ -72,7 +86,27 @@
   }
 
   // ---------- configuration ----------
-  function loadConfig(d) { return Object.assign({}, d.defaults, store.get('config.' + d.id, {})); }
+  // A drill with stages keeps the items you practice in config.set, and the automatic mode adds to it.
+  // Before, that mode counted stages in 'stage.<id>'. The count becomes the set once, so nothing you unlocked is lost.
+  function loadConfig(d) {
+    const saved = store.get('config.' + d.id, {});
+    const config = Object.assign({}, d.defaults, saved);
+    if (d.stages && !saved.grows) {
+      const stage = store.get('stage.' + d.id, 0);
+      if (config.auto) config.set = d.stages.slice(0, stage + 1).flat();
+      config.grows = true;
+      if (stage || Object.keys(saved).length) saveConfig(d, config);
+    }
+    return config;
+  }
+  // The items the automatic mode adds next: what is missing from the first group that is not complete.
+  function nextGroup(d, config) {
+    for (const group of d.stages || []) {
+      const missing = group.filter(item => !config.set.includes(item));
+      if (missing.length) return missing;
+    }
+    return [];
+  }
   function saveConfig(d, config) { store.set('config.' + d.id, config); }
   const statsId = (d, config) => d.statsKey ? `${d.id}:${d.statsKey(config)}` : d.id;
 
@@ -88,6 +122,7 @@
     const settingsPanel = h('div', { class: 'settings-panel', id: 'drill-options', hidden: !optionsOpen });
     const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options', onclick: () => {
       settingsPanel.hidden = !settingsPanel.hidden;
+      settingsPanel.querySelectorAll('.pickset').forEach(even);
       settingsBtn.setAttribute('aria-expanded', String(!settingsPanel.hidden));
       store.set('drillOptions', !settingsPanel.hidden);
     } }, icon('sliders'), 'Options');
@@ -114,7 +149,9 @@
         answers.dataset.long = String(items.some(c => String(c.main).length > 3));
         answers.replaceChildren(...items.map((c, i) => h('button', { type: 'button', class: 'answer', dataset: { value: String(c.value) }, onclick: () => submit(c.value) },
           h('b', null, c.main), c.sub ? h('span', null, c.sub) : null, KEYS[i] ? h('span', { class: 'kbd', 'aria-hidden': 'true' }, KEYS[i]) : null)));
+        even(answers);
       },
+      even,
       noChoices() { answers.hidden = true; answers.replaceChildren(); },
       submit: v => submit(v),
       // Play the question. The answer clock starts at the first sound.
@@ -126,7 +163,7 @@
       startClock(delaySeconds = 0) { session.started = performance.now() + delaySeconds * 1000; },
       neck(markers, opts = {}) {
         const box = h('div', { class: 'neck' });
-        GT.fretboard.render(box, Object.assign({ from: 0, to: 12, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, compact: true }, opts));
+        GT.fretboard.render(box, Object.assign({ from: 0, to: 12, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, compact: true, turn: true }, opts));
         return box;
       },
       rebuild: () => restart(),
@@ -209,7 +246,8 @@
       // A mixed-up item, such as the interval you chose instead, comes back sooner too.
       for (const item of fb.requeue || []) if (item !== q.item && pool().includes(item)) session.requeue.push({ item, at: session.count + 2 + Math.floor(Math.random() * 3) });
       let unlocked = null;
-      if (d.stages && config.auto) unlocked = maybeUnlock(d, config);
+      // New items join after a right answer, not after a miss.
+      if (d.stages && config.auto && correct) unlocked = maybeUnlock(d, config);
       // Go on by itself after a right answer, once the feedback sound has finished. A picture gets more time.
       const wait = Math.max(d.advanceMs || 1100, (fb.hold || 0) * 1000 + 400, fb.visual ? 2600 : 0);
       const auto = correct && settings.autoAdvance !== false && d.autoAdvance !== false && !unlocked;
@@ -251,13 +289,14 @@
         kbd('Space'), d.play ? ' replay or next' : ' next', ...(d.play ? [', ', kbd('R'), ' replay'] : []), '.');
     }
     const decode = v => (v !== '' && !isNaN(Number(v)) && String(Number(v)) === v) ? Number(v) : v;
+    // The automatic mode: when your set is solid, the next group joins it, whatever set you started with.
     function maybeUnlock(def, cfg) {
-      const key = 'stage.' + def.id;
-      const stageNow = store.get(key, 0);
-      if (stageNow >= def.stages.length - 1) return null;
-      if (!P.ready(statsId(def, cfg), def.pool(cfg))) return null;
-      store.set(key, stageNow + 1);
-      return def.unlockText ? def.unlockText(stageNow + 1) : 'New items added.';
+      const added = nextGroup(def, cfg);
+      if (!added.length || !P.ready(statsId(def, cfg), def.pool(cfg))) return null;
+      cfg.set = cfg.set.concat(added);
+      saveConfig(def, cfg);
+      buildSettings();
+      return def.unlockText ? def.unlockText(added) : 'New items added.';
     }
     function finish() {
       session.done = true;
@@ -306,6 +345,7 @@
         d.options ? d.options(config, patch => { Object.assign(config, patch); saveConfig(d, config); buildSettings(); restart(); }) : null,
         h('div', { class: 'opts' },
           h('div', { class: 'field' }, h('span', null, 'Session length'), GT.segmented('Session length', [[10, '10'], [20, '20'], [40, '40'], [0, 'No end']], config.length, v => { config.length = v; saveConfig(d, config); buildSettings(); updateStats(); }))));
+      settingsPanel.querySelectorAll('.pickset').forEach(even);
     }
     if (config.length === undefined) config.length = 20;
     buildSettings();
@@ -324,8 +364,11 @@
       d.help ? h('details', { class: 'drill-help' }, h('summary', null, 'How this drill works'), d.help.map(p => h('p', null, p))) : null,
       keysLine));
     document.addEventListener('keydown', onKey);
+    const onResize = () => document.querySelectorAll('.answers, .pickset').forEach(even);
+    root.addEventListener('resize', onResize);
     next();
-    return () => { document.removeEventListener('keydown', onKey); clearTimeout(advanceTimer); };
+    onResize();
+    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); };
   }
 
   let cleanup = null;
@@ -340,7 +383,7 @@
 
   // Shared option pieces for drills.
   function pickset(label, items, selected, onChange, min = 1) {
-    const box = h('div', { class: 'pickset', role: 'group', 'aria-label': label });
+    const box = h('div', { class: 'pickset', role: 'group', 'aria-label': label, dataset: { long: String(items.some(it => String(it.main).length > 4)), wide: String(items.some(it => (String(it.main) + (it.sub || '')).length > 15)) } });
     for (const it of items) {
       const input = h('input', { type: 'checkbox', checked: selected.includes(it.value) });
       input.addEventListener('change', () => {
@@ -353,6 +396,15 @@
     return h('div', { class: 'field' }, h('span', null, label), box);
   }
   function field(label, control) { return h('div', { class: 'field' }, h('span', null, label), control); }
+  // The switch of the automatic mode, with the names of the items that join next.
+  function autoRow(d, config, set, noun, nameOf = x => x) {
+    const next = nextGroup(d, config).map(nameOf);
+    return [
+      h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: config.auto, onchange: e => set({ auto: e.target.checked }) }), `Add ${noun} for me as I improve`),
+      h('p', { class: 'small muted' }, !config.auto ? 'Your set changes only when you change it.'
+        : next.length ? `Start with any set. When about 85 percent of your answers are right, the next ones join: ${next.join(', ')}.`
+          : `Your set has all the ${noun} of this drill.`)];
+  }
 
-  GT.drills = Object.assign(drills, { pickset, field, statsId, loadConfig, TRACKS, KEYS, icon });
+  GT.drills = Object.assign(drills, { pickset, field, autoRow, nextGroup, statsId, loadConfig, TRACKS, KEYS, icon });
 })(window);

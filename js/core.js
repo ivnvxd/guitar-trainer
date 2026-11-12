@@ -72,6 +72,7 @@
   };
 
   // Router: "#/library/scales/blues/a" calls the view registered for "library" with the rest.
+  // The Library is the home page.
   const views = {};
   let current = null;
   function route(name, view) { views[name] = view; }
@@ -84,7 +85,7 @@
   }
   function render() {
     const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
-    const name = views[parts[0]] ? parts[0] : 'train';
+    const name = views[parts[0]] ? parts[0] : 'library';
     const rest = views[parts[0]] ? parts.slice(1) : [];
     if (current && current.leave) current.leave();
     GT.audio.stopMetronome();

@@ -7,7 +7,6 @@
   const D = GT.drills;
   const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
   const name = midi => T.PC_PLAIN[T.mod(midi)];
-  const stageOf = id => store.get('stage.' + id, 0);
   const DIR_TEXT = { up: 'up', down: 'down', harmonic: 'together' };
   const an = word => (/^[aeiou]/i.test(word) ? 'an ' : 'a ') + word;
 
@@ -59,7 +58,7 @@
     hint: 'Listen, then choose. The starting note changes every time.',
     help: [
       'Name it: you hear two notes and choose the interval. Sing it: you see an interval, hear the first note, and sing the second before you check. On the neck: you hear the interval and tap the second note on the guitar.',
-      'With "Add intervals for me" on, you start with the perfect 5th, major 3rd, octave and perfect 4th. When you answer these right about 85 percent of the time, the next group comes in: minor 3rd, major 2nd, minor 2nd, then the 6ths and the tritone, then the 7ths.',
+      'Choose the intervals you practice in Options. Any set works as a start. With "Add intervals for me" on, the next group joins your set when you answer about 85 percent right. The order is: perfect 5th, major 3rd, octave and perfect 4th, then minor 3rd, major 2nd and minor 2nd, then the 6ths and the tritone, then the 7ths.',
       'Practice ascending first, then descending, then together. A right answer that takes more than 3 seconds still counts as not learned yet, so it comes back sooner. After a miss you hear your answer and the right one on the same note, and both intervals come back a few questions later.',
       'Hear all plays every interval of your set from the same first note, and lights each answer while it sounds. Use it when new intervals come in. After each answer, a song that starts with the interval helps you recall it.',
       'Ten minutes a day works better than one long session.'
@@ -69,12 +68,12 @@
     // Singing and playing take longer than naming. Self-graded singing has no speed limit.
     fastMs: c => ({ identify: 3000, sing: 60000, guitar: 7000 })[c.mode] || 3000,
     statsKey: c => c.mode,
-    semis(c) { return (c.auto ? INTERVAL_STAGES.slice(0, stageOf('ear-intervals') + 1).flat() : c.set).slice().sort((a, b) => a - b); },
+    semis(c) { return c.set.slice().sort((a, b) => a - b); },
     pool(c) {
       const dirs = c.direction === 'mixed' ? ['up', 'down', 'harmonic'] : [c.direction];
       return this.semis(c).flatMap(s => dirs.map(d => `${s}:${d}`));
     },
-    unlockText(stage) { return `New intervals added: ${INTERVAL_STAGES[stage].map(s => T.intervalBySemi(s).short).join(', ')}.`; },
+    unlockText(added) { return `New intervals added: ${added.map(s => T.intervalBySemi(s).short).join(', ')}.`; },
     itemName(item) { const [s, d] = item.split(':'); return `${T.intervalBySemi(Number(s)).short} ${DIR_TEXT[d]}`; },
     make(item, c) {
       const [s, dir] = item.split(':');
@@ -170,7 +169,7 @@
       markers.push({ string: place2.string, fret: place2.fret, kind: FB.degreeKind(intervalLabel(q.semi)) === 'root' ? 'correct' : FB.degreeKind(intervalLabel(q.semi)), label: b });
       const lo = Math.min(place1.fret, place2.fret), hi = Math.max(place1.fret, place2.fret);
       // The two notes on the neck, joined by a line, in the result box: the answers above stay where they are.
-      const visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(15, Math.max(hi + 1, lo + 4)), orientation: 'horizontal', compact: true, links: [{ points: [place1, place2], cls: 'is-answer' }], label: 'Where the interval is on the guitar' });
+      const visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(15, Math.max(hi + 1, lo + 4)), turn: false, links: [{ points: [place1, place2], cls: 'is-answer' }], label: 'Where the interval is on the guitar' });
       const song = songFor(q.semi, q.dir);
       const frets = q.semi === 0 ? 'the same note' : `${q.semi} fret${q.semi > 1 ? 's' : ''} apart on one string`;
       const text = `${a} to ${b}: ${frets}. On the neck: ${where(place1)} to ${where(place2)}.${song ? ` Think of ${song}.` : ''}`;
@@ -191,10 +190,9 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', [['identify', 'Name it'], ['sing', 'Sing it'], ['guitar', 'On the neck']], c.mode, v => set({ mode: v }))),
-        D.field('Direction', GT.segmented('Direction', [['up', 'Ascending'], ['down', 'Descending'], ['harmonic', 'Together'], ['mixed', 'Mixed']], c.direction, v => set({ direction: v }))),
-        h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.semis(Object.assign({}, c, { auto: true })) }) }), 'Add intervals for me as I improve'),
-        c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.semis(c).map(s => T.intervalBySemi(s).short).join(', ')}.`)
-          : D.pickset('Intervals', T.INTERVALS.map(i => ({ value: i.semi, main: i.short, sub: i.name })), c.set, v => set({ set: v })));
+        D.field('Direction', GT.segmented('Direction', [['up', 'Up'], ['down', 'Down'], ['harmonic', 'Together'], ['mixed', 'Mixed']], c.direction, v => set({ direction: v }))),
+        D.pickset('Intervals', T.INTERVALS.map(i => ({ value: i.semi, main: i.short, sub: i.name })), c.set, v => set({ set: v })),
+        D.autoRow(this, c, set, 'intervals', s => T.intervalBySemi(s).short));
     }
   });
 
@@ -206,7 +204,7 @@
   function cadence(keyPc) {
     const chords = [[0, 4, 7], [5, 9, 0], [7, 11, 2], [0, 4, 7]];
     let v = null;
-    const seq = chords.map(c => { v = T.voiceLead(c.map(x => T.mod(keyPc + x)), v, 52, 70); return [36 + T.mod(keyPc + c[0] - 36)].concat(v); });
+    const seq = chords.map(c => { v = T.voiceLead(c.map(x => T.mod(keyPc + x)), v, 52, 70); return [A.bass(keyPc + c[0])].concat(v); });
     A.chordSequence(seq, 132, 1);
     return seq.length * 60 / 132;
   }
@@ -224,11 +222,10 @@
     stages: DEGREE_STAGES,
     fastMs: 3500,
     labels(c) {
-      const list = c.auto ? DEGREE_STAGES.slice(0, stageOf('ear-degrees') + 1).flat() : c.set;
-      return list.slice().sort((a, b) => T.parseDegree(a).semi - T.parseDegree(b).semi);
+      return c.set.slice().sort((a, b) => T.parseDegree(a).semi - T.parseDegree(b).semi);
     },
     pool(c) { return this.labels(c); },
-    unlockText(stage) { return `New degrees added: ${DEGREE_STAGES[stage].join(', ')}.`; },
+    unlockText(added) { return `New degrees added: ${added.join(', ')}.`; },
     itemName: item => `${item} (${SOLFEGE[item]})`,
     make(item, c, session) {
       if (c.keyChange === 'each' || session.keyPc === undefined || session.count % 10 === 0) session.keyPc = randInt(0, 11);
@@ -264,9 +261,8 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         D.field('New key', GT.segmented('New key', [['each', 'Every question'], ['ten', 'Every 10 questions']], c.keyChange, v => set({ keyChange: v }))),
-        h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.labels(Object.assign({}, c, { auto: true })) }) }), 'Add degrees for me as I improve'),
-        c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.labels(c).join(', ')}.`)
-          : D.pickset('Degrees', Object.keys(SOLFEGE).sort((a, b) => T.parseDegree(a).semi - T.parseDegree(b).semi).map(l => ({ value: l, main: l, sub: SOLFEGE[l] })), c.set, v => set({ set: v })));
+        D.pickset('Degrees', Object.keys(SOLFEGE).sort((a, b) => T.parseDegree(a).semi - T.parseDegree(b).semi).map(l => ({ value: l, main: l, sub: SOLFEGE[l] })), c.set, v => set({ set: v })),
+        D.autoRow(this, c, set, 'degrees'));
     }
   });
 
@@ -286,9 +282,9 @@
     stages: CHORD_STAGES,
     fastMs: 3500,
     statsKey: c => c.inversions ? 'inv' : 'root',
-    ids(c) { return c.auto ? CHORD_STAGES.slice(0, stageOf('ear-chords') + 1).flat() : c.set; },
+    ids(c) { return CHORD_STAGES.flat().filter(id => c.set.includes(id)); },
     pool(c) { return this.ids(c); },
-    unlockText(stage) { return `New chords added: ${CHORD_STAGES[stage].map(id => T.chordById(id).name.toLowerCase()).join(', ')}.`; },
+    unlockText(added) { return `New chords added: ${added.map(id => T.chordById(id).name.toLowerCase()).join(', ')}.`; },
     itemName: item => T.chordById(item).name,
     voicing(chordId, rootMidi, inversion) {
       const semis = T.chordById(chordId).toneList.map(t => t.semi);
@@ -326,9 +322,8 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.inversions, onchange: e => set({ inversions: e.target.checked }) }), 'Invert triads'),
-        h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.ids(Object.assign({}, c, { auto: true })) }) }), 'Add chords for me as I improve'),
-        c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.ids(c).map(id => T.chordById(id).name.toLowerCase()).join(', ')}.`)
-          : D.pickset('Chords', CHORD_STAGES.flat().map(id => ({ value: id, main: T.chordById(id).name, sub: T.chordById(id).tones })), c.set, v => set({ set: v })));
+        D.pickset('Chords', CHORD_STAGES.flat().map(id => ({ value: id, main: T.chordById(id).name, sub: T.chordById(id).tones })), c.set, v => set({ set: v })),
+        D.autoRow(this, c, set, 'chords', id => T.chordById(id).name.toLowerCase()));
     }
   });
 
@@ -342,7 +337,7 @@
       const d = NUMERAL_DEGREE[n];
       const pcs = [0, 2, 4].map(k => T.mod(keyPc + major[(d + k) % 7].semi));
       v = T.voiceLead(pcs, v, 52, 72);
-      return [36 + T.mod(pcs[0] - 36)].concat(v);
+      return [A.bass(pcs[0])].concat(v);
     });
   }
   D.add({
@@ -359,14 +354,14 @@
     stages: NUMERAL_STAGES,
     fastMs: 12000,
     advanceMs: 1600,
-    numerals(c) { const l = c.auto ? NUMERAL_STAGES.slice(0, stageOf('ear-progressions') + 1).flat() : c.set; return Object.keys(NUMERAL_DEGREE).filter(n => l.includes(n)); },
+    numerals(c) { return Object.keys(NUMERAL_DEGREE).filter(n => c.set.includes(n)); },
     pool(c) {
       const nums = this.numerals(c), out = [];
       const walk = (seq) => { if (seq.length === 4) { out.push(seq.join('-')); return; } for (const n of nums) if (n !== seq[seq.length - 1]) walk(seq.concat(n)); };
       walk(['I']);
       return out;
     },
-    unlockText(stage) { return `New chords added: ${NUMERAL_STAGES[stage].join(', ')}.`; },
+    unlockText(added) { return `New chords added: ${added.join(', ')}.`; },
     itemName: item => item.replace(/-/g, ' '),
     make(item) {
       const keyPc = randInt(0, 11);
@@ -378,9 +373,9 @@
       ui.sub(`Key of ${KEY_NAMES[q.keyPc]} major. The first chord is I.`);
       ui.actions([['▶ Replay', () => ui.play(), 'R']]);
       ui.noChoices();
-      const slots = h('div', { class: 'chips', style: 'margin-top:16px;gap:8px' });
+      const slots = h('div', { class: 'chips slots' });
       const nums = this.numerals(ui.config);
-      const drawSlots = () => slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', style: 'min-width:64px;justify-content:center;font-weight:700;font-size:17px', 'aria-current': String(i === q.entered.length + 1) }, i === 0 ? 'I' : (q.entered[i - 1] || '?'))));
+      const drawSlots = () => slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', 'aria-current': String(i === q.entered.length + 1) }, i === 0 ? 'I' : (q.entered[i - 1] || '?'))));
       const add = n => {
         if (q.done || q.entered.length >= 3) return;
         q.entered.push(n); drawSlots();
@@ -389,8 +384,10 @@
       q.add = add;
       q.back = () => { if (!q.done) { q.entered.pop(); drawSlots(); } };
       drawSlots();
-      ui.board.replaceChildren(slots, h('div', { class: 'answers' }, nums.map((n, i) => h('button', { type: 'button', class: 'answer', onclick: () => add(n) }, h('b', null, n), h('span', null, T.diatonic(KEY_NAMES[q.keyPc])[NUMERAL_DEGREE[n]].name), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i])))),
+      const tiles = h('div', { class: 'answers' }, nums.map((n, i) => h('button', { type: 'button', class: 'answer', onclick: () => add(n) }, h('b', null, n), h('span', null, T.diatonic(KEY_NAMES[q.keyPc])[NUMERAL_DEGREE[n]].name), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
+      ui.board.replaceChildren(slots, tiles,
         h('button', { type: 'button', class: 'btn', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
+      ui.even(tiles);
     },
     onKey(e, q, ui) {
       if (!q || q.done) return;
@@ -405,7 +402,7 @@
       const given = String(v).split('-');
       ui.board.querySelectorAll('.answer').forEach(b => { b.disabled = true; });
       const slots = ui.board.querySelector('.chips');
-      slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', style: `min-width:64px;justify-content:center;font-weight:700;font-size:17px;border-color:${given[i] === n ? 'var(--ok)' : 'var(--bad)'}` }, given[i] === n ? n : `${given[i]} → ${n}`)));
+      slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', style: `border-color:${given[i] === n ? 'var(--ok)' : 'var(--bad)'}` }, given[i] === n ? n : `${given[i]} → ${n}`)));
       return {
         text: `It was ${q.numerals.join(' ')}: ${chordNames.join(' ')}.`,
         actions: [['▶ Replay', () => this.play(q)]].concat(correct ? [] : [['▶ Yours', () => A.chordSequence(progressionChords(q.keyPc, given), 96, 2)]])
@@ -413,9 +410,8 @@
     },
     options(c, set) {
       return h('div', { class: 'opts' },
-        h('label', { class: 'row', style: 'gap:8px' }, h('input', { type: 'checkbox', checked: c.auto, onchange: e => set({ auto: e.target.checked, set: this.numerals(Object.assign({}, c, { auto: true })) }) }), 'Add chords for me as I improve'),
-        c.auto ? h('p', { class: 'small muted' }, `Now practicing: ${this.numerals(c).join(', ')}.`)
-          : D.pickset('Chords', Object.keys(NUMERAL_DEGREE).map(n => ({ value: n, main: n })), c.set, v => set({ set: v.includes('I') ? v : ['I'].concat(v) }), 2));
+        D.pickset('Chords', Object.keys(NUMERAL_DEGREE).map(n => ({ value: n, main: n })), c.set, v => set({ set: v.includes('I') ? v : ['I'].concat(v) }), 2),
+        D.autoRow(this, c, set, 'chords'));
     }
   });
 })(window);

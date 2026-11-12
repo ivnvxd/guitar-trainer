@@ -72,6 +72,8 @@
     for (const type of GESTURES) root.addEventListener(type, unlock, true);
   });
   const freq = midi => 440 * Math.pow(2, (midi - 69) / 12);
+  // The bass note of a chord, in the lowest octave of the guitar (E2 to D♯3). Lower notes are lost on a phone speaker.
+  const bass = pc => 40 + ((pc - 40) % 12 + 12) % 12;
 
   // Karplus-Strong. The averaging filter delays by half a sample, so the period is N + 0.5.
   // The playback rate then corrects the pitch exactly, which matters for ear training.
@@ -140,20 +142,22 @@
     (voice === 'soft' ? playSoft : playPluck)(midi, when, duration, gainValue);
     return true;
   }
-  // Notes one after another ("up", "down") or together ("together"); "strum" spreads them slightly.
+  // Notes one after another ("up", "down") or together ("together"); "strum" runs over the strings.
+  // A strum is slow enough to hear each string, also on a phone speaker: about a third of a second for six strings.
+  // Many strings get less gain each, so the limiter does not press the chord into one sound.
   function notes(midis, mode = 'up', gap = 0.6, duration = 0) {
     if (!context()) return false;
     const list = mode === 'down' ? [...midis].reverse() : midis;
-    const each = mode === 'together' ? 0 : mode === 'strum' ? 0.035 : gap;
-    const gainValue = mode === 'together' || mode === 'strum' ? 0.38 : 0.5;
+    const each = mode === 'together' ? 0 : mode === 'strum' ? Math.min(0.09, Math.max(0.065, 0.34 / list.length)) : gap;
+    const gainValue = mode === 'together' ? 0.38 : mode === 'strum' ? Math.min(0.4, 0.74 / Math.sqrt(list.length)) : 0.5;
     list.forEach((m, i) => note(m, i * each, duration, gainValue));
     return true;
   }
-  // A sequence of chords: [[midis], [midis], ...], one per beat at the given tempo.
+  // A sequence of chords: [[midis], [midis], ...], one per beat at the given tempo. Each chord is a short strum.
   function chordSequence(chords, bpm = 80, beatsEach = 2) {
     if (!context()) return false;
     const beat = 60 / bpm;
-    chords.forEach((midis, i) => midis.forEach((m, j) => note(m, i * beat * beatsEach + j * 0.03, beat * beatsEach * 0.95, 0.32)));
+    chords.forEach((midis, i) => midis.forEach((m, j) => note(m, i * beat * beatsEach + j * 0.055, beat * beatsEach * 0.95, 0.32)));
     return chords.length * beat * beatsEach;
   }
   // Stop every note that plays or waits to play, and every delayed sound. The metronome goes on.
@@ -207,7 +211,7 @@
   function setTempo(bpm) { metronome.bpm = bpm; }
 
   GT.audio = {
-    note, notes, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
+    note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
     get metronomeRunning() { return metronome.running; },
     setVoice(v) { voice = v; },
     setVolume(v) { volume = v; if (master) master.gain.value = v; },

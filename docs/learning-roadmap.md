@@ -18,6 +18,12 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 12. CAGED map: the five shapes over the whole neck as outlines, with rings on the notes two shapes share. One shape shows lines between its notes and the outlines of its neighbors. The CAGED drill shows the same picture after each answer.
 13. Intervals: a song that starts with the interval after each answer, Hear all for the whole set, your answer and the right one at once after a miss, and the interval you chose comes back soon as well.
 14. Library: every choice of a page (root, type, shape, string set, labels, frets) sits in one panel above the neck.
+15. Library first: it is the home page, with a search box and six topics in learning order. Each topic opens where you left it.
+16. Choices in one tap: seven root letters with flat, natural and sharp, the common scales and chords as chips, and the rest in a list. The panel and the neck fit one phone screen.
+17. The neck as a flat diagram: a plain board, the root as a square, and colors that leave green and red for right and wrong. A long neck scrolls sideways on a phone, with the string names pinned to the side. A switch turns it upright.
+18. Circle of fifths: the wheel turns the chosen key to the top, under a fixed frame for the seven chords. A tap on a chord plays it and shows a shape and its seventh chord.
+19. A piano keyboard folds out under the neck for notes, intervals, scales, chords and keys.
+20. Ear drills: the automatic mode starts from any set you choose and adds the next group in teaching order.
 
 ## Next
 

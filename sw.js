@@ -1,5 +1,5 @@
 /* Offline cache. Change VERSION when you publish new files, so browsers fetch them again. */
-const VERSION = 'guitar-trainer-4';
+const VERSION = 'guitar-trainer-5';
 const FILES = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest',
   'fonts/geist.woff2',
