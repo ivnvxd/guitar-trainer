@@ -27,7 +27,9 @@
     const rows = D.list.map(d => {
       const config = D.loadConfig(d);
       const s = P.summary(D.statsId(d, config), d.pool(config));
-      return h('tr', null, h('td', null, h('a', { href: '#/train/' + d.id }, d.title)), h('td', null, s.n), h('td', null, pct(s.ok, s.n)), h('td', null, secs(s.median)), h('td', null, `${s.mastered} of ${s.total}`));
+      // On a phone a row is the drill name over its four numbers, each with its label.
+      const cell = (label, value) => h('td', { dataset: { label } }, value);
+      return h('tr', null, h('td', null, h('a', { href: '#/train/' + d.id }, d.title)), cell('Answers', s.n), cell('Right', pct(s.ok, s.n)), cell('Typical time', secs(s.median)), cell('Solid', `${s.mastered} of ${s.total}`));
     });
     main.append(
       head,
@@ -37,7 +39,7 @@
           h('span', { class: 'small muted' }, d.label)))),
         h('p', { class: 'small muted', style: 'margin-top:8px' }, `Green: daily goal of ${settings.goal || 10} minutes reached. ${P.streak()} ${P.streak() === 1 ? 'day' : 'days'} in a row.`)),
       h('section', { class: 'lib-section' }, h('h2', null, 'Drills'),
-        h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table' }, h('thead', null, h('tr', null, ['Drill', 'Answers', 'Right', 'Typical time', 'Solid'].map(t => h('th', null, t)))), h('tbody', null, rows))),
+        h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table table-stack' }, h('thead', null, h('tr', null, ['Drill', 'Answers', 'Right', 'Typical time', 'Solid'].map(t => h('th', null, t)))), h('tbody', null, rows))),
         h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Solid: answered right and fast at least three times in a row. Counts are for the current options of each drill.')),
       ...[intervalTable(), noteMap(), backup()].filter(Boolean));
   }
@@ -47,13 +49,13 @@
     const cell = item => { const s = stats[item]; return s ? `${pct(s.ok, s.n)} (${s.n})` : '–'; };
     if (!Object.keys(stats).length) return null;
     return h('section', { class: 'lib-section' }, h('h2', null, 'Intervals by ear'),
-      h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table' },
+      h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table table-stack' },
         h('thead', null, h('tr', null, h('th', null, 'Interval'), dirs.map(([, t]) => h('th', null, t)), h('th', null, 'Typical time'))),
         h('tbody', null, T.INTERVALS.map(iv => {
           const items = dirs.map(([d]) => `${iv.semi}:${d}`);
           if (!items.some(i => stats[i])) return null;
           const times = items.flatMap(i => (stats[i] && stats[i].times) || []);
-          return h('tr', null, h('td', null, `${iv.short} ${iv.name}`), items.map(i => h('td', null, cell(i))), h('td', null, secs(P.median(times))));
+          return h('tr', null, h('td', null, `${iv.short} ${iv.name}`), items.map((i, k) => h('td', { dataset: { label: dirs[k][1] } }, cell(i))), h('td', { dataset: { label: 'Typical time' } }, secs(P.median(times))));
         })))),
       h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Right answers and, in brackets, how often you heard each one in "Name it" mode.'));
   }

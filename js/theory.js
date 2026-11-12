@@ -363,6 +363,47 @@
       return { degree: i + 1, label: t.label, root: chordRoot, chord, name: chord ? chordRoot + chord.symbol : `${chordRoot} (${formula})` };
     });
   }
+  // Reverse lookup: the chords that a set of notes spells. pcs are pitch classes in any order,
+  // bass is the pitch class of the lowest note. A chord whose root is in the bass comes first,
+  // then the common chords before the rare ones. "missing" asks for chords that need that many more notes.
+  function chordsFrom(pcs, bass, missing = 0) {
+    const set = [...new Set(pcs.map(x => mod(x)))];
+    const out = [];
+    for (const rootPc of set) {
+      const have = new Set(set.map(pc => mod(pc - rootPc)));
+      CHORDS.forEach((chord, rank) => {
+        const want = [...new Set(chord.toneList.map(t => mod(t.semi)))];
+        if (want.length !== have.size + missing || ![...have].every(x => want.includes(x))) return;
+        const rootName = PC_PLAIN[rootPc];
+        const tones = tonesOn(rootName, chord);
+        const bassTone = tones.find(t => t.pc === mod(bass));
+        const inversion = bassTone ? tones.indexOf(bassTone) : 0;
+        out.push({
+          root: rootName, chord, rank, inversion,
+          // The bass under its plain name: "E+/C", not "E+/B♯".
+          name: chordName(rootName, chord) + (inversion ? '/' + PC_PLAIN[bassTone.pc] : ''),
+          missing: tones.filter(t => !set.includes(t.pc)).map(t => t.name)
+        });
+      });
+    }
+    return out.sort((a, b) => (a.inversion ? 1 : 0) - (b.inversion ? 1 : 0) || a.rank - b.rank);
+  }
+  // The scales that hold every one of the notes. A scale that starts on the lowest note comes first,
+  // then a scale that starts on any of the notes, then the common scales before the rare ones.
+  function scalesWith(pcs, bass) {
+    const set = [...new Set(pcs.map(x => mod(x)))];
+    const out = [];
+    for (let rootPc = 0; rootPc < 12; rootPc++) {
+      SCALES.forEach((scale, rank) => {
+        if (scale.id === 'chromatic') return;
+        const want = scale.toneList.map(t => mod(rootPc + t.semi));
+        if (!set.every(pc => want.includes(pc))) return;
+        out.push({ root: PC_PLAIN[rootPc], scale, rank, exact: want.length === set.length, onBass: rootPc === mod(bass), onNote: set.includes(rootPc) });
+      });
+    }
+    const order = x => (x.onBass ? 0 : x.onNote ? 1 : 2);
+    return out.sort((a, b) => order(a) - order(b) || (a.exact ? 0 : 1) - (b.exact ? 0 : 1) || a.rank - b.rank);
+  }
   // The major key whose notes a mode shares: D Dorian shares C major.
   const MODE_INDEX = { major: 0, dorian: 1, phrygian: 2, lydian: 3, mixolydian: 4, minor: 5, locrian: 6 };
   function parentMajor(rootName, scaleId) {
@@ -463,7 +504,7 @@
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions,
-    placeShape, chordShapes, identifyChord, scaleChords, parentMajor, voiceLead,
+    placeShape, chordShapes, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

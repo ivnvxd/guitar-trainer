@@ -34,6 +34,12 @@
       return out;
     },
     itemName: item => { const [s, f] = item.split(':').map(Number); return `${ord(s)} str. fret ${f}`; },
+    // The places you missed, on one neck, each with its note name.
+    missedVisual(items, ui) {
+      const [lo, hi] = range(ui.config.frets), t = GT.tuning();
+      const markers = items.map(item => { const [s, f] = item.split(':').map(Number); return { string: s, fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(t[s] + f)] }; });
+      return ui.neck(markers, { from: lo === 0 ? 0 : lo - 1, to: Math.max(hi, (lo === 0 ? 0 : lo - 1) + 5), turn: false, label: 'The places you missed' });
+    },
     make(item) { const [s, f] = item.split(':').map(Number); return { string: s, fret: f, midi: GT.tuning()[s] + f }; },
     // On a phone the neck stands upright, so show six frets around the dot to keep the answers on screen.
     view(q, ui) {

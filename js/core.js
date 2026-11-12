@@ -90,6 +90,8 @@
     if (current && current.leave) current.leave();
     GT.audio.stopMetronome();
     GT.audio.silence();
+    // A backing belongs to the Library page that started it.
+    if (name !== 'library') { GT.audio.stopLoop(); GT.audio.stopDrone(); }
     const main = document.getElementById('main');
     main.replaceChildren();
     current = views[name];
@@ -104,11 +106,13 @@
   render.first = true;
 
   // Re-render the current fretboards when the window changes between narrow and wide.
-  let lastNarrow = null;
+  // A phone turned sideways counts as a change as well.
+  const shapeNow = () => `${root.innerWidth < 660}:${GT.fretboard.sideways()}`;
+  let lastShape = shapeNow();
   root.addEventListener('resize', () => {
-    const narrow = root.innerWidth < 660;
-    if (lastNarrow !== null && narrow !== lastNarrow && current && current.resize) current.resize();
-    lastNarrow = narrow;
+    const shape = shapeNow();
+    if (shape !== lastShape && current && current.resize) current.resize();
+    lastShape = shape;
   });
 
   function shuffle(list) {

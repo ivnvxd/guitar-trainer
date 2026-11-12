@@ -250,7 +250,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .types .more { flex: 1 1 170px; max-width: 320px; min-height: 38px; border-radius: 999px; font-size: 14px; padding: 5px 34px 5px 14px; color: var(--muted); border-color: var(--line); }
 .types .more.is-on { border-color: var(--accent); background-color: var(--accent-soft-2); color: var(--text); }
 /* A grid of short chips: 13 intervals or 12 notes in even rows. */
-.grid-chips { display: grid; grid-template-columns: repeat(var(--n), 52px); gap: 5px; }
+.grid-chips { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 52px)); gap: 5px; flex: 1; min-width: 0; }
 /* Many chips of about the same length, such as the open chords: equal tiles. */
 .chip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
 .chip-grid .chip { justify-content: center; padding: 5px 4px; border-radius: 11px; }
@@ -306,6 +306,11 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-hint .fb-label { fill: var(--accent-line); }
 .fb-dim { opacity: .3; }
 .fb-mute { fill: var(--muted); font-size: 18px; font-weight: 700; }
+/* A small chord chart: larger text, because the whole picture is drawn small. */
+.fb-mini .fb-label { font-size: 15px; }
+.fb-mini .fb-label-long { font-size: 12px; }
+.fb-mini .fb-num { font-size: 14px; }
+.fb-mini .fb-mute { font-size: 19px; }
 .fb-flash .fb-dot { animation: flash .5s ease-out; }
 @keyframes flash { from { stroke: var(--flash); stroke-width: 8; } to { stroke-width: 1.6; } }
 /* Lines between notes and outlines of shapes. */
@@ -336,7 +341,21 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .lib-tabs a { flex: none; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; font-weight: 650; font-size: 15px; border: 1px solid transparent; transition: color .15s, background-color .15s; }
 .lib-tabs a:hover { color: var(--text); background: var(--surface-2); }
 .lib-tabs a[aria-current="true"] { color: var(--text); background: var(--surface); border-color: var(--line-strong); box-shadow: var(--shadow); }
-.lib-tabs .lib-home-link { display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-color: var(--line); margin-right: 4px; }
+/* The search button stands before the topics, so it stays in view while they scroll. */
+.lib-nav { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lib-nav .lib-tabs { flex: 1; min-width: 0; }
+.lib-home-link { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--text); background: var(--surface); transition: background-color .15s, border-color .15s; }
+.lib-home-link:hover { background: var(--surface-2); border-color: var(--line-hover); }
+/* A tool, not a topic: a thin line sets it apart. */
+.lib-tabs .lib-tool-link { margin-left: 8px; position: relative; }
+.lib-tabs .lib-tool-link::before { content: ""; position: absolute; left: -5px; top: 9px; bottom: 9px; width: 1px; background: var(--line-strong); }
+.lib-stage { min-width: 0; }
+/* Links from a topic to its drills. */
+.practice { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; }
+.practice-label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; font-size: 13px; font-weight: 650; color: var(--muted); }
+.practice-label .icon { width: 16px; height: 16px; }
+.practice .chip { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
+.practice .chip:hover { border-color: var(--accent); background: var(--accent-soft-2); }
 .lib-main { min-width: 0; }
 .lib-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
 .lib-title h1 { font-size: 42px; }
@@ -384,13 +403,36 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .chord-panel-text h3 small { font-size: 13.5px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .chord-panel-text p { color: var(--muted); font-size: 14.5px; }
 .chord-panel-text .row { gap: 6px; }
-.chord-panel .neck { flex: 0 0 132px; padding: 0; }
+.chord-panel .neck { flex: 0 0 170px; padding: 0; }
 .prog-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
 .prog { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center; text-align: left; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); transition: border-color .15s, background-color .15s; }
 .prog:hover { background: var(--surface-2); border-color: var(--line-hover); }
-.prog-play { grid-row: span 2; color: var(--accent-text); font-size: 13px; }
+.prog[aria-pressed="true"] { border-color: var(--live); background: color-mix(in srgb, var(--live) 9%, var(--surface)); }
+/* A triangle to start, a square to stop. */
+.prog-play { grid-row: span 2; width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent var(--accent-text); }
+[aria-pressed="true"] > .prog-play { width: 11px; height: 11px; border: 0; border-radius: 2px; background: var(--live); }
 .prog b { font-size: 15px; }
-.prog span:last-child { grid-column: 2; color: var(--muted); font-size: 14px; white-space: pre-wrap; }
+.prog-chords { grid-column: 2; display: flex; flex-wrap: wrap; gap: 0 12px; color: var(--muted); font-size: 14px; }
+.prog-chords .is-now { color: var(--live); font-weight: 700; }
+.section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
+.tempo { display: inline-flex; align-items: center; gap: 4px; }
+.tempo .btn { min-height: 36px; width: 36px; font-size: 18px; }
+.tempo output { min-width: 72px; text-align: center; font-size: 14px; font-weight: 650; }
+.backing-row { gap: 10px 16px; margin-bottom: 10px; }
+/* The backings of a scale: two or three of them, one under the other. */
+.prog-stack { grid-template-columns: minmax(0, 1fr); max-width: 560px; }
+.drone { gap: 10px; }
+.drone .prog-play { grid-row: auto; }
+.drone[aria-pressed="true"] { border-color: var(--live); background: color-mix(in srgb, var(--live) 9%, var(--surface-2)); }
+/* Name these notes: the answers under the neck. */
+.named { margin-top: 14px; max-width: 640px; }
+.named h2 { font-size: 17px; margin: 22px 0 8px; }
+.named .found-list { margin-top: 0; }
+.named .formula { margin-top: 0; }
+.named-note { margin: 12px 0 8px; }
+.named .btn { margin-top: 8px; }
+.found-text { display: grid; gap: 1px; min-width: 0; }
+.found-text small { color: var(--muted); font-size: 13px; }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; font-size: 15px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; }
@@ -424,7 +466,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .found-list:empty { display: none; }
 .found { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); text-decoration: none; }
 .found:hover, .found:focus-visible { border-color: var(--accent); }
-.found span { color: var(--muted); font-size: 13px; }
+.found > span:last-child:not(.found-text) { color: var(--muted); font-size: 13px; text-align: right; }
 .topics { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .topic { display: flex; align-items: center; gap: 18px; height: 100%; padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
 .topic:hover { border-color: var(--line-hover); transform: translateY(-1px); }
@@ -440,6 +482,8 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .topic-start { padding: 2px 9px; border-radius: 999px; background: var(--accent-soft-2); color: var(--accent-text); font-size: 12px; font-weight: 650; letter-spacing: 0; }
 .topic-text p { margin-top: 5px; color: var(--muted); font-size: 14.5px; }
 .topic-text .topic-last { color: var(--accent-text); font-size: 13.5px; }
+/* The lookup tool: one wide card under the six topics. */
+.topic-tool { margin-top: 12px; height: auto; border-style: dashed; border-color: var(--line-strong); }
 
 /* Circle of fifths. The wheel turns the chosen key to the top; the words turn back so they stay upright. */
 .circle-wrap { display: grid; grid-template-columns: minmax(280px, 440px) minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 18px; }
@@ -462,13 +506,13 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .circle text { pointer-events: none; text-anchor: middle; }
 .circle .t-name { fill: var(--text); font-size: 18px; font-weight: 700; }
 .circle .ring-minor .t-name { fill: var(--muted); font-size: 14px; font-weight: 650; }
-.circle .ring-dim .t-name { fill: var(--faint); font-size: 10.5px; font-weight: 600; }
+.circle .ring-dim .t-name { fill: var(--faint); font-size: 12.5px; font-weight: 600; }
 .circle .in-key .t-name { fill: var(--text); }
-.circle .ring-dim.in-key .t-name { font-size: 11.5px; font-weight: 700; }
+.circle .ring-dim.in-key .t-name { font-size: 13px; font-weight: 700; }
 .circle .t-num { fill: var(--accent-text); font-size: 12px; font-weight: 750; }
-.circle .ring-minor .t-num { font-size: 11px; }
-.circle .ring-dim .t-num { font-size: 10px; }
-.circle .t-sig { fill: var(--faint); font-size: 10.5px; }
+.circle .ring-minor .t-num { font-size: 12px; }
+.circle .ring-dim .t-num { font-size: 11.5px; }
+.circle .t-sig { fill: var(--faint); font-size: 12.5px; }
 .circle .in-key .t-sig { fill: var(--muted); }
 .circle .is-tonic .t-name, .circle .is-tonic .t-num, .circle .is-tonic .t-sig { fill: var(--accent-ink); }
 .circle .hub { fill: var(--surface); stroke: var(--line); }
@@ -597,6 +641,9 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .done-panel .stats-row b { display: block; font-size: 28px; letter-spacing: -.02em; }
 .done-panel .stats-row span { color: var(--muted); font-size: 13px; }
 .missed { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0 20px; }
+.missed-visual { margin: 0 0 20px; text-align: left; }
+.done-actions { justify-content: center; gap: 10px; }
+.start-sound { margin: 2px 0; }
 
 /* Tools */
 .tempo-row { display: flex; align-items: center; gap: 12px; width: min(460px, 100%); }
@@ -619,6 +666,8 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .heat i { display: block; height: 100%; }
 
 /* Narrow screens */
+/* Four practice links fit one row only when their label has a line of its own. */
+@media (max-width: 760px) { .practice-label { flex-basis: 100%; } }
 @media (max-width: 980px) {
   .circle-wrap { grid-template-columns: minmax(0, 1fr); }
   .circle-col { max-width: 440px; width: 100%; margin: 0 auto; }
@@ -639,7 +688,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   h1, .lib-title h1 { font-size: 30px; }
   /* The topics are one row that scrolls to the screen edge. */
   .lib { gap: 14px; }
-  .lib-tabs { margin: -4px -16px; padding: 4px 16px; gap: 2px; }
+  .lib-tabs { margin: -4px -16px -4px -4px; padding: 4px 16px 4px 4px; gap: 2px; }
   .lib-tabs a { padding: 7px 11px; font-size: 14.5px; }
   .lib-play .btn { min-height: 38px; padding: 6px 12px; font-size: 14.5px; }
   /* The panel: letters, then sharp or flat beside the labels, then the types and the position. */
@@ -661,7 +710,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .chord-strip .chord-btn b { font-size: 14px; }
   .chord-strip .chord-btn small { font-size: 11.5px; }
   .chord-panel { align-items: flex-start; padding: 12px; gap: 12px; }
-  .chord-panel .neck { flex-basis: 108px; }
+  .chord-panel .neck { flex-basis: 150px; }
   .topic { padding: 12px; gap: 14px; }
   .topic-thumb { flex-basis: 108px; }
   .topic-text h2 { font-size: 17px; }
@@ -692,14 +741,27 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .drill-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1 1 100%; gap: 5px; }
   .drill-stats span { display: grid; justify-items: center; padding: 6px 2px; border-radius: 12px; font-size: 11.5px; line-height: 1.25; text-align: center; }
   .drill-stats b { margin: 0; font-size: 15px; }
-  /* Cards are one row that you swipe: two in view and the edge of the next. */
+  /* Cards are one row that you swipe: one in view and most of the next, so the chart in a card stays readable. */
   .cards { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 10px; scroll-snap-type: x proximity; scrollbar-width: none; }
   .cards::-webkit-scrollbar { display: none; }
-  .cards > * { flex: 0 0 44%; min-width: 0; scroll-snap-align: start; scroll-margin-left: 16px; }
+  .cards > * { flex: 0 0 56%; min-width: 0; scroll-snap-align: start; scroll-margin-left: 16px; }
   .cards > :first-child:nth-last-child(2), .cards > :first-child:nth-last-child(2) ~ * { flex-basis: calc(50% - 4px); }
   .card { padding: 10px; }
   .facts { grid-template-columns: 1fr; gap: 2px; }
   .facts dd { margin-bottom: 8px; }
+  /* Two links in a row, so two or four of them fill their rows. */
+  .practice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .practice-label { grid-column: 1 / -1; }
+  .practice .chip { justify-content: center; text-align: center; border-radius: 12px; padding: 6px 8px; line-height: 1.25; }
+  .named .formula { max-width: none; }
+  .done-actions .btn { flex: 1 1 100%; }
+  /* A results table becomes rows: the name, then its numbers side by side, each under its label. */
+  .table-stack, .table-stack tbody { display: block; max-width: none; }
+  .table-stack thead { display: none; }
+  .table-stack tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px 8px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .table-stack td { display: block; padding: 0; border: 0; font-size: 14.5px; }
+  .table-stack td:first-child { grid-column: 1 / -1; font-size: 15px; font-weight: 650; }
+  .table-stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
 }
 @media (max-width: 350px) {
   .controls { padding: 10px; }
@@ -707,5 +769,70 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .types .chip { padding: 5px 8px; font-size: 13.5px; }
   .seg-word { display: none; }
 }
+/* A phone held sideways: wide but low. The bar scrolls away, and the neck comes before the choices. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .topbar { position: static; }
+  .topbar-inner { height: 46px; }
+  .topbar nav { position: static; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .topbar nav a { flex: none; flex-direction: row; gap: 7px; padding: 4px 11px; font-size: 13.5px; border-radius: 999px; }
+  .topbar nav a[aria-current="true"] { color: var(--text); background: var(--surface-3); }
+  .nav-icon { display: none; }
+  main { padding-top: 10px; padding-bottom: 40px; }
+  h1, .lib-title h1 { font-size: 22px; }
+  .lib { gap: 8px; }
+  .lib-tabs a { padding: 5px 11px; font-size: 14px; }
+  .lib-home-link { width: 32px; height: 32px; }
+  .lib-title { align-items: center; }
+  .lib-title { flex-wrap: nowrap; }
+  .lib-title > div:first-child { display: flex; align-items: baseline; gap: 12px; flex: 1 1 0; min-width: 0; overflow: hidden; }
+  .lib-title h1 { flex: none; }
+  .lib-sub { margin-top: 0; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lib-title > .seg, .lib-play { flex: none; flex-wrap: nowrap; }
+  /* The circle beside the chords of the key, as large as the screen is high. */
+  .circle-wrap { grid-template-columns: minmax(0, max(260px, calc(100vh - 110px))) minmax(0, 1fr); grid-template-columns: minmax(0, max(260px, calc(100dvh - 110px))) minmax(0, 1fr); gap: 20px; margin-top: 8px; }
+  .circle-col { max-width: none; margin: 0; }
+  .circle-note { display: none; }
+  .lib-play .btn { min-height: 32px; padding: 4px 11px; font-size: 14px; }
+  .lib-stage { display: flex; flex-direction: column-reverse; }
+  .lib-stage .controls { margin: 8px 0 0; }
+  .lib-stage .neck { padding: 2px 0 4px; }
+  .lib-stage svg.fb-horizontal { max-height: max(150px, calc(100vh - 142px)); max-height: max(150px, calc(100dvh - 142px)); }
+  /* A drill: the neck on the left, the question and its answers on the right. */
+  .drill .crumb { display: none; }
+  .drill-bar { margin-bottom: 8px; gap: 6px 12px; }
+  .drill-bar > .row { width: auto; }
+  .drill-stats { display: flex; flex: none; }
+  .drill-stats span { display: inline; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; }
+  .drill-stats b { margin-right: 5px; font-size: 13.5px; }
+  /* Two numbers, so the title, the numbers and the options stay in one row. */
+  .drill-stats span:nth-child(n+3) { display: none; }
+  .drill-bar, .drill-bar > .row { flex-wrap: nowrap; }
+  .drill-bar h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .prompt { padding: 12px 14px; }
+  .prompt h2 { font-size: 20px; }
+  .prompt .neck { padding: 2px 0 4px; }
+  .prompt-board svg.fb-horizontal { max-height: max(150px, calc(100vh - 178px)); max-height: max(150px, calc(100dvh - 178px)); }
+  /* The card is the whole box here: the neck on the left; the question, the answers and the result on the right.
+     So the neck stays in view when the result comes. */
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-rows: auto auto 1fr; grid-template-areas: "board top" "board answers" "board feedback"; column-gap: 16px; align-items: start; padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .prompt { display: contents; }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .prompt-top { grid-area: top; }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .prompt-board { grid-area: board; min-width: 0; }
+  /* A short neck fits its column, so it does not scroll here. */
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .prompt-board svg.fb { min-width: 0 !important; }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .answers { grid-area: answers; margin-top: 10px; }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .feedback { grid-area: feedback; margin-top: 8px; min-height: 0; }
+  .prompt-wrap:has(.prompt-board:not(:empty)):has(.answers:not([hidden])) .result { padding: 10px 12px; gap: 8px; box-shadow: none; border-radius: 14px; }
+  /* No tab bar at the bottom here, so the result needs no room for it. */
+  .result { scroll-margin-bottom: 8px; }
+  .result-icon { width: 28px; height: 28px; }
+  .result-icon .icon { width: 16px; height: 16px; }
+  .result-answer { font-size: 18px; }
+  .result-text { font-size: 14.5px; }
+  .answers { --min: 58px; --gap: 6px; }
+  .answers[data-long="true"] { --min: 104px; }
+  .answer { min-height: 46px; padding: 7px 10px; }
+  .answer span:not(.kbd) { display: none; }
+}
 /* Key hints help only with a keyboard. */
-@media (hover: none) and (pointer: coarse) { .drill-keys { display: none; } }
+@media (hover: none) and (pointer: coarse) { .drill-keys, .kbd { display: none; } }

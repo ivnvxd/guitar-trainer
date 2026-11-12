@@ -8,7 +8,7 @@
   let voice = 'pluck';
   const active = new Set();   // sources that are playing or scheduled
   const pending = new Set();  // timers that start sounds later
-  const track = node => { active.add(node); node.onended = () => active.delete(node); };
+  const track = (node, bag = active) => { bag.add(node); node.onended = () => bag.delete(node); };
   let volume = 0.8;
 
   function context() {
@@ -107,7 +107,7 @@
     return item;
   }
 
-  function playPluck(midi, at, duration, gainValue) {
+  function playPluck(midi, at, duration, gainValue, bag) {
     const { buffer, rate } = pluckBuffer(midi);
     const src = ctx.createBufferSource();
     src.buffer = buffer; src.playbackRate.value = rate;
@@ -118,11 +118,11 @@
       g.gain.exponentialRampToValueAtTime(0.0001, at + duration + 0.12);
     }
     src.connect(g); g.connect(master);
-    track(src);
+    track(src, bag);
     src.start(at);
     src.stop(at + (duration ? duration + 0.15 : buffer.duration));
   }
-  function playSoft(midi, at, duration, gainValue) {
+  function playSoft(midi, at, duration, gainValue, bag) {
     const len = duration || 0.9;
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
     o1.type = 'triangle'; o2.type = 'sine';
@@ -131,7 +131,7 @@
     g.gain.exponentialRampToValueAtTime(gainValue * 0.5, at + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0001, at + len);
     o1.connect(g); o2.connect(g); g.connect(master);
-    track(o1); track(o2);
+    track(o1, bag); track(o2, bag);
     o1.start(at); o2.start(at); o1.stop(at + len + 0.02); o2.stop(at + len + 0.02);
   }
 
@@ -160,7 +160,7 @@
     chords.forEach((midis, i) => midis.forEach((m, j) => note(m, i * beat * beatsEach + j * 0.055, beat * beatsEach * 0.95, 0.32)));
     return chords.length * beat * beatsEach;
   }
-  // Stop every note that plays or waits to play, and every delayed sound. The metronome goes on.
+  // Stop every note that plays or waits to play, and every delayed sound. The metronome and a backing go on.
   function silence() {
     for (const id of pending) clearTimeout(id);
     pending.clear();
@@ -171,6 +171,71 @@
   function later(fn, ms) {
     const id = setTimeout(() => { pending.delete(id); fn(); }, ms);
     pending.add(id);
+  }
+
+  // Play-along: a loop of chords and a drone. They run until you stop them, so silence() leaves them
+  // alone: a tap on the neck or a new position on the page does not cut the backing.
+  const backing = { nodes: new Set(), timer: null, chords: null, bpm: 84, beats: 4, at: 0, nextTime: 0, onChord: null, drone: null };
+  const STRUM_GAIN = [0.3, 0.15, 0.2, 0.15, 0.2, 0.15];
+  function scheduleLoop() {
+    // After a pause in the background the clock is behind: go on from now, not with every missed bar at once.
+    if (backing.nextTime < ctx.currentTime - 0.05) backing.nextTime = ctx.currentTime + 0.05;
+    while (backing.nextTime < ctx.currentTime + 0.15) {
+      const i = backing.at, midis = backing.chords[i], beat = 60 / backing.bpm, when = backing.nextTime;
+      const play = voice === 'soft' ? playSoft : playPluck;
+      // One bar for each chord: the bass rings for the bar, a full strum on beat one, lighter strums after it.
+      play(midis[0], when, beat * backing.beats * 0.98, 0.3, backing.nodes);
+      for (let k = 0; k < backing.beats; k++) midis.slice(1).forEach((m, j) => play(m, when + k * beat + j * (k ? 0.016 : 0.03), beat * 0.95, STRUM_GAIN[k] || 0.15, backing.nodes));
+      if (backing.onChord) {
+        const chords = backing.chords;
+        setTimeout(() => { if (backing.chords === chords && backing.onChord) backing.onChord(i); }, Math.max(0, (when - ctx.currentTime) * 1000));
+      }
+      backing.at = (i + 1) % backing.chords.length;
+      backing.nextTime += beat * backing.beats;
+    }
+  }
+  // chords: [[bass, note, note, ...], ...] as MIDI numbers. onChord(i) runs when chord i starts to sound.
+  function startLoop(chords, bpm = 84, beats = 4, onChord = null) {
+    if (!context()) return false;
+    stopLoop();
+    Object.assign(backing, { chords, bpm, beats, at: 0, nextTime: ctx.currentTime + 0.1, onChord });
+    scheduleLoop();
+    backing.timer = setInterval(scheduleLoop, 25);
+    return true;
+  }
+  function stopLoop() {
+    clearInterval(backing.timer);
+    backing.timer = null;
+    backing.chords = null;
+    for (const node of backing.nodes) { try { node.stop(); } catch { /* already stopped */ } }
+    backing.nodes.clear();
+  }
+  // A held root note in three octaves. A phone speaker loses the lowest one, so the upper ones carry it.
+  function startDrone(pc) {
+    if (!context()) return false;
+    stopDrone();
+    const now = ctx.currentTime, out = ctx.createGain(), low = bass(pc);
+    out.gain.setValueAtTime(0.0001, now);
+    out.gain.exponentialRampToValueAtTime(1, now + 0.5);
+    out.connect(master);
+    const oscs = [[low, 'triangle', 0.17], [low + 12, 'triangle', 0.1], [low + 24, 'sine', 0.035]].map(([midi, type, level]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = freq(midi); g.gain.value = level;
+      o.connect(g); g.connect(out); o.start(now);
+      return o;
+    });
+    backing.drone = { pc, out, oscs };
+    return true;
+  }
+  function stopDrone() {
+    const d = backing.drone;
+    if (!d) return;
+    backing.drone = null;
+    const now = ctx.currentTime;
+    d.out.gain.cancelScheduledValues(now);
+    d.out.gain.setValueAtTime(Math.max(0.0001, d.out.gain.value), now);
+    d.out.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+    for (const o of d.oscs) o.stop(now + 0.3);
   }
 
   // Metronome with a look-ahead scheduler, so the clicks stay in time while the page works.
@@ -212,7 +277,12 @@
 
   GT.audio = {
     note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
+    startLoop, stopLoop, startDrone, stopDrone,
+    setLoopTempo(bpm) { backing.bpm = bpm; },
     get metronomeRunning() { return metronome.running; },
+    get loopRunning() { return !!backing.chords; },
+    // The pitch class of the drone that sounds, or null.
+    get droneRoot() { return backing.drone ? backing.drone.pc : null; },
     setVoice(v) { voice = v; },
     setVolume(v) { volume = v; if (master) master.gain.value = v; },
     available: () => !!(root.AudioContext || root.webkitAudioContext),

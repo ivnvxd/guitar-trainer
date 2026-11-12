@@ -24,6 +24,12 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 18. Circle of fifths: the wheel turns the chosen key to the top, under a fixed frame for the seven chords. A tap on a chord plays it and shows a shape and its seventh chord.
 19. A piano keyboard folds out under the neck for notes, intervals, scales, chords and keys.
 20. Ear drills: the automatic mode starts from any set you choose and adds the next group in teaching order.
+21. From the Library to practice: each topic has a row of links to the drills that train it.
+22. Play along: a scale page has a drone on the root and chord loops that fit the scale. A key page loops its common progressions. The tempo is yours, and the backing goes on while you change the position.
+23. Name these notes: tap notes on the neck and get the chord, also as an inversion, and the scales that hold the notes. The notes are in the link.
+24. A phone held sideways: the neck comes first in the Library, and a drill shows the neck beside its answers.
+25. After a session: a neck with the places you missed, and a short round on the missed items only.
+26. Search: one result of each kind, so a word such as "pentatonic" lists each scale once. The topics and the CAGED shapes are found by name. A search button stands before the topics on every Library page.
 
 ## Next
 

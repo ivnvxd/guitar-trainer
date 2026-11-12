@@ -144,4 +144,44 @@ for (const k of T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean))) {
 eq(T.keyCells('G♭').map(c => c.name), ['G♭', 'A♭m', 'B♭m', 'C♭', 'D♭', 'E♭m', 'F°']);
 eq(T.keyCells('A', 'minor').map(c => c.roman), ['i', 'ii°', '♭III', 'iv', 'v', '♭VI', '♭VII']);
 
+// Reverse lookup: notes to chord names. The root in the bass comes first.
+const pcs = names => names.split(' ').map(T.pcOf);
+const chordNames = (names, n = 0) => T.chordsFrom(pcs(names), pcs(names)[0], n).map(c => c.name);
+eq(chordNames('C E G'), ['C']);
+eq(chordNames('E G C'), ['C/E']);
+eq(chordNames('G C E'), ['C/G']);
+eq(T.chordsFrom(pcs('E G C'), T.pcOf('E'))[0].inversion, 1);
+// The same four notes are two chords: the bass decides which comes first.
+eq(chordNames('A C E G'), ['Am7', 'C6/A']);
+eq(chordNames('C E G A'), ['C6', 'Am7/C']);
+eq(chordNames('C D G'), ['Csus2', 'Gsus4/C']);
+eq(chordNames('G C D'), ['Gsus4', 'Csus2/G']);
+eq(chordNames('A C E♭ G'), ['Am7♭5', 'Cm6/A']);
+eq(chordNames('C E♭ G A'), ['Cm6', 'Am7♭5/C']);
+// Symmetric chords have a name on every note.
+eq(chordNames('C E♭ F♯ A').length, 4);
+eq(chordNames('C E♭ F♯ A')[0], 'C°7');
+eq(chordNames('C E A♭').length, 3);
+eq(chordNames('C E A♭')[0], 'C+');
+eq(chordNames('C G'), ['C5']);
+eq(chordNames('E♭ G B♭ D'), ['E♭maj7']);
+eq(chordNames('C C♯ D'), []);
+// One note short of a chord.
+ok(chordNames('C E', 1).includes('C'), 'C and E are part of C');
+eq(T.chordsFrom(pcs('C E'), 0, 1).find(c => c.name === 'C').missing, ['G']);
+// Every chord of the list is found again from its own notes, on every root.
+for (const root of T.PC_PLAIN) for (const chord of T.CHORDS) {
+  const tones = T.tonesOn(root, chord).map(t => t.pc);
+  ok(T.chordsFrom(tones, tones[0]).some(c => c.root === root && c.chord.id === chord.id && !c.inversion), `${root} ${chord.id} is found from its notes`);
+}
+// Notes to scales. A scale that starts on the lowest note comes first.
+const scaleNames = names => T.scalesWith(pcs(names), pcs(names)[0]).map(s => `${s.root} ${s.scale.id}`);
+eq(scaleNames('C D E F G A B')[0], 'C major');
+eq(scaleNames('D E F G A B C')[0], 'D dorian');
+eq(scaleNames('A C D E G')[0], 'A minor-pentatonic');
+ok(scaleNames('A C D E G').includes('C major-pentatonic'), 'A minor pentatonic has the notes of C major pentatonic');
+ok(T.scalesWith(pcs('A C D E G'), 9)[0].exact, 'five notes are the whole pentatonic scale');
+ok(!scaleNames('C E G').some(n => n.endsWith('chromatic')), 'the chromatic scale is not an answer');
+for (const s of T.scalesWith(pcs('C E♭ G♭ A'), 0)) ok(pcs('C E♭ G♭ A').every(pc => T.tonesOn(s.root, s.scale).some(t => t.pc === pc)), `${s.root} ${s.scale.id} holds the notes`);
+
 console.log(`theory: ${checks} checks passed`);

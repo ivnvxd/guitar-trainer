@@ -21,6 +21,8 @@
   const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : { 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
   // 'auto' is the flat neck. Upright is a choice: the switch on a neck, or Settings.
   const isUpright = orientation => orientation === 'vertical';
+  // A phone held sideways: wide but low. A long neck is flat there, whatever the setting says.
+  const sideways = () => !!root.matchMedia && root.matchMedia('(orientation: landscape) and (max-height: 500px)').matches;
 
   /**
    * render(container, options)
@@ -39,21 +41,24 @@
    *                            with its label beside the neck (CAGED shapes)
    * options.lane               keep the room for region letters, so the neck does not grow when they appear
    * options.bare               no fret numbers and no string names (small pictures)
+   * options.mini               a small upright chord chart: tighter strings and larger text, no string names,
+   *                            so the labels stay readable when the picture is about 150 px wide
    * A marker with ring: true gets a second ring, for a note that two shapes share.
    */
   function render(container, options) {
     const o = Object.assign({ from: 0, to: 15, tuning: GT.theory.STANDARD, markers: [], orientation: 'auto', leftHanded: false }, options);
     const strings = o.tuning.length;
-    const vertical = isUpright(o.orientation);
+    const vertical = isUpright(o.orientation) && !(o.turn && sideways());
     const narrow = root.innerWidth < 660;
+    const mini = !!o.mini && vertical;
     // Every fret has the same length. The open strings get a shorter column before the nut.
-    const fret = vertical ? (o.compact ? 42 : 50) : (narrow ? 54 : 58);
+    const fret = vertical ? (mini ? 36 : o.compact ? 42 : 50) : (narrow ? 54 : 58);
     const widths = [];
     for (let f = o.from; f <= o.to; f++) widths.push(f === 0 ? fret * 0.72 : fret);
-    const gap = vertical ? 48 : (narrow ? 40 : 36);   // distance between strings
+    const gap = vertical ? (mini ? 31 : 48) : (narrow ? 40 : 36);   // distance between strings
     const edge = gap * 0.5;                            // board beyond the outer strings
     // Room for fret numbers, string names and mute marks.
-    const pad = o.bare ? { along: 6, across: edge + 4 } : { along: vertical ? 46 : 34, across: vertical ? 46 : 26 };
+    const pad = o.bare ? { along: 6, across: edge + 4 } : mini ? { along: 30, across: 38 } : { along: vertical ? 46 : 34, across: vertical ? 46 : 26 };
     const neckLength = widths.reduce((a, b) => a + b, 0);
     const neckWidth = gap * (strings - 1);
     // Outlines and lines keep only the notes inside the frets shown.
@@ -79,14 +84,14 @@
     const flipAlong = v => (o.leftHanded && !vertical ? W - v : v);
     const xy = (a, c) => vertical ? { x: c, y: a } : { x: flipAlong(a), y: c };
 
-    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: `fb ${vertical ? 'fb-vertical' : 'fb-horizontal'}`, role: 'group', 'aria-label': o.label || 'Fretboard' });
+    const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: `fb ${vertical ? 'fb-vertical' : 'fb-horizontal'}${mini ? ' fb-mini' : ''}`, role: 'group', 'aria-label': o.label || 'Fretboard' });
     // A flat neck may shrink a little to fit. Below that it keeps its size and the box scrolls.
     if (!vertical) svg.style.minWidth = Math.round(W * (o.bare ? 0.2 : 0.86)) + 'px';
     const scroll = document.createElement('div');
     scroll.className = 'neck-scroll';
     scroll.appendChild(svg);
     container.replaceChildren(scroll);
-    if (o.turn && narrow) {
+    if (o.turn && narrow && !sideways()) {
       const turn = document.createElement('button');
       turn.type = 'button';
       turn.className = 'neck-turn';
@@ -167,7 +172,7 @@
         const t = el('text', { x: p.x, y: p.y, class: `fb-num${INLAYS.includes(f) || DOUBLE.includes(f) ? ' fb-num-strong' : ''}`, 'text-anchor': 'middle' }, svg);
         t.textContent = f;
       }
-      for (let s = 0; s < strings; s++) {
+      for (let s = 0; s < strings && !mini; s++) {
         const p = vertical ? { x: across(s), y: 14 } : { x: o.leftHanded ? W - 9 : 9, y: across(s) + 4.5 };
         const t = el('text', { x: p.x, y: p.y, class: 'fb-strname', 'text-anchor': 'middle' }, svg);
         t.textContent = s === strings - 1 && names[s] === 'E' ? 'e' : names[s];
@@ -176,7 +181,7 @@
 
     // Muted strings: an × beside the string name, outside the frets.
     for (const s of o.muted || []) {
-      const p = vertical ? { x: across(s), y: o.bare ? 6 : 36 } : { x: o.leftHanded ? W - 25 : 25, y: across(s) + 5 };
+      const p = vertical ? { x: across(s), y: o.bare ? 6 : mini ? 22 : 36 } : { x: o.leftHanded ? W - 25 : 25, y: across(s) + 5 };
       const t = el('text', { x: p.x, y: p.y, class: 'fb-mute', 'text-anchor': 'middle' }, svg);
       t.textContent = '×';
     }
@@ -202,14 +207,14 @@
         if (m) {
           if (m.title) el('title', {}, g).textContent = m.title;
           if (m.kind === 'muted') { const t = el('text', { class: 'fb-mute', 'text-anchor': 'middle', y: 5 }, g); t.textContent = '×'; continue; }
-          const r = m.small ? 9 : 13.5;
+          const r = m.small ? 9 : mini ? 12.5 : 13.5;
           // The root is a square with round corners. Every other note is a circle.
           const shape = (size, cls) => m.kind === 'root'
             ? el('rect', { x: -size * 0.94, y: -size * 0.94, width: size * 1.88, height: size * 1.88, rx: size * 0.42, class: cls }, g)
             : el('circle', { r: size, class: cls }, g);
-          if (m.ring) shape(r + 5, 'fb-ring');
+          if (m.ring) shape(r + (mini ? 3.5 : 5), 'fb-ring');
           shape(r, 'fb-dot');
-          if (m.label) { const t = el('text', { class: 'fb-label', 'text-anchor': 'middle', y: 4.5 }, g); t.textContent = m.label; if (m.label.length > 2) t.classList.add('fb-label-long'); }
+          if (m.label) { const t = el('text', { class: 'fb-label', 'text-anchor': 'middle', y: mini ? 5.2 : 4.5 }, g); t.textContent = m.label; if (m.label.length > 2) t.classList.add('fb-label-long'); }
         }
       }
     }
@@ -297,5 +302,5 @@
     return 'other';
   }
 
-  GT.fretboard = { render, degreeKind, ordinal, el, isUpright };
+  GT.fretboard = { render, degreeKind, ordinal, el, isUpright, sideways };
 })(window);

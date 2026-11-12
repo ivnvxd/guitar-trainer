@@ -21,7 +21,9 @@
     cross: 'M6.5 6.5l11 11M17.5 6.5l-11 11',
     plus: 'M12 5v14M5 12h14',
     sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
-    grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z'
+    grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
+    search: 'M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM20 20l-4.6-4.6',
+    train: 'M4 18V9m5 9V5m5 13v-6m5 6V8'
   };
   function icon(name, cls = '') {
     const el = GT.fretboard.el;
@@ -113,12 +115,13 @@
   // ---------- runner ----------
   function run(main, d) {
     const config = loadConfig(d);
-    const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false };
+    // only: the items of a review round, after "Practice the missed ones". length: its number of questions.
+    const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false, only: null, length: 0 };
     let advanceTimer = null;
 
     const statLine = h('div', { class: 'drill-stats', 'aria-live': 'off' });
-    // The options stay open on a wide screen, so a change is one click away. The choice is remembered.
-    const optionsOpen = store.get('drillOptions', root.innerWidth >= 900);
+    // The options open on request, so the question and its answers fit one screen. The choice is remembered.
+    const optionsOpen = store.get('drillOptions', false);
     const settingsPanel = h('div', { class: 'settings-panel', id: 'drill-options', hidden: !optionsOpen });
     const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options', onclick: () => {
       settingsPanel.hidden = !settingsPanel.hidden;
@@ -129,7 +132,7 @@
     const title = h('h2', { id: 'q-title' });
     const sub = h('p', { class: 'sub' });
     const promptActions = h('div', { class: 'prompt-actions' });
-    const board = h('div');
+    const board = h('div', { class: 'prompt-board' });
     const answers = h('div', { class: 'answers', role: 'group', 'aria-labelledby': 'q-title' });
     const feedback = h('div', { class: 'feedback', role: 'status', 'aria-live': 'polite' });
     const stage = h('div');
@@ -159,6 +162,7 @@
         if (!d.play || !session.q) return;
         const seconds = d.play(session.q, 'replay') || 0;
         if (!session.heard) { session.heard = true; ui.startClock(seconds); }
+        if (feedback.querySelector('.start-sound')) feedback.replaceChildren(h('p', { class: 'muted' }, d.hint || 'Choose an answer.'));
       },
       startClock(delaySeconds = 0) { session.started = performance.now() + delaySeconds * 1000; },
       neck(markers, opts = {}) {
@@ -167,20 +171,22 @@
         return box;
       },
       rebuild: () => restart(),
-      narrow: () => root.innerWidth < 600
+      // A phone held sideways is wide but low: it gets the short neck too, beside the answers.
+      narrow: () => root.innerWidth < 600 || GT.fretboard.sideways()
     };
 
     function updateStats() {
       const acc = session.count ? Math.round(session.correct / session.count * 100) : 0;
       const med = P.median(session.times);
-      const length = config.length || 0;
+      const length = sessionLength();
       statLine.replaceChildren(
         h('span', null, h('b', null, length ? `${Math.min(session.count + (session.answered ? 0 : 1), length)} / ${length}` : session.count + 1), 'question'),
         h('span', null, h('b', null, session.count ? acc + '%' : '–'), 'right'),
         h('span', null, h('b', null, med ? (med / 1000).toFixed(1) + ' s' : '–'), 'typical time'),
         h('span', { class: session.streak >= 3 ? 'is-hot' : '' }, h('b', null, session.streak), 'in a row'));
     }
-    function pool() { return d.pool(config); }
+    function pool() { const all = d.pool(config); return session.only ? all.filter(item => session.only.includes(item)) : all; }
+    const sessionLength = () => session.only ? session.length : config.length || 0;
     function nextItem() {
       const due = session.requeue.findIndex(r => r.at <= session.count);
       if (due >= 0) { const [r] = session.requeue.splice(due, 1); if (pool().includes(r.item)) return r.item; }
@@ -189,7 +195,7 @@
     function next() {
       clearTimeout(advanceTimer);
       A.silence();
-      if (config.length && session.count >= config.length) return finish();
+      if (sessionLength() && session.count >= sessionLength()) return finish();
       const item = nextItem();
       if (item === null) { stage.replaceChildren(h('p', null, 'Choose at least one item in Options.')); return; }
       session.q = d.make(item, config, session);
@@ -210,11 +216,12 @@
       session.heard = d.autoPlay === false || !d.play;
       if (d.autoPlay !== false && d.play) {
         ui.play();
-        // Without a click first, browsers keep the sound off. Then the first Replay starts it.
+        // Without a click first, browsers keep the sound off. Then a button starts it.
         setTimeout(() => {
           if (!A.running() && !session.answered) {
             session.heard = false;
-            feedback.replaceChildren(h('p', null, 'Your browser waits for a click before it plays sound. Press ', h('b', null, 'Replay'), ' or ', h('span', { class: 'kbd' }, 'Space'), ' to hear the question.'));
+            // The first sound needs a tap or a key. One large button says that better than a line of text.
+            feedback.replaceChildren(h('button', { type: 'button', class: 'btn btn-primary btn-big start-sound', onclick: () => ui.play() }, '▶ Play the question', h('span', { class: 'kbd' }, 'Space')));
           }
         }, 250);
       }
@@ -309,17 +316,27 @@
           h('div', null, h('b', null, `${acc}%`), h('span', null, 'right')),
           h('div', null, h('b', null, session.count), h('span', null, 'answers')),
           h('div', null, h('b', null, P.median(session.times) ? (P.median(session.times) / 1000).toFixed(1) + ' s' : '–'), h('span', null, 'typical time'))),
-        missed.length ? h('div', null, h('p', { class: 'small muted' }, 'Missed'), h('div', { class: 'missed' }, missed.map(([item, n]) => h('span', { class: 'chip' }, d.itemName ? d.itemName(item, config) : item, n > 1 ? h('small', null, '×' + n) : null)))) : null,
-        h('div', { class: 'row', style: 'justify-content:center' },
-          h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: restart }, 'Practice again'),
+        missed.length ? h('div', null, h('p', { class: 'small muted' }, 'Missed'), h('div', { class: 'missed' }, missed.map(([item, n]) => h('span', { class: 'chip' }, d.itemName ? d.itemName(item, config) : item, n > 1 ? h('small', null, '×' + n) : null))),
+          d.missedVisual ? h('div', { class: 'result-visual missed-visual' }, d.missedVisual(missed.map(([item]) => item), ui)) : null) : null,
+        h('div', { class: 'row done-actions' },
+          missed.length ? h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => review(missed.map(([item]) => item)) }, 'Practice the missed ones') : null,
+          h('button', { type: 'button', class: 'btn btn-big' + (missed.length ? '' : ' btn-primary'), onclick: restart }, missed.length ? 'New session' : 'Practice again'),
           h('a', { class: 'btn btn-big', href: '#/train' }, 'Back to Train'))));
       stage.querySelector('.btn-primary').focus();
     }
-    function restart() {
+    function begin(only, length) {
       clearTimeout(advanceTimer);
-      Object.assign(session, { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false });
+      Object.assign(session, { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false, only, length });
       stage.replaceChildren(promptBox);
       next();
+    }
+    // A new session with the options of the drill. A change of the options comes here too, so a review round ends.
+    function restart() { begin(null, 0); }
+    // A short round on the items you missed. A few other items join a very small set, so the answer is not known in advance.
+    function review(items) {
+      const others = GT.shuffle(d.pool(config).filter(item => !items.includes(item)));
+      const only = items.concat(others.slice(0, Math.max(0, 4 - items.length)));
+      begin(only, Math.min(20, Math.max(6, only.length * 2)));
     }
     function onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -350,7 +367,7 @@
     if (config.length === undefined) config.length = 20;
     buildSettings();
 
-    const promptBox = h('div', null,
+    const promptBox = h('div', { class: 'prompt-wrap' },
       h('div', { class: 'prompt' },
         h('div', { class: 'prompt-top' }, h('div', null, title, sub), promptActions),
         board, answers, timer),
@@ -368,17 +385,20 @@
     root.addEventListener('resize', onResize);
     next();
     onResize();
-    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); };
+    // The phone was turned: an open question is drawn again with the neck that fits the new shape of the screen.
+    redraw = () => { if (session.q && !session.answered && !session.done) { d.render(session.q, ui); onResize(); } };
+    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); redraw = null; };
   }
 
-  let cleanup = null;
+  let cleanup = null, redraw = null;
   GT.route('train', {
     render(main, parts) {
       if (cleanup) { cleanup(); cleanup = null; }
       const d = byId[parts[0]];
       if (d) cleanup = run(main, d); else hub(main);
     },
-    leave() { if (cleanup) { cleanup(); cleanup = null; } }
+    leave() { if (cleanup) { cleanup(); cleanup = null; } },
+    resize() { if (redraw) redraw(); }
   });
 
   // Shared option pieces for drills.

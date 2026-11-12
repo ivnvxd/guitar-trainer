@@ -9,14 +9,26 @@
 
   const lib = Object.assign({ labels: 'notes' }, store.get('library', {}));
   const saveLib = patch => { Object.assign(lib, patch); store.set('library', lib); };
+  // find: more words that the search knows a topic by.
   const TOPICS = [
-    { id: 'notes', name: 'Notes', title: 'Notes on the neck', line: 'Where every note is. Start with the natural notes.' },
-    { id: 'intervals', name: 'Intervals', title: 'Intervals', line: 'The distance between two notes, and its shape on the neck.' },
-    { id: 'scales', name: 'Scales', title: 'Scales', line: 'Major, minor, pentatonic and modes, in positions over the whole neck.' },
-    { id: 'chords', name: 'Chords', title: 'Chords and CAGED', line: 'The notes of a chord, its shapes, and how the five CAGED shapes join.' },
-    { id: 'triads', name: 'Triads', title: 'Triads', line: 'Three-note chords on each set of strings, with their inversions.' },
-    { id: 'keys', name: 'Keys', title: 'Keys and the circle of fifths', line: 'The seven chords of a key, its signature and common progressions.' }
+    { id: 'notes', name: 'Notes', title: 'Notes on the neck', line: 'Where every note is. Start with the natural notes.', find: 'fretboard note names natural sharps flats' },
+    { id: 'intervals', name: 'Intervals', title: 'Intervals', line: 'The distance between two notes, and its shape on the neck.', find: 'distance semitones' },
+    { id: 'scales', name: 'Scales', title: 'Scales', line: 'Major, minor, pentatonic and modes, in positions over the whole neck.', find: 'modes positions boxes pentatonic play along backing drone' },
+    { id: 'chords', name: 'Chords', title: 'Chords and CAGED', line: 'The notes of a chord, its shapes, and how the five CAGED shapes join.', find: 'shapes open barre' },
+    { id: 'triads', name: 'Triads', title: 'Triads', line: 'Three-note chords on each set of strings, with their inversions.', find: 'inversions three strings' },
+    { id: 'keys', name: 'Keys', title: 'Keys and the circle of fifths', line: 'The seven chords of a key, its signature and common progressions.', find: 'key signature progressions roman numerals play along backing loop' }
   ];
+  // A tool beside the topics: from notes on the neck to their name.
+  const LOOKUP = { id: 'name', name: 'Name it', title: 'Name these notes', line: 'Tap notes on the neck and get the name of the chord and the scales that hold them.', find: 'identify chord finder namer reverse lookup what is this' };
+  // The drills that train what a topic shows: [drill id, text of the link].
+  const PRACTICE = {
+    notes: [['neck-notes', 'Name the note'], ['neck-find', 'Find every note']],
+    intervals: [['ear-intervals', 'Intervals by ear'], ['neck-degrees', 'Degrees from a root']],
+    scales: [['ear-degrees', 'Scale degrees by ear'], ['neck-degrees', 'Degrees from a root']],
+    chords: [['neck-caged', 'CAGED shapes'], ['ear-chords', 'Chord quality by ear']],
+    triads: [['neck-triads', 'Triad shapes'], ['ear-chords', 'Chord quality by ear']],
+    keys: [['keys-chords', 'Chords in a key'], ['keys-facts', 'Key facts'], ['keys-numbers', 'Numbers to chords'], ['ear-progressions', 'Progressions by ear']]
+  };
   const PROPER = /^(Dorian|Phrygian|Lydian|Mixolydian|Locrian|Hungarian|Ionian|Aeolian)/;
   const lowerName = name => PROPER.test(name) ? name : name[0].toLowerCase() + name.slice(1);
   const stringOrdinal = s => FB.ordinal(6 - s);
@@ -131,7 +143,7 @@
     const from = low <= 1 ? 0 : low - 1;
     const to = Math.max(from + 4, high);
     const box = h('div', { class: 'neck' });
-    FB.render(box, Object.assign({ from, to, tuning: GT.tuning(), markers, muted, orientation: 'vertical', leftHanded: settings.leftHanded, label }, extra));
+    FB.render(box, Object.assign({ from, to, tuning: GT.tuning(), markers, muted, orientation: 'vertical', mini: true, leftHanded: settings.leftHanded, label }, extra));
     return box;
   }
   function describeNote(tones) {
@@ -149,6 +161,107 @@
   function playButton(text, fn) { return h('button', { type: 'button', class: 'btn', onclick: fn }, '▶ ', text); }
   function section(title, intro, ...content) {
     return h('section', { class: 'lib-section' }, h('h2', null, title), intro ? h('p', null, intro) : null, content);
+  }
+  // One row of links from a topic to the drills that train it.
+  function practice(topic) {
+    const links = PRACTICE[topic].filter(([id]) => GT.drills.byId[id]);
+    return h('nav', { class: 'practice', 'aria-label': 'Practice this' }, h('span', { class: 'practice-label' }, GT.drills.icon('train'), 'Practice'),
+      links.map(([id, text]) => h('a', { class: 'chip', href: '#/train/' + id }, text)));
+  }
+
+  // ---------- play-along ----------
+  // One backing at a time: a loop of chords or a drone. It keeps on while you change the position or the labels.
+  // It stops when you change the key, the root or the scale, or when you leave the Library.
+  // scope names the page that owns the loop, for example "keys:C:major". onStep draws the chord that sounds;
+  // each drawing of the page sets it again, because the page is rebuilt under a running loop.
+  const backing = { id: null, scope: null, onStep: null };
+  const TEMPOS = { min: 48, max: 160, step: 4 };
+  const tempo = () => Math.max(TEMPOS.min, Math.min(TEMPOS.max, lib.tempo || 84));
+  function stopBacking() {
+    A.stopLoop();
+    if (backing.onStep) backing.onStep(null);
+    Object.assign(backing, { id: null, scope: null, onStep: null });
+    document.querySelectorAll('.prog[aria-pressed="true"]').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    document.querySelectorAll('.prog .is-now').forEach(x => x.classList.remove('is-now'));
+  }
+  function tempoCtl() {
+    const out = h('output', null, `${tempo()} bpm`);
+    const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); A.setLoopTempo(v); out.textContent = `${v} bpm`; };
+    return h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo of the backing' },
+      h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+      h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+'));
+  }
+  // Chords of a loop as MIDI numbers: the bass, then a close voicing that moves little from chord to chord.
+  function loopMidis(chords) {
+    let v = null;
+    return chords.map(c => { v = T.voiceLead(c.pcs, v); return [A.bass(c.pcs[0])].concat(v); });
+  }
+  // A list of loops. items: [{ id, name, chords: [{ name, pcs }] }], one bar for each chord.
+  // A tap starts a loop, a tap on the same one stops it. onStep(item, i) runs when chord i sounds, and with null at the end.
+  function backingList(scope, items, onStep, cls = '') {
+    // Chords that repeat show once with a count: "A7 ×4".
+    const groups = item => item.chords.reduce((list, c, i) => { const last = list[list.length - 1]; if (last && last.name === c.name) last.to = i; else list.push({ name: c.name, from: i, to: i }); return list; }, []);
+    const step = item => i => {
+      const row = document.querySelector(`.prog[data-id="${item.id}"]`);
+      if (row) row.querySelectorAll('.prog-chords span').forEach(x => x.classList.toggle('is-now', i !== null && i >= Number(x.dataset.from) && i <= Number(x.dataset.to)));
+      if (onStep) onStep(item, i);
+    };
+    const start = item => {
+      stopBacking();
+      A.silence();
+      if (!A.startLoop(loopMidis(item.chords), tempo(), 4, i => backing.onStep && backing.onStep(i))) return;
+      Object.assign(backing, { id: item.id, scope, onStep: step(item) });
+      const row = document.querySelector(`.prog[data-id="${item.id}"]`);
+      if (row) row.setAttribute('aria-pressed', 'true');
+    };
+    // The page was drawn again under a running loop: point the loop at the new rows.
+    const playing = items.find(item => item.id === backing.id);
+    if (playing) backing.onStep = step(playing);
+    return h('div', { class: 'prog-list ' + cls }, items.map(item => h('button', { type: 'button', class: 'prog', dataset: { id: item.id }, 'aria-pressed': String(item.id === backing.id), onclick: () => item.id === backing.id ? stopBacking() : start(item) },
+      h('span', { class: 'prog-play', 'aria-hidden': 'true' }), h('b', null, item.name),
+      h('span', { class: 'prog-chords' }, groups(item).map(g => h('span', { dataset: { from: g.from, to: g.to } }, g.name, g.to > g.from ? ` ×${g.to - g.from + 1}` : null))))));
+  }
+  const pcsOf = (rootName, chord) => chord.toneList.map(t => T.mod(T.pcOf(rootName) + t.semi));
+  // Roman numeral of a chord built on a scale degree: "♭VII", "ii", "vii°".
+  function numeral(c) {
+    const d = T.parseDegree(c.label), id = c.chord.id;
+    const n = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'][d.step];
+    return c.label.replace(/\d+/, '') + (['minor', 'dim'].includes(id) ? n.toLowerCase() : n) + (id === 'dim' ? '°' : id === 'aug' ? '+' : '');
+  }
+  // Backings that fit a scale: degrees of the chords built on the scale itself. A mode gets the two or three chords
+  // that make its sound. A pentatonic or blues scale borrows the chords of the seven-note scale it comes from.
+  const VAMPS = {
+    major: [[1, 4, 5, 1], [1, 5, 6, 4]], minor: [[1, 6, 7, 1], [1, 4, 5, 1]],
+    dorian: [[1, 4]], phrygian: [[1, 2]], lydian: [[1, 2]], mixolydian: [[1, 7, 4, 1]], locrian: [[1, 2]],
+    'harmonic-minor': [[1, 4, 5, 1]], 'melodic-minor': [[1, 4]], 'phrygian-dominant': [[1, 2]]
+  };
+  const VAMP_FROM = { 'minor-pentatonic': 'minor', blues: 'minor', 'major-pentatonic': 'major', 'major-blues': 'major' };
+  const BLUES_12 = ['1', '1', '1', '1', '4', '4', '1', '1', '5', '4', '1', '5'];
+  function scaleBackings(r, scale) {
+    const from = T.scaleById(VAMP_FROM[scale.id] || scale.id);
+    const chords = T.scaleChords(r, from);
+    const items = (VAMPS[from.id] || []).filter(degrees => degrees.every(d => chords[d - 1] && chords[d - 1].chord)).map((degrees, i) => ({
+      id: `scales:${r}:${scale.id}:${i}`, name: degrees.map(d => numeral(chords[d - 1])).join('–'),
+      // A rare spelling such as B♭♭ shows under its plain name here: these are chords to play along with.
+      chords: degrees.map(d => ({ name: T.chordName(rootForLink(chords[d - 1].root), chords[d - 1].chord), pcs: pcsOf(chords[d - 1].root, chords[d - 1].chord) }))
+    }));
+    // The blues scale and the minor pentatonic are at home over twelve bars of dominant seventh chords.
+    if (['blues', 'major-blues', 'minor-pentatonic'].includes(scale.id)) {
+      const seventh = T.chordById('7');
+      items.push({ id: `scales:${r}:${scale.id}:blues`, name: '12-bar blues', chords: BLUES_12.map(d => { const root = rootForLink(T.spell(r, d)); return { name: T.chordName(root, seventh), pcs: pcsOf(root, seventh) }; }) });
+    }
+    return items;
+  }
+  function playAlong(r, scale) {
+    const items = scaleBackings(r, scale), pc = T.pcOf(r);
+    const drone = h('button', { type: 'button', class: 'btn drone', 'aria-pressed': String(A.droneRoot === pc), onclick: () => {
+      if (A.droneRoot === pc) A.stopDrone(); else A.startDrone(pc);
+      drone.setAttribute('aria-pressed', String(A.droneRoot === pc));
+    } }, h('span', { class: 'prog-play', 'aria-hidden': 'true' }), `Drone on ${r}`);
+    return section('Play along', items.length ? 'Start a backing and play the scale over it. It goes on while you change the position. The drone holds the root, so you hear each note against it.'
+      : 'The drone holds the root, so you hear each note of the scale against it.',
+      h('div', { class: 'row backing-row' }, drone, items.length ? tempoCtl() : null),
+      items.length ? backingList(`scales:${r}:${scale.id}`, items, null, 'prog-stack') : null);
   }
 
   // ---------- scales ----------
@@ -203,6 +316,8 @@
         neckSlot, cap,
         formula,
         h('p', { class: 'small muted lib-note' }, pos ? `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}. ` : '', 'Tap a tone to light it on the neck.'),
+        practice('scales'),
+        playAlong(r, scale),
         pianoBox('scales', tones.concat(Object.assign({}, tones[0], { semi: 12 })), r, 'On a keyboard, a half step (H) is the very next key and a whole step (W) skips one. On the guitar that is 1 fret and 2 frets.')
       ];
       const steps = stepNames(scale);
@@ -336,6 +451,7 @@
         cap,
         toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
         mapNote ? h('p', { class: 'small muted lib-note' }, mapNote) : null,
+        practice('chords'),
         pianoBox('chords', tones, r, 'A chord takes every other note of its scale. On a keyboard you see the gaps: 4 keys up for a major third, 3 for a minor third.')
       ];
       if (shapes.length) {
@@ -389,6 +505,7 @@
           fretsCtl(rerender)),
         neck(toneMarkers(tones), { onPress: pressPlayer(cap, describeNote(tones)), label: `${interval.name} from ${r}` }),
         cap,
+        practice('intervals'),
         pianoBox('intervals', both, r, `Count the keys from ${r} up to ${target}, black keys too: ${interval.semi}. Each key is one semitone, the same as one fret.`),
         h('p', { class: 'small muted lib-note' }, `Turned upside down, ${/^[aeiou]/i.test(interval.name) ? 'an' : 'a'} ${interval.name.toLowerCase()} is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`),
         songs.up || songs.down ? section('Songs that start with it', 'A song you know makes the sound easy to recall. Sing the start of it, then check with the buttons above.',
@@ -441,6 +558,7 @@
         neck(toneMarkers(tones, { only: s => onSet(s) }), { onPress: pressPlayer(cap, describeNote(tones)), label: `${triadsView.title(state)} on ${set.name}` }),
         cap,
         toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
+        practice('triads'),
         section('Inversions', 'The same three notes with a different note in the bass. Tap a card to hear it. Up the neck the order repeats: root position, first inversion, second inversion.',
           h('div', { class: 'cards' }, voicings.map((list, inversion) => {
             const v = list[0];
@@ -493,14 +611,15 @@
         A.silence();
         A.notes([A.bass(c.pc)].concat(T.voiceLead(pcs, null)), 'strum');
       };
+      // Six of each, so the list fills its rows in one, two or three columns.
       const progressions = mode === 'major'
-        ? [['I–IV–V–I', [1, 4, 5, 1]], ['I–V–vi–IV', [1, 5, 6, 4]], ['ii–V–I', [2, 5, 1]], ['I–vi–IV–V', [1, 6, 4, 5]], ['vi–IV–I–V', [6, 4, 1, 5]]]
-        : [['i–iv–v–i', [1, 4, 5, 1]], ['i–♭VI–♭III–♭VII', [1, 6, 3, 7]], ['i–♭VII–♭VI–♭VII', [1, 7, 6, 7]], ['ii°–v–i', [2, 5, 1]]];
+        ? [['I–IV–V–I', [1, 4, 5, 1]], ['I–V–vi–IV', [1, 5, 6, 4]], ['ii–V–I', [2, 5, 1]], ['I–vi–IV–V', [1, 6, 4, 5]], ['vi–IV–I–V', [6, 4, 1, 5]], ['I–vi–ii–V', [1, 6, 2, 5]]]
+        : [['i–iv–v–i', [1, 4, 5, 1]], ['i–♭VI–♭III–♭VII', [1, 6, 3, 7]], ['i–♭VII–♭VI–♭VII', [1, 7, 6, 7]], ['ii°–v–i', [2, 5, 1]], ['i–♭VI–♭VII–i', [1, 6, 7, 1]], ['i–iv–♭VII–♭III', [1, 4, 7, 3]]];
 
       // The seven chords in one row. A tap plays the chord, marks it on the circle and shows how to play it.
       const panel = h('div', { class: 'chord-panel', 'aria-live': 'polite' });
       const strip = h('div', { class: 'chord-strip', role: 'group', 'aria-label': `The chords of ${key} ${mode}` }, triads.map((c, i) =>
-        h('button', { type: 'button', class: 'chord-btn', 'aria-pressed': String(i === 0), onclick: () => { choose(i); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name))));
+        h('button', { type: 'button', class: 'chord-btn', 'aria-pressed': String(i === 0), onclick: () => { stopBacking(); choose(i); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name))));
       const light = i => {
         strip.querySelectorAll('.chord-btn').forEach((b, k) => b.classList.toggle('is-playing', k === i));
         circle.hot(i === null ? null : cells[i]);
@@ -526,16 +645,11 @@
       }
       choose(0);
       circle.hot(null);
-      const playProgression = degrees => {
-        A.silence();
-        let v = null;
-        const chords = degrees.map(d => { const c = triads[d - 1]; const pcs = c.chord.toneList.map(t => T.mod(c.pc + t.semi)); v = T.voiceLead(pcs, v); return [A.bass(c.pc)].concat(v); });
-        A.chordSequence(chords, 84, 2);
-        // Each chord lights up on the circle and in the row while it plays.
-        const each = 60 / 84 * 2 * 1000;
-        degrees.forEach((d, i) => A.later(() => light(d - 1), i * each));
-        A.later(() => light(null), degrees.length * each);
-      };
+      // A progression loops, one bar for each chord. The chord that sounds lights up on the circle and in the row.
+      const loops = backingList(`keys:${key}:${mode}`, progressions.map(([name, degrees], i) => ({
+        id: `keys:${key}:${mode}:${i}`, name, degrees,
+        chords: degrees.map(d => ({ name: triads[d - 1].name, pcs: triads[d - 1].chord.toneList.map(t => T.mod(triads[d - 1].pc + t.semi)) }))
+      })), (item, i) => light(i === null ? null : item.degrees[i] - 1));
       const facts = h('dl', { class: 'facts' },
         h('dt', null, 'Key signature'), h('dd', null, sigText(entry.count)),
         h('dt', null, mode === 'major' ? 'Relative minor' : 'Relative major'), h('dd', null, keyLink(relName, mode === 'major' ? 'minor' : 'major'), ', the same notes'),
@@ -550,9 +664,9 @@
           h('div', { class: 'keys-main' },
             h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel,
               mode === 'minor' ? h('p', { class: 'small muted', style: 'margin-top:10px' }, `Songs in minor keys often make v a major chord (${T.spell(key, '5')}), borrowed from the harmonic minor.`) : null),
-            h('div', { class: 'lib-section' }, h('h2', null, 'Common progressions'),
-              h('div', { class: 'prog-list' }, progressions.map(([name, degrees]) => h('button', { type: 'button', class: 'prog', onclick: () => playProgression(degrees) },
-                h('span', { class: 'prog-play', 'aria-hidden': 'true' }, '▶'), h('b', null, name), h('span', null, degrees.map(d => triads[d - 1].name).join('  ')))))))),
+            h('div', { class: 'lib-section' }, h('div', { class: 'section-head' }, h('h2', null, 'Common progressions'), tempoCtl()),
+              h('p', null, 'Tap one to loop it, one bar for each chord. Tap it again to stop.'), loops))),
+        practice('keys'),
         h('div', { class: 'keys-more' },
           h('div', { class: 'lib-section' }, h('h2', null, 'Scale'),
             toneRow(tones, t => h('button', { type: 'button', class: 'tone', onclick: () => A.note(48 + T.mod(T.pcOf(key) - 48) + t.semi) }, h('b', null, t.name), h('span', null, t.label))),
@@ -590,7 +704,7 @@
     const paths = new Map();
     const wheel = el('g', { class: 'wheel' });
     // Text lines per ring: numeral, name, signature (offsets from the middle of the cell).
-    const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 5], [-7, 10]], dim: [[null, 4], [-5, 9]] };
+    const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 5], [-7, 10]], dim: [[null, 4], [-6, 10]] };
     T.CIRCLE.forEach((k, i) => {
       const a = i * STEP;
       for (const ring of ['major', 'minor', 'dim']) {
@@ -674,6 +788,7 @@
           fretsCtl(rerender)),
         neck(markers, { onPress: pressPlayer(cap, describeNote(null)), label: notesView.title(state) }),
         cap,
+        practice('notes'),
         pianoBox('notes', keys, 'C', 'B to C and E to F have no black key between them. On the guitar they are one fret apart, and all other natural notes are two frets apart.'),
         section('Ways to remember', null, h('dl', { class: 'facts' },
           h('dt', null, 'Octave shape'), h('dd', null, 'Two strings higher and two frets up. Across the B string it is three frets up.'),
@@ -684,7 +799,87 @@
     }
   };
 
-  const VIEWS = { notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView };
+  // ---------- name these notes ----------
+  // The other way round: you tap notes on the neck and the page names the chord and the scales that hold them.
+  // The places are in the link, so a set of notes can be shared: "1.3-2.2-3.0" is string.fret, and the low E string is 0.
+  // A place beyond the frets on screen is dropped: a note you cannot see must not change the name.
+  const nameView = {
+    parse(p) {
+      const places = (p[0] || '').split('-').map(x => x.split('.').map(Number))
+        .filter(([s, f]) => Number.isInteger(s) && Number.isInteger(f) && s >= 0 && s < 6 && f >= 0 && f <= settings.frets);
+      return { places };
+    },
+    link: s => 'library/name' + (s.places.length ? '/' + s.places.map(p => p.join('.')).join('-') : ''),
+    title: () => LOOKUP.title,
+    render(state) {
+      let places = state.places.slice(), showAll = false;
+      const tuning = GT.tuning();
+      const neckSlot = h('div'), result = h('div', { class: 'named', 'aria-live': 'polite' });
+      const sorted = () => places.map(([s, f]) => ({ string: s, fret: f, midi: tuning[s] + f })).sort((a, b) => a.midi - b.midi);
+      const row = (href, name, text, tag) => h('a', { class: 'found', href: '#/' + href }, h('span', { class: 'found-text' }, h('b', null, name), text ? h('small', null, text) : null), tag ? h('span', null, tag) : null);
+      const draw = () => {
+        const notes = sorted(), pcs = [...new Set(notes.map(n => T.mod(n.midi)))];
+        const bass = notes.length ? T.mod(notes[0].midi) : 0;
+        const chords = pcs.length > 1 ? T.chordsFrom(pcs, bass) : [];
+        const near = pcs.length > 1 && !chords.length ? T.chordsFrom(pcs, bass, 1).slice(0, 6) : [];
+        const scales = pcs.length > 2 ? T.scalesWith(pcs, bass) : [];
+        // The first chord colors the notes: its root is the square.
+        const best = chords[0] ? T.tonesOn(chords[0].root, chords[0].chord) : [];
+        const toneOf = pc => best.find(t => t.pc === pc) || { name: T.PC_PLAIN[pc], label: '', kind: 'other' };
+        const markers = notes.map(n => { const t = toneOf(T.mod(n.midi)); return { string: n.string, fret: n.fret, label: lib.labels === 'degrees' && t.label ? t.label : t.name, kind: kindOf(t), title: t.label ? `${t.name}, ${t.label}` : t.name }; });
+        neckSlot.replaceChildren(neck(markers, { onPress: toggle, label: 'Tap the notes you play' }));
+        const out = [];
+        if (!notes.length) out.push(h('p', { class: 'muted' }, 'No notes yet. For a chord, tap one note on each string you play. For a scale, tap every note of the run.'));
+        else {
+          out.push(toneRow(pcs.map(toneOf), t => h('div', { class: 'tone is-still' }, h('i', { class: 'swatch' + (kindOf(t) === 'root' ? ' is-root' : ''), style: `background:var(--${kindOf(t)})` }), h('b', null, t.name), h('span', null, t.label || ' ')), 'The notes you chose'));
+          if (pcs.length === 1) out.push(h('p', { class: 'muted named-note' }, 'One note. Tap one more for an interval, or two more for a chord.'),
+            h('div', { class: 'found-list' }, row(notesView.link({ mode: 'one', note: T.PC_PLAIN[pcs[0]] }), `Every ${T.PC_PLAIN[pcs[0]]} on the neck`, null, 'Notes')));
+          if (pcs.length === 2) {
+            const iv = T.intervalBySemi(T.mod(pcs.find(pc => pc !== bass) - bass)), from = T.PC_PLAIN[bass];
+            out.push(h('h2', null, 'Interval'), h('div', { class: 'found-list' }, row(intervalsView.link({ interval: iv, root: from }), iv.name, `${from} up to ${T.spell(from, iv.semi === 6 ? '♭5' : iv.label)}`, 'Interval')));
+          }
+          if (chords.length) out.push(h('h2', null, chords.length > 1 ? 'Chords' : 'Chord'), h('div', { class: 'found-list' }, chords.map(c => row(
+            chordsView.link({ chord: c.chord, root: c.root }), c.name,
+            `${c.root} ${lowerName(c.chord.name)}${c.inversion ? `, ${T.tonesOn(c.root, c.chord)[c.inversion].name} in the bass` : ''}`, c.inversion ? null : 'Root in the bass'))));
+          else if (pcs.length > 1) out.push(h('h2', null, 'Chord'), h('p', { class: 'muted' }, near.length ? 'No chord of the Library has exactly these notes. One more note gives:' : 'No chord of the Library has these notes.'),
+            near.length ? h('div', { class: 'found-list' }, near.map(c => row(chordsView.link({ chord: c.chord, root: c.root }), c.name, `with ${c.missing.join(' ')}`, null))) : null);
+          if (pcs.length > 2) {
+            const shown = showAll ? scales : scales.slice(0, 6);
+            out.push(h('h2', null, 'Scales with these notes'),
+              scales.length ? h('div', { class: 'found-list' }, shown.map(x => row(scalesView.link({ scale: x.scale, root: x.root }), `${x.root} ${lowerName(x.scale.name)}`,
+                x.exact ? 'These are all its notes' : `${pcs.length} of its ${x.scale.toneList.length} notes`, x.onBass ? 'Starts on the lowest note' : null)))
+                : h('p', { class: 'muted' }, 'No scale of the Library holds all these notes.'),
+              scales.length > shown.length ? h('button', { type: 'button', class: 'btn', onclick: () => { showAll = true; draw(); } }, `Show ${scales.length - shown.length} more`) : null);
+          }
+        }
+        result.replaceChildren(...out.filter(Boolean));
+        play.disabled = clear.disabled = !notes.length;
+      };
+      // A tap adds a note or takes it away. The page is not drawn again, so the sound and your place on it stay.
+      function toggle(s, f, midi) {
+        const at = places.findIndex(([ps, pf]) => ps === s && pf === f);
+        if (at >= 0) places.splice(at, 1); else { places.push([s, f]); A.note(midi, 0, 0, 0.55); }
+        showAll = false;
+        const href = nameView.link({ places });
+        history.replaceState(null, '', '#/' + href);
+        saveLib({ last: Object.assign({}, lib.last, { name: { href, title: LOOKUP.title } }) });
+        draw();
+        const again = neckSlot.querySelector(`.fb-pos[data-string="${s}"][data-fret="${f}"]`);
+        if (again) again.focus({ preventScroll: true });
+      }
+      const play = h('button', { type: 'button', class: 'btn', onclick: () => A.notes(sorted().map(n => n.midi), 'strum') }, '▶ Play');
+      const clear = h('button', { type: 'button', class: 'btn', onclick: () => { places = []; history.replaceState(null, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
+      draw();
+      return [
+        head(LOOKUP.title, 'Tap notes on the neck. The page names the chord, and the scales that hold the notes.', [play, clear]),
+        h('div', { class: 'lib-stage' }, controls(labelsCtl(rerender), fretsCtl(rerender)), neckSlot),
+        h('p', { class: 'small muted', style: 'margin-top:6px' }, 'Tap a note to add it. Tap it again to take it away.'),
+        result
+      ];
+    }
+  };
+
+  const VIEWS = { notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView, name: nameView };
   let rerender = () => {};
 
   // ---------- start page ----------
@@ -695,15 +890,26 @@
     if (index) return index;
     index = [];
     // rank: the place of a scale or chord in its list, so the plain major and minor come before the rare ones.
-    const add = (title, kind, href, more = '', rank = title.length) => index.push({ title, kind, href, rank, words: plain(`${title} ${more}`).split(' ') });
+    // type: what an entry is, without its root. The search shows one entry of each type,
+    // so "pentatonic" lists each pentatonic scale once and not one scale in eight roots.
+    const add = (title, kind, href, type, more = '', rank = title.length, words = plain(`${title} ${more}`).split(' ')) => index.push({ title, kind, href, type, rank, words });
+    TOPICS.forEach((t, i) => add(t.title, 'Topic', 'library/' + t.id, 'topic:' + t.id, t.find, i - 30));
+    add(LOOKUP.title, 'Tool', 'library/name', 'topic:name', LOOKUP.find, -24);
     for (const r of T.ROOTS) {
-      T.SCALES.forEach((s, i) => add(`${r} ${lowerName(s.name)}`, 'Scale', scalesView.link({ scale: s, root: r }), 'scale', i));
-      T.CHORDS.forEach((c, i) => add(T.chordName(r, c), 'Chord', chordsView.link({ chord: c, root: r }), `${r} ${c.name} chord`, i));
-      for (const q of TRIAD_QUALITIES) add(`${T.chordName(r, T.chordById(q))} triads`, 'Triads', triadsView.link({ quality: q, root: r, set: '123' }), `${r} ${T.chordById(q).name} triad`);
-      add(`Every ${r} on the neck`, 'Notes', notesView.link({ mode: 'one', note: r }), `${r} note`);
+      // "am" means A minor: the chord, the key and the scale.
+      const short = plain(r) + 'm';
+      T.SCALES.forEach((s, i) => add(`${r} ${lowerName(s.name)}`, 'Scale', scalesView.link({ scale: s, root: r }), 'scale:' + s.id, 'scale' + (s.id === 'minor' ? ' ' + short : ''), i));
+      // A chord symbol is one word, also with brackets in it: "Am(maj7)" is found as "ammaj7" and as "am maj7".
+      T.CHORDS.forEach((c, i) => add(T.chordName(r, c), 'Chord', chordsView.link({ chord: c, root: r }), 'chord:' + c.id, '', i,
+        [plain(T.chordName(r, c)).replace(/ /g, '')].concat(plain(`${r} ${c.name} chord ${(c.symbol.match(/\(([^)]+)\)/) || [])[1] || ''}${['major', 'minor'].includes(c.id) ? ' caged' : ''}`).split(' '))));
+      for (const q of TRIAD_QUALITIES) add(`${T.chordName(r, T.chordById(q))} triads`, 'Triads', triadsView.link({ quality: q, root: r, set: '123' }), 'triads:' + q, `${r} ${T.chordById(q).name} triad`);
+      add(`Every ${r} on the neck`, 'Notes', notesView.link({ mode: 'one', note: r }), 'note', `${r} note`);
     }
-    for (const k of KEY_NAMES) for (const m of ['major', 'minor']) add(`${m === 'major' ? k.major : k.minor} ${m}`, 'Key', keysView.link({ key: m === 'major' ? k.major : k.minor, mode: m }), 'key circle of fifths');
-    for (const i of T.INTERVALS) add(i.name, 'Interval', intervalsView.link({ interval: i, root: 'C' }), `${i.short} interval`);
+    for (const k of KEY_NAMES) for (const m of ['major', 'minor']) {
+      const name = m === 'major' ? k.major : k.minor;
+      add(`${name} ${m}`, 'Key', keysView.link({ key: name, mode: m }), 'key:' + m, 'key circle of fifths' + (m === 'minor' ? ` ${plain(name)}m` : ''));
+    }
+    for (const i of T.INTERVALS) add(i.name, 'Interval', intervalsView.link({ interval: i, root: 'C' }), 'interval:' + i.id, `${i.short} interval`);
     return index;
   }
   function find(query) {
@@ -716,7 +922,13 @@
       let score = 0;
       for (const t of tokens) {
         let at = free.indexOf(t), points = 2;
-        if (at < 0) { at = free.findIndex(w => w.startsWith(t)); points = 1; }
+        if (at < 0) {
+          at = free.findIndex(w => w.startsWith(t));
+          // "am" is the start of Am7 and of Amaj7. You mean the minor chords: for a major seventh you type "ama".
+          points = at >= 0 && t.endsWith('m') && free[at].slice(t.length).startsWith('aj') ? 0.4 : 1;
+          // One or two letters are a root, not the start of a word in the text of a topic.
+          if (t.length < 3 && entry.type.startsWith('topic:')) at = -1;
+        }
         if (at < 0) { score = 0; break; }
         free.splice(at, 1);
         score += points;
@@ -724,9 +936,14 @@
       if (score) hits.push({ entry, score: score * 100 - entry.rank });
     }
     hits.sort((a, b) => b.score - a.score);
-    // One of each kind first: "F sharp minor" is a chord, a key, a scale and a set of triads.
-    const byKind = new Map();
-    for (const x of hits) byKind.set(x.entry.kind, (byKind.get(x.entry.kind) || []).concat(x.entry));
+    // One entry of each type: the best root for it. Then one of each kind first:
+    // "F sharp minor" is a chord, a key, a scale and a set of triads.
+    const types = new Set(), byKind = new Map();
+    for (const x of hits) {
+      if (types.has(x.entry.type)) continue;
+      types.add(x.entry.type);
+      byKind.set(x.entry.kind, (byKind.get(x.entry.kind) || []).concat(x.entry));
+    }
     const out = [];
     for (let round = 0; out.length < 8 && round < 8; round++) for (const list of byKind.values()) if (list[round] && out.length < 8) out.push(list[round]);
     return out;
@@ -750,7 +967,8 @@
       scales: { from: 4, to: 9, markers: [[0, 5, 'root'], [0, 8], [1, 5], [1, 7], [2, 5], [2, 7, 'root'], [3, 5], [3, 7], [4, 5], [4, 8], [5, 5, 'root'], [5, 8]].map(([s, f, k]) => dot(s, f, k || 'other')) },
       chords: { from: 0, to: 4, markers: [dot(1, 3, 'root'), dot(2, 2, 'third'), dot(3, 0, 'fifth'), dot(4, 1, 'root'), dot(5, 0, 'third')], links: [{ points: [[1, 3], [2, 2], [3, 0], [4, 1], [5, 0]].map(([string, fret]) => ({ string, fret })), cls: 'is-shape' }] },
       triads: { from: 3, to: 9, markers: [dot(3, 5, 'root'), dot(4, 5, 'third'), dot(5, 3, 'fifth'), dot(3, 9, 'third'), dot(4, 8, 'fifth'), dot(5, 8, 'root')],
-        links: [[[3, 5], [4, 5], [5, 3]], [[3, 9], [4, 8], [5, 8]]].map(l => ({ points: l.map(([string, fret]) => ({ string, fret })), cls: 'is-shape' })) }
+        links: [[[3, 5], [4, 5], [5, 3]], [[3, 9], [4, 8], [5, 8]]].map(l => ({ points: l.map(([string, fret]) => ({ string, fret })), cls: 'is-shape' })) },
+      name: { from: 0, to: 4, markers: [[1, 3], [2, 2], [4, 1]].map(([string, fret]) => ({ string, fret, kind: 'target', label: '?' })) }
     };
     FB.render(box, Object.assign({ tuning: T.STANDARD, bare: true, orientation: 'horizontal' }, pictures[id]));
     return box;
@@ -766,6 +984,7 @@
     input.addEventListener('input', show);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = results.querySelector('a'); if (first) location.hash = first.getAttribute('href'); } });
     const last = lib.last || {};
+    const tool = last[LOOKUP.id];
     main.append(h('div', { class: 'lib-home' },
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Library'), h('p', null, 'Every note, scale, chord and key, shown on the neck. Choose a topic, then change the root and the type with one tap.'))),
       h('div', { class: 'search-box' }, input, h('p', { class: 'small muted search-hint' }, 'For example: Am7, D dorian, F# minor, E major triads.'), results),
@@ -775,32 +994,56 @@
           h('div', { class: 'topic-text' },
             h('h2', null, h('span', { class: 'topic-no' }, i + 1), t.title, i === 0 ? h('span', { class: 'topic-start' }, 'Start here') : null),
             h('p', null, t.line),
-            last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null)))))));
+            last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null))))),
+      h('a', { class: 'topic topic-tool', href: '#/' + (tool ? tool.href : 'library/name') },
+        thumb(LOOKUP.id),
+        h('div', { class: 'topic-text' }, h('h2', null, LOOKUP.title), h('p', null, LOOKUP.line)))));
     document.title = `Library · ${GT.siteName}`;
   }
 
   function render(main, parts) {
     main.replaceChildren();
-    if (!VIEWS[parts[0]]) { rerender = () => {}; lastRender = null; home(main); return; }
+    if (!VIEWS[parts[0]]) { stopBacking(); A.stopDrone(); rerender = () => {}; lastRender = null; home(main); return; }
     const tab = parts[0];
     const view = VIEWS[tab];
     const state = view.parse(parts.slice(1));
-    rerender = () => render(main, parts);
+    // A lookup page changes its link as you tap, so a new drawing reads the link again.
+    rerender = () => render(main, tab === 'name' ? location.hash.replace(/^#\/?/, '').split('/').slice(1) : parts);
+    // A loop belongs to one key or one scale on one root. The drone follows the root of the scale page.
+    const scope = tab === 'keys' ? `keys:${state.key}:${state.mode}` : tab === 'scales' ? `scales:${state.root}:${state.scale.id}` : null;
+    // Another page stops the sound itself: then the row must not look as if it still plays.
+    if (backing.scope && (backing.scope !== scope || !A.loopRunning)) stopBacking();
+    if (A.droneRoot !== null && tab !== 'scales') A.stopDrone();
+    else if (A.droneRoot !== null && A.droneRoot !== T.pcOf(state.root)) A.startDrone(T.pcOf(state.root));
     // Topic row. A topic with roots opens on the root you look at now.
     const tabLink = id => {
       const target = VIEWS[id], base = target.parse([]);
       return '#/' + (state.root && base.root ? target.link(Object.assign(base, { root: state.root })) : 'library/' + id);
     };
-    const tabs = h('nav', { class: 'lib-tabs', 'aria-label': 'Library topics' },
-      h('a', { href: '#/library', class: 'lib-home-link', 'aria-label': 'Library start page', title: 'Library start page' }, GT.drills.icon('grid')),
-      TOPICS.map(t => h('a', { href: tabLink(t.id), 'aria-current': String(t.id === tab) }, t.name)));
+    // The search button stands before the topics. It opens the start page with the cursor in the search box.
+    // The page is drawn inside the tap, because a phone opens its keyboard only then.
+    const toSearch = e => {
+      e.preventDefault();
+      history.pushState(null, '', '#/library');
+      GT.render();
+      const box = document.querySelector('.search');
+      if (box) box.focus();
+    };
+    const tabs = h('div', { class: 'lib-tabs' },
+      TOPICS.map(t => h('a', { href: tabLink(t.id), 'aria-current': String(t.id === tab) }, t.name)),
+      h('a', { href: '#/library/name', class: 'lib-tool-link', 'aria-current': String(tab === LOOKUP.id) }, LOOKUP.name));
+    const nav = h('nav', { class: 'lib-nav', 'aria-label': 'Library topics' },
+      h('a', { href: '#/library', class: 'lib-home-link', 'aria-label': 'Search the Library', title: 'Search the Library', onclick: toSearch }, GT.drills.icon('search')), tabs);
     const body = h('div', { class: 'lib-main' }, view.render(state));
-    main.append(h('div', { class: 'lib' }, tabs, body));
+    // The panel and the neck travel together: on a phone held sideways the neck comes first.
+    const panel = body.querySelector(':scope > .controls');
+    if (panel && panel.nextElementSibling) { const stage = h('div', { class: 'lib-stage' }); panel.before(stage); stage.append(panel, panel.nextElementSibling); }
+    main.append(h('div', { class: 'lib' }, nav, body));
     const chosen = tabs.querySelector('[aria-current="true"]');
     if (chosen) tabs.scrollLeft += chosen.getBoundingClientRect().left - tabs.getBoundingClientRect().left - (tabs.clientWidth - chosen.offsetWidth) / 2;
     document.title = `${view.title(state)} · ${GT.siteName}`;
     // The start page opens each topic where you left it.
-    saveLib({ last: Object.assign({}, lib.last, { [tab]: { href: view.link(state), title: view.title(state) } }) });
+    if (tab !== LOOKUP.id) saveLib({ last: Object.assign({}, lib.last, { [tab]: { href: view.link(state), title: view.title(state) } }) });
     lastRender = rerender;
   }
 

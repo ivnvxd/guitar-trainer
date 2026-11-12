@@ -104,7 +104,7 @@
       const tones = T.tonesOn(c.root, T.chordById(c.chord));
       const markers = c.frets.map((f, s) => f === null ? null : (() => { const t = tones.find(x => x.pc === T.mod(T.STANDARD[s] + f)); return { string: s, fret: f, kind: GT.fretboard.degreeKind(t.label), label: t.name }; })()).filter(Boolean);
       const box = h('div', { class: 'neck' });
-      GT.fretboard.render(box, { from: 0, to: Math.max(4, Math.max(...frets)), markers, muted: c.frets.map((f, s) => f === null ? s : null).filter(s => s !== null), orientation: 'vertical', label: label });
+      GT.fretboard.render(box, { from: 0, to: Math.max(4, Math.max(...frets)), markers, muted: c.frets.map((f, s) => f === null ? s : null).filter(s => s !== null), orientation: 'vertical', mini: true, label: label });
       const select = h('select', { 'aria-label': which === 'a' ? 'First chord' : 'Second chord' }, CHANGE_CHORDS.map(n => h('option', { value: n, selected: n === label }, n)));
       select.addEventListener('change', () => { saved[which] = select.value; store.set('changes', saved); GT.render(); });
       return h('div', { class: 'card', style: 'display:grid;gap:8px' }, select, h('button', { type: 'button', class: 'btn', onclick: () => A.notes(c.frets.map((f, s) => f === null ? null : T.STANDARD[s] + f).filter(m => m !== null), 'strum') }, '▶ Strum'), box);
