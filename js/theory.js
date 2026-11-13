@@ -415,6 +415,9 @@
     return letter + accidentalText(mod(pc - LETTER_PC[letter] + 6) - 6);
   }
 
+  // The scale that a triad lives in, for the notes around it: a diminished triad is the first chord of Locrian,
+  // an augmented triad of the whole-tone scale.
+  const TRIAD_SCALE = { major: 'major', minor: 'minor', dim: 'locrian', aug: 'whole-tone' };
   // Close triad voicings on three adjacent strings. Sets are named by their lowest string index.
   const TRIAD_SETS = [
     { id: '123', name: 'Strings 3–2–1 (G B e)', strings: [3, 4, 5] },
@@ -501,7 +504,7 @@
 
   const theory = {
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
-    TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, INVERSIONS, MODE_INDEX,
+    TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, TRIAD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions,
     placeShape, chordShapes, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,

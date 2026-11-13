@@ -160,6 +160,12 @@
       // Play the question. The answer clock starts at the first sound.
       play() {
         if (!d.play || !session.q) return;
+        // With the sound off, a listening question would be a silent one: offer to turn the sound on.
+        if (A.muted && d.autoPlay !== false && !session.answered) {
+          session.heard = false;
+          feedback.replaceChildren(h('button', { type: 'button', class: 'btn btn-primary btn-big start-sound', onclick: () => { GT.setMuted(false); ui.play(); } }, 'The sound is off. Turn it on'));
+          return;
+        }
         const seconds = d.play(session.q, 'replay') || 0;
         if (!session.heard) { session.heard = true; ui.startClock(seconds); }
         if (feedback.querySelector('.start-sound')) feedback.replaceChildren(h('p', { class: 'muted' }, d.hint || 'Choose an answer.'));
@@ -218,7 +224,7 @@
         ui.play();
         // Without a click first, browsers keep the sound off. Then a button starts it.
         setTimeout(() => {
-          if (!A.running() && !session.answered) {
+          if (!A.muted && !A.running() && !session.answered) {
             session.heard = false;
             // The first sound needs a tap or a key. One large button says that better than a line of text.
             feedback.replaceChildren(h('button', { type: 'button', class: 'btn btn-primary btn-big start-sound', onclick: () => ui.play() }, '▶ Play the question', h('span', { class: 'kbd' }, 'Space')));

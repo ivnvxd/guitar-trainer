@@ -189,6 +189,17 @@ p { margin: 0; }
 .topbar nav a { display: flex; align-items: center; gap: 7px; color: var(--muted); text-decoration: none; padding: 6px 14px; border-radius: 999px; font-size: 14.5px; font-weight: 600; transition: color .15s, background-color .15s; }
 .topbar nav a:hover { color: var(--text); }
 .topbar nav a[aria-current="true"] { color: var(--text); background: var(--surface-3); }
+/* The sound switch: a speaker with waves, or with a cross when the sound is off. */
+.topbar-side { display: flex; align-items: center; gap: 10px; }
+.sound-btn { flex: none; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted); transition: color .15s, border-color .15s, background-color .15s; }
+.sound-btn:hover { color: var(--text); border-color: var(--line-hover); }
+.sound-btn .icon { width: 19px; height: 19px; stroke-width: 1.9; }
+.sound-btn .snd-off { display: none; }
+.sound-btn[aria-pressed="true"] { color: var(--bad); border-color: var(--bad-edge); background: var(--bad-soft); }
+.sound-btn.is-asked { animation: asked .55s ease-out; }
+@keyframes asked { 35% { transform: scale(1.28); box-shadow: 0 0 0 7px var(--bad-soft); } }
+.sound-btn[aria-pressed="true"] .snd-on { display: none; }
+.sound-btn[aria-pressed="true"] .snd-off { display: inline; }
 .nav-icon { display: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 main { max-width: 1200px; margin: 0 auto; padding: 30px max(24px, env(safe-area-inset-right)) 90px max(24px, env(safe-area-inset-left)); }
@@ -763,6 +774,8 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .table-stack td:first-child { grid-column: 1 / -1; font-size: 15px; font-weight: 650; }
   .table-stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
 }
+/* A long chip in the panel drops its second word, so it keeps its row. */
+@media (max-width: 385px) { .chip-more { display: none; } }
 @media (max-width: 350px) {
   .controls { padding: 10px; }
   .seg button { padding: 6px 6px; font-size: 13.5px; }

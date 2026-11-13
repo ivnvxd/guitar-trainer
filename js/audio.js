@@ -10,6 +10,8 @@
   const pending = new Set();  // timers that start sounds later
   const track = (node, bag = active) => { bag.add(node); node.onended = () => bag.delete(node); };
   let volume = 0.8;
+  // The sound switch: the volume stays as it is, the output is closed.
+  let muted = false;
 
   function context() {
     const Ctx = root.AudioContext || root.webkitAudioContext;
@@ -19,7 +21,7 @@
       try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
       ctx = new Ctx({ latencyHint: 'interactive' });
       master = ctx.createGain();
-      master.gain.value = volume;
+      master.gain.value = muted ? 0 : volume;
       // A gentle low-pass takes the edge off the plucked noise.
       const tone = ctx.createBiquadFilter();
       tone.type = 'lowpass'; tone.frequency.value = 5200; tone.Q.value = 0.4;
@@ -135,9 +137,17 @@
     o1.start(at); o2.start(at); o1.stop(at + len + 0.02); o2.stop(at + len + 0.02);
   }
 
+  // A sound was asked for while the sound is off: tell the page, so the switch can show itself.
+  let lastAsked = 0;
+  function askedWhileMuted() {
+    if (!muted || performance.now() - lastAsked < 500) return;
+    lastAsked = performance.now();
+    if (GT.audio.onMuted) GT.audio.onMuted();
+  }
   // Play one note. "at" is seconds from now. Returns false when the browser has no audio.
   function note(midi, at = 0, duration = 0, gainValue = 0.5) {
     if (!context()) return false;
+    askedWhileMuted();
     const when = ctx.currentTime + 0.03 + at;
     (voice === 'soft' ? playSoft : playPluck)(midi, when, duration, gainValue);
     return true;
@@ -197,6 +207,7 @@
   // chords: [[bass, note, note, ...], ...] as MIDI numbers. onChord(i) runs when chord i starts to sound.
   function startLoop(chords, bpm = 84, beats = 4, onChord = null) {
     if (!context()) return false;
+    askedWhileMuted();
     stopLoop();
     Object.assign(backing, { chords, bpm, beats, at: 0, nextTime: ctx.currentTime + 0.1, onChord });
     scheduleLoop();
@@ -213,6 +224,7 @@
   // A held root note in three octaves. A phone speaker loses the lowest one, so the upper ones carry it.
   function startDrone(pc) {
     if (!context()) return false;
+    askedWhileMuted();
     stopDrone();
     const now = ctx.currentTime, out = ctx.createGain(), low = bass(pc);
     out.gain.setValueAtTime(0.0001, now);
@@ -262,6 +274,7 @@
   }
   function startMetronome(bpm, beats, onBeat) {
     if (!context()) return false;
+    askedWhileMuted();
     stopMetronome();
     Object.assign(metronome, { running: true, bpm, beats, beat: 0, nextTime: ctx.currentTime + 0.08, onBeat });
     schedule();
@@ -284,7 +297,9 @@
     // The pitch class of the drone that sounds, or null.
     get droneRoot() { return backing.drone ? backing.drone.pc : null; },
     setVoice(v) { voice = v; },
-    setVolume(v) { volume = v; if (master) master.gain.value = v; },
+    setVolume(v) { volume = v; if (master) master.gain.value = muted ? 0 : v; },
+    setMuted(v) { muted = !!v; if (master) master.gain.value = muted ? 0 : volume; },
+    get muted() { return muted; },
     available: () => !!(root.AudioContext || root.webkitAudioContext),
     running: () => !!ctx && ctx.state === 'running'
   };

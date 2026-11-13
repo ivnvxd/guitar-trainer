@@ -30,6 +30,9 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 24. A phone held sideways: the neck comes first in the Library, and a drill shows the neck beside its answers.
 25. After a session: a neck with the places you missed, and a short round on the missed items only.
 26. Search: one result of each kind, so a word such as "pentatonic" lists each scale once. The topics and the CAGED shapes are found by name. A search button stands before the topics on every Library page.
+27. A sound switch in the top bar. With the sound off, an ear drill offers to turn it on and does not ask a silent question.
+28. Triads: a line joins the three notes of each shape on the neck and in the inversion cards. A switch shows the other notes of the scale around the triads, faint, on the same strings.
+29. Name these notes: an intervals mode. Each note shows its interval from the first note you tapped.
 
 ## Next
 

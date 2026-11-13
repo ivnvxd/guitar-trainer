@@ -32,7 +32,11 @@ Library opens first. Its start page has a search box and six topics in the order
 
 A scale page and a key page play along with you. A scale has a drone on its root and one to three chord loops that fit it. A key loops its common progressions. You set the tempo, and the backing goes on while you change the position.
 
-Name these notes works the other way round. You tap notes on the neck, and the page names the chord and the scales that hold the notes.
+Name these notes works the other way round. You tap notes on the neck, and the page names the chord and the scales that hold the notes. Its labels show note names, degrees in the chord, or the interval of each note from the first note you tapped.
+
+On the Triads page a line joins the three notes of each shape. A switch adds the other notes of the scale, faint, on the same strings.
+
+A speaker button in the top bar turns all sound off and on.
 
 The neck is a flat diagram: the nut on the left and the high e on top. On a phone a long neck scrolls sideways. A switch under each neck turns it upright, and so does Settings. A phone held sideways shows the neck first, and a drill puts the neck beside its answers.
 

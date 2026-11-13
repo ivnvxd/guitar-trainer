@@ -547,17 +547,26 @@
       const voicings = T.triadVoicings(r, state.quality, state.set, GT.tuning(), settings.frets);
       const cap = caption();
       const onSet = (s) => set.strings.includes(s);
+      // A line joins the three notes of each shape. A shape that runs past the last fret keeps the part you see.
+      const links = T.triadVoicings(r, state.quality, state.set, GT.tuning(), settings.frets + 4).flat()
+        .map(v => ({ points: v.frets.map((f, i) => ({ string: v.strings[i], fret: f })).filter(p => p.fret <= settings.frets), cls: 'is-shape' }));
+      // The other notes of the scale around the triad, faint, on the same three strings: the notes for a melody between the shapes.
+      const scale = T.scaleById(T.TRIAD_SCALE[state.quality]), scaleTones = T.tonesOn(r, scale);
+      const around = lib.triadScale ? toneMarkers(scaleTones.filter(t => !tones.some(x => x.pc === t.pc)), { only: s => onSet(s), kind: 'ghost' }) : [];
       const out = [
         head(triadsView.title(state), `${tones.map(t => t.name).join(' ')} on ${set.name.replace('Strings', 'strings')}`, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum'))),
         controls(
           rootCtl(state, triadsView),
           labelsCtl(rerender),
           ctl('Quality', GT.segmented('Quality', TRIAD_QUALITIES.map(q => [q, { major: 'Major', minor: 'Minor', dim: 'Dim', aug: 'Aug' }[q]]), state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true)), 'ctl-plain'),
+          // The second word goes on a narrow phone, so the switch stays in the row of the quality.
+          ctl('Around the triad', h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib.triadScale), title: `Show the other notes of ${r} ${lowerName(scale.name)}`, 'aria-label': 'Scale notes', onclick: () => { saveLib({ triadScale: !lib.triadScale }); rerender(); } }, 'Scale', h('span', { class: 'chip-more' }, ' notes')), 'ctl-plain'),
           ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map((s, i) => [s.id, [i ? null : h('span', { class: 'seg-word' }, 'Strings '), s.id.split('').reverse().join('–')]]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true)), 'ctl-plain'),
           fretsCtl(rerender)),
-        neck(toneMarkers(tones, { only: s => onSet(s) }), { onPress: pressPlayer(cap, describeNote(tones)), label: `${triadsView.title(state)} on ${set.name}` }),
+        neck(toneMarkers(tones, { only: s => onSet(s) }).concat(around), { links, onPress: pressPlayer(cap, describeNote(lib.triadScale ? scaleTones : tones)), label: `${triadsView.title(state)} on ${set.name}` }),
         cap,
         toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
+        h('p', { class: 'small muted lib-note' }, 'A line joins the three notes of one shape. ', lib.triadScale ? `The faint notes are the other notes of ${r} ${lowerName(scale.name)} on the same strings.` : null),
         practice('triads'),
         section('Inversions', 'The same three notes with a different note in the bass. Tap a card to hear it. Up the neck the order repeats: root position, first inversion, second inversion.',
           h('div', { class: 'cards' }, voicings.map((list, inversion) => {
@@ -570,7 +579,8 @@
             const midis = v.frets.map((f, i) => GT.tuning()[v.strings[i]] + f);
             const low = Math.min(...v.frets), high = Math.max(...v.frets);
             return h('button', { type: 'button', class: 'card', onclick: () => A.notes(midis, 'strum') },
-              h('h3', null, T.INVERSIONS[inversion]), h('p', null, `${v.tones[0]} in the bass, frets ${low}–${high}`), miniNeck(markers, low, high, `${T.INVERSIONS[inversion]}`));
+              h('h3', null, T.INVERSIONS[inversion]), h('p', null, `${v.tones[0]} in the bass, frets ${low}–${high}`),
+              miniNeck(markers, low, high, `${T.INVERSIONS[inversion]}`, null, { links: [{ points: markers.map(m => ({ string: m.string, fret: m.fret })), cls: 'is-shape' }] }));
           }))),
         section('Related', null, h('div', { class: 'chips' },
           h('a', { class: 'chip', href: '#/' + chordsView.link({ chord, root: r }) }, `All ${T.chordName(r, chord)} chord shapes`)))
@@ -814,6 +824,8 @@
     render(state) {
       let places = state.places.slice(), showAll = false;
       const tuning = GT.tuning();
+      // Labels of this page: note names, degrees in the chord that was found, or intervals from the first note you tapped.
+      const mode = ['notes', 'degrees', 'intervals'].includes(lib.nameLabels) ? lib.nameLabels : lib.labels;
       const neckSlot = h('div'), result = h('div', { class: 'named', 'aria-live': 'polite' });
       const sorted = () => places.map(([s, f]) => ({ string: s, fret: f, midi: tuning[s] + f })).sort((a, b) => a.midi - b.midi);
       const row = (href, name, text, tag) => h('a', { class: 'found', href: '#/' + href }, h('span', { class: 'found-text' }, h('b', null, name), text ? h('small', null, text) : null), tag ? h('span', null, tag) : null);
@@ -825,16 +837,33 @@
         const scales = pcs.length > 2 ? T.scalesWith(pcs, bass) : [];
         // The first chord colors the notes: its root is the square.
         const best = chords[0] ? T.tonesOn(chords[0].root, chords[0].chord) : [];
-        const toneOf = pc => best.find(t => t.pc === pc) || { name: T.PC_PLAIN[pc], label: '', kind: 'other' };
-        const markers = notes.map(n => { const t = toneOf(T.mod(n.midi)); return { string: n.string, fret: n.fret, label: lib.labels === 'degrees' && t.label ? t.label : t.name, kind: kindOf(t), title: t.label ? `${t.name}, ${t.label}` : t.name }; });
+        const chordTone = pc => best.find(t => t.pc === pc) || { name: T.PC_PLAIN[pc], label: '', kind: 'other' };
+        // Intervals: every note is measured from the first note you tapped, upward and in any octave.
+        // That note is the square, with a ring, and it stays the measure when a lower note joins.
+        const first = places.length ? { string: places[0][0], fret: places[0][1], midi: tuning[places[0][0]] + places[0][1] } : null;
+        const stepOf = n => { const up = T.mod(n.midi - first.midi); return up === 0 && n.midi !== first.midi ? T.intervalBySemi(12) : T.intervalBySemi(up); };
+        const fromFirst = pc => { const iv = T.intervalBySemi(T.mod(pc - first.midi)); return { pc, name: T.PC_PLAIN[pc], label: iv.short, long: iv.name, kind: FB.degreeKind(iv.label) }; };
+        const toneOf = mode === 'intervals' ? fromFirst : chordTone;
+        const markers = notes.map(n => {
+          const t = toneOf(T.mod(n.midi));
+          if (mode !== 'intervals') return { string: n.string, fret: n.fret, label: mode === 'degrees' && t.label ? t.label : t.name, kind: kindOf(t), title: t.label ? `${t.name}, ${t.label}` : t.name };
+          const iv = stepOf(n);
+          return { string: n.string, fret: n.fret, label: iv.short, kind: t.kind, ring: n.string === first.string && n.fret === first.fret, title: `${t.name}, ${iv.name.toLowerCase()} from ${T.PC_PLAIN[T.mod(first.midi)]}` };
+        });
         neckSlot.replaceChildren(neck(markers, { onPress: toggle, label: 'Tap the notes you play' }));
         const out = [];
         if (!notes.length) out.push(h('p', { class: 'muted' }, 'No notes yet. For a chord, tap one note on each string you play. For a scale, tap every note of the run.'));
         else {
-          out.push(toneRow(pcs.map(toneOf), t => h('div', { class: 'tone is-still' }, h('i', { class: 'swatch' + (kindOf(t) === 'root' ? ' is-root' : ''), style: `background:var(--${kindOf(t)})` }), h('b', null, t.name), h('span', null, t.label || ' ')), 'The notes you chose'));
+          // In the row the notes go up from the first one in the intervals mode, and from the lowest one in the other modes.
+          const inRow = mode === 'intervals' ? pcs.slice().sort((a, b) => T.mod(a - first.midi) - T.mod(b - first.midi)) : pcs;
+          out.push(toneRow(inRow.map(toneOf), t => h('div', { class: 'tone is-still', title: t.long || null }, h('i', { class: 'swatch' + (kindOf(t) === 'root' ? ' is-root' : ''), style: `background:var(--${kindOf(t)})` }), h('b', null, t.name), h('span', null, t.label || ' ')), 'The notes you chose'));
           if (pcs.length === 1) out.push(h('p', { class: 'muted named-note' }, 'One note. Tap one more for an interval, or two more for a chord.'),
             h('div', { class: 'found-list' }, row(notesView.link({ mode: 'one', note: T.PC_PLAIN[pcs[0]] }), `Every ${T.PC_PLAIN[pcs[0]]} on the neck`, null, 'Notes')));
-          if (pcs.length === 2) {
+          if (mode === 'intervals' && pcs.length > 1) {
+            const from = T.PC_PLAIN[T.mod(first.midi)];
+            out.push(h('h2', null, `Intervals from ${from}`), h('p', { class: 'muted named-note' }, `${from} is the first note you tapped. Each note shows its interval above ${from}, in any octave.`),
+              h('div', { class: 'found-list' }, inRow.filter(pc => pc !== T.mod(first.midi)).map(pc => { const iv = T.intervalBySemi(T.mod(pc - first.midi)); return row(intervalsView.link({ interval: iv, root: from }), iv.name, `${from} up to ${T.PC_PLAIN[pc]}, ${iv.semi} ${iv.semi === 1 ? 'fret' : 'frets'} on one string`, iv.short); })));
+          } else if (pcs.length === 2) {
             const iv = T.intervalBySemi(T.mod(pcs.find(pc => pc !== bass) - bass)), from = T.PC_PLAIN[bass];
             out.push(h('h2', null, 'Interval'), h('div', { class: 'found-list' }, row(intervalsView.link({ interval: iv, root: from }), iv.name, `${from} up to ${T.spell(from, iv.semi === 6 ? '♭5' : iv.label)}`, 'Interval')));
           }
@@ -872,7 +901,7 @@
       draw();
       return [
         head(LOOKUP.title, 'Tap notes on the neck. The page names the chord, and the scales that hold the notes.', [play, clear]),
-        h('div', { class: 'lib-stage' }, controls(labelsCtl(rerender), fretsCtl(rerender)), neckSlot),
+        h('div', { class: 'lib-stage' }, controls(ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees'], ['intervals', 'Intervals']], mode, v => { saveLib({ nameLabels: v }); rerender(); }), 'ctl-plain'), fretsCtl(rerender)), neckSlot),
         h('p', { class: 'small muted', style: 'margin-top:6px' }, 'Tap a note to add it. Tap it again to take it away.'),
         result
       ];

@@ -184,4 +184,10 @@ ok(T.scalesWith(pcs('A C D E G'), 9)[0].exact, 'five notes are the whole pentato
 ok(!scaleNames('C E G').some(n => n.endsWith('chromatic')), 'the chromatic scale is not an answer');
 for (const s of T.scalesWith(pcs('C E♭ G♭ A'), 0)) ok(pcs('C E♭ G♭ A').every(pc => T.tonesOn(s.root, s.scale).some(t => t.pc === pc)), `${s.root} ${s.scale.id} holds the notes`);
 
+// The scale around a triad holds the three notes of the triad, on every root.
+for (const [quality, scaleId] of Object.entries(T.TRIAD_SCALE)) for (const root of T.ROOTS) {
+  const scale = T.tonesOn(root, T.scaleById(scaleId)).map(t => t.pc);
+  ok(T.tonesOn(root, T.chordById(quality)).every(t => scale.includes(t.pc)), `${root} ${quality} is inside ${scaleId}`);
+}
+
 console.log(`theory: ${checks} checks passed`);

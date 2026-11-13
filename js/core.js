@@ -42,15 +42,29 @@
     }
   };
 
-  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, tuning: 'standard', orientation: 'auto', theme: 'auto' };
+  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', orientation: 'auto', theme: 'auto' };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   function saveSettings(patch) {
     Object.assign(settings, patch);
     store.set('settings', settings);
     GT.audio.setVoice(settings.voice);
     GT.audio.setVolume(settings.volume);
+    applySound();
     applyTheme();
   }
+  // The sound switch in the top bar shows the setting, and so does every other place that asks.
+  function applySound() {
+    GT.audio.setMuted(settings.muted);
+    for (const b of document.querySelectorAll('.sound-btn')) {
+      b.setAttribute('aria-pressed', String(!!settings.muted));
+      b.title = settings.muted ? 'The sound is off' : 'The sound is on';
+    }
+  }
+  const setMuted = v => saveSettings({ muted: !!v });
+  // A tap that asks for a sound while the sound is off: the switch pulses, so you see why it is quiet.
+  GT.audio.onMuted = () => {
+    for (const b of document.querySelectorAll('.sound-btn')) { b.classList.remove('is-asked'); void b.offsetWidth; b.classList.add('is-asked'); }
+  };
   // Theme: 'auto' follows the device. index.html sets it once before the first paint.
   const lightQuery = root.matchMedia ? root.matchMedia('(prefers-color-scheme: light)') : null;
   function applyTheme() {
@@ -144,5 +158,5 @@
   }
 
   GT.siteName = 'Guitar Trainer';
-  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, tuning, rootSlug, rootFromSlug, route, go, render, shuffle, pick, segmented });
+  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, shuffle, pick, segmented });
 })(window);
