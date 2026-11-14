@@ -278,8 +278,13 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .neck.is-scrolling.at-end .neck-scroll { -webkit-mask-image: linear-gradient(to right, transparent, #000 26px); mask-image: linear-gradient(to right, transparent, #000 26px); }
 .neck svg.fb { display: block; max-width: 100%; height: auto; margin: 0 auto; }
 .neck svg.fb-vertical { max-width: min(100%, 400px); }
-.neck-turn { display: flex; align-items: center; gap: 6px; margin: 8px 0 0 auto; padding: 5px 11px; min-height: 32px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 600; }
+/* The row under the neck: chips that switch faint layers on and off, then the switch between flat and upright. */
+.neck-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.neck-tools .chip { min-height: 32px; padding: 5px 11px; font-size: 13px; }
+.neck-turn { display: flex; align-items: center; gap: 6px; margin: 0 0 0 auto; padding: 5px 11px; min-height: 32px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 600; }
 .neck-turn .icon { width: 15px; height: 15px; }
+.turn-short { display: none; }
+@media (max-width: 340px) { .turn-long { display: none; } .turn-short { display: inline; } }
 /* String names pinned to the side of a neck that scrolls. */
 .neck-names { position: absolute; left: 0; width: 20px; pointer-events: none; opacity: 0; transition: opacity .15s; }
 .neck.is-left .neck-names { left: auto; right: 0; }
@@ -311,6 +316,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-ring { fill: none; stroke: var(--c); stroke-width: 2; stroke-dasharray: 3 2.5; }
 .fb-label { fill: var(--ink); font-size: 12.5px; font-weight: 750; pointer-events: none; }
 .fb-label-long { font-size: 10.5px; }
+.fb-small .fb-label, .fb-small .fb-label-long { font-size: 9.5px; }
 .fb-ghost .fb-dot { fill: var(--board); stroke: var(--ghost-edge); stroke-width: 1.2; }
 .fb-ghost .fb-label { fill: var(--ghost-ink); font-weight: 600; }
 .fb-hint .fb-dot { fill: var(--board); stroke: var(--accent-line); stroke-width: 2.5; stroke-dasharray: 4 3; }
@@ -334,6 +340,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-region-label circle { fill: var(--rc); }
 .fb-region-label text { fill: var(--dot-ink); font-size: 12px; font-weight: 800; text-anchor: middle; }
 .fb-region-label.is-near { opacity: .65; }
+/* A faint layer behind the main picture: the CAGED shapes around a triad or a scale. */
+.fb-region.is-faint { fill-opacity: .05; stroke-opacity: .4; stroke-width: 1.4; }
+.fb-region-label.is-faint { opacity: .5; }
 .shape-C { --rc: var(--shape-c); }
 .shape-A { --rc: var(--shape-a); }
 .shape-G { --rc: var(--shape-g); }
@@ -775,7 +784,6 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .table-stack td[data-label]::before { content: attr(data-label); display: block; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
 }
 /* A long chip in the panel drops its second word, so it keeps its row. */
-@media (max-width: 385px) { .chip-more { display: none; } }
 @media (max-width: 350px) {
   .controls { padding: 10px; }
   .seg button { padding: 6px 6px; font-size: 13.5px; }
@@ -810,6 +818,8 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   .lib-stage .controls { margin: 8px 0 0; }
   .lib-stage .neck { padding: 2px 0 4px; }
   .lib-stage svg.fb-horizontal { max-height: max(150px, calc(100vh - 142px)); max-height: max(150px, calc(100dvh - 142px)); }
+  /* The row of layer chips under the neck stays on the screen too. */
+  .lib-stage .neck:has(.neck-tools) svg.fb-horizontal { max-height: max(150px, calc(100vh - 182px)); max-height: max(150px, calc(100dvh - 182px)); }
   /* A drill: the neck on the left, the question and its answers on the right. */
   .drill .crumb { display: none; }
   .drill-bar { margin-bottom: 8px; gap: 6px 12px; }

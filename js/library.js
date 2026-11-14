@@ -7,7 +7,7 @@
   const T = GT.theory, FB = GT.fretboard, A = GT.audio;
   const { h, store, settings, rootSlug, rootFromSlug } = GT;
 
-  const lib = Object.assign({ labels: 'notes' }, store.get('library', {}));
+  const lib = Object.assign({ labels: 'notes', triadNotes: true, scaleShapes: 'boxes' }, store.get('library', {}));
   const saveLib = patch => { Object.assign(lib, patch); store.set('library', lib); };
   // find: more words that the search knows a topic by.
   const TOPICS = [
@@ -130,7 +130,7 @@
       const t = tones.find(x => x.pc === T.mod(tuning[s] + f));
       if (!t) continue;
       if (opts.only && !opts.only(s, f)) continue;
-      out.push({ string: s, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: opts.kind || FB.degreeKind(t.label), dim: opts.focus && t.label !== opts.focus, title: `${t.name}, ${t.label}` });
+      out.push({ string: s, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: opts.kind || FB.degreeKind(t.label), small: opts.small, dim: (opts.focus && t.label !== opts.focus) || (opts.lit && !opts.lit.has(t.pc)), title: `${t.name}, ${t.label}` });
     }
     return out;
   }
@@ -159,6 +159,11 @@
   };
   const shapeMidis = frets => frets.map((f, s) => f === null ? null : GT.tuning()[s] + f).filter(m => m !== null);
   function playButton(text, fn) { return h('button', { type: 'button', class: 'btn', onclick: fn }, '▶ ', text); }
+  // The places of a chord shape on the neck, and the five CAGED shapes as faint outlines behind another picture.
+  const placesOf = sh => sh.frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
+  const cagedBehind = (r, quality) => T.cagedMap(r, quality, settings.frets).map(sh => ({ points: placesOf(sh), label: sh.shape, cls: 'is-faint shape-' + sh.shape }));
+  // A switch chip for a faint layer. It keeps the setting and draws the page again.
+  const layerChip = (key, text, label, title) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib[key]), 'aria-label': label, title, onclick: () => { saveLib({ [key]: !lib[key] }); rerender(); } }, text);
   function section(title, intro, ...content) {
     return h('section', { class: 'lib-section' }, h('h2', null, title), intro ? h('p', null, intro) : null, content);
   }
@@ -174,13 +179,14 @@
   // It stops when you change the key, the root or the scale, or when you leave the Library.
   // scope names the page that owns the loop, for example "keys:C:major". onStep draws the chord that sounds;
   // each drawing of the page sets it again, because the page is rebuilt under a running loop.
-  const backing = { id: null, scope: null, onStep: null };
+  // at: the chord that sounds now, so a page drawn again under the loop shows it at once.
+  const backing = { id: null, scope: null, onStep: null, at: null };
   const TEMPOS = { min: 48, max: 160, step: 4 };
   const tempo = () => Math.max(TEMPOS.min, Math.min(TEMPOS.max, lib.tempo || 84));
   function stopBacking() {
     A.stopLoop();
     if (backing.onStep) backing.onStep(null);
-    Object.assign(backing, { id: null, scope: null, onStep: null });
+    Object.assign(backing, { id: null, scope: null, onStep: null, at: null });
     document.querySelectorAll('.prog[aria-pressed="true"]').forEach(b => b.setAttribute('aria-pressed', 'false'));
     document.querySelectorAll('.prog .is-now').forEach(x => x.classList.remove('is-now'));
   }
@@ -202,6 +208,7 @@
     // Chords that repeat show once with a count: "A7 ×4".
     const groups = item => item.chords.reduce((list, c, i) => { const last = list[list.length - 1]; if (last && last.name === c.name) last.to = i; else list.push({ name: c.name, from: i, to: i }); return list; }, []);
     const step = item => i => {
+      backing.at = i;
       const row = document.querySelector(`.prog[data-id="${item.id}"]`);
       if (row) row.querySelectorAll('.prog-chords span').forEach(x => x.classList.toggle('is-now', i !== null && i >= Number(x.dataset.from) && i <= Number(x.dataset.to)));
       if (onStep) onStep(item, i);
@@ -216,10 +223,14 @@
     };
     // The page was drawn again under a running loop: point the loop at the new rows.
     const playing = items.find(item => item.id === backing.id);
-    if (playing) backing.onStep = step(playing);
+    if (playing) {
+      backing.onStep = step(playing);
+      if (onStep && backing.at !== null) onStep(playing, backing.at);
+    }
+    const now = (item, g) => item.id === backing.id && backing.at !== null && backing.at >= g.from && backing.at <= g.to;
     return h('div', { class: 'prog-list ' + cls }, items.map(item => h('button', { type: 'button', class: 'prog', dataset: { id: item.id }, 'aria-pressed': String(item.id === backing.id), onclick: () => item.id === backing.id ? stopBacking() : start(item) },
       h('span', { class: 'prog-play', 'aria-hidden': 'true' }), h('b', null, item.name),
-      h('span', { class: 'prog-chords' }, groups(item).map(g => h('span', { dataset: { from: g.from, to: g.to } }, g.name, g.to > g.from ? ` ×${g.to - g.from + 1}` : null))))));
+      h('span', { class: 'prog-chords' }, groups(item).map(g => h('span', { class: now(item, g) ? 'is-now' : null, dataset: { from: g.from, to: g.to } }, g.name, g.to > g.from ? ` ×${g.to - g.from + 1}` : null))))));
   }
   const pcsOf = (rootName, chord) => chord.toneList.map(t => T.mod(T.pcOf(rootName) + t.semi));
   // Roman numeral of a chord built on a scale degree: "♭VII", "ii", "vii°".
@@ -252,16 +263,16 @@
     }
     return items;
   }
-  function playAlong(r, scale) {
+  function playAlong(r, scale, onStep) {
     const items = scaleBackings(r, scale), pc = T.pcOf(r);
     const drone = h('button', { type: 'button', class: 'btn drone', 'aria-pressed': String(A.droneRoot === pc), onclick: () => {
       if (A.droneRoot === pc) A.stopDrone(); else A.startDrone(pc);
       drone.setAttribute('aria-pressed', String(A.droneRoot === pc));
     } }, h('span', { class: 'prog-play', 'aria-hidden': 'true' }), `Drone on ${r}`);
-    return section('Play along', items.length ? 'Start a backing and play the scale over it. It goes on while you change the position. The drone holds the root, so you hear each note against it.'
+    return section('Play along', items.length ? 'Start a backing and play the scale over it. The notes of the chord that sounds stay bright on the neck. The backing goes on while you change the position. The drone holds the root, so you hear each note against it.'
       : 'The drone holds the root, so you hear each note of the scale against it.',
       h('div', { class: 'row backing-row' }, drone, items.length ? tempoCtl() : null),
-      items.length ? backingList(`scales:${r}:${scale.id}`, items, null, 'prog-stack') : null);
+      items.length ? backingList(`scales:${r}:${scale.id}`, items, onStep, 'prog-stack') : null);
   }
 
   // ---------- scales ----------
@@ -277,16 +288,27 @@
       const tones = T.tonesOn(r, scale);
       const positions = scalePositions(r, scale);
       const pos = positions.find(p => p.index === state.pos) || null;
-      let focus = null;
+      // The chord on the root: major with a 3 and a 5, minor with a ♭3 and a 5. Its CAGED shapes can sit behind the scale.
+      const has = l => scale.toneList.some(t => t.label === l);
+      const tonic = scale.id === 'chromatic' || !has('5') ? null : has('3') ? 'major' : has('♭3') ? 'minor' : null;
+      const tonicName = tonic && T.chordName(r, T.chordById(tonic));
+      const caged = tonic && lib.scaleCaged;
+      // focus: the tone you tapped. now: the notes of the chord that the backing plays.
+      let focus = null, now = null;
       const cap = caption();
       const neckSlot = h('div');
       const drawNeck = () => {
         let markers;
         if (pos) {
           const inPos = new Set(pos.notes.map(n => `${n.string}:${n.fret}`));
-          markers = toneMarkers(tones, { focus }).map(m => inPos.has(`${m.string}:${m.fret}`) ? m : Object.assign(m, { kind: 'ghost', label: m.label }));
-        } else markers = toneMarkers(tones, { focus });
-        neckSlot.replaceChildren(neck(markers, { onPress: pressPlayer(cap, describeNote(tones)), pressMarkersOnly: false, dimOutside: pos ? [pos.low, pos.high] : null, label: `${scalesView.title(state)} on the neck` }));
+          markers = toneMarkers(tones, { focus, lit: now }).map(m => inPos.has(`${m.string}:${m.fret}`) ? m : Object.assign(m, { kind: 'ghost', label: m.label }));
+        } else markers = toneMarkers(tones, { focus, lit: now });
+        neckSlot.replaceChildren(neck(markers, { onPress: pressPlayer(cap, describeNote(tones)), pressMarkersOnly: false, dimOutside: pos ? [pos.low, pos.high] : null,
+          regions: caged ? cagedBehind(r, tonic) : null, tools: tonic ? [layerChip('scaleCaged', 'CAGED', 'CAGED shapes', `Show the five CAGED shapes of ${tonicName}`)] : null, label: `${scalesView.title(state)} on the neck` }));
+      };
+      const follow = (item, i) => {
+        now = i === null ? null : new Set(item.chords[i].pcs);
+        drawNeck();
       };
       const formula = toneRow(tones, t => {
         const b = h('button', { type: 'button', class: 'tone', 'aria-pressed': 'false', onclick: () => {
@@ -303,6 +325,15 @@
         A.notes(up.concat(up.slice(0, -1).reverse()), 'up', 0.32, 0.4);
       };
       drawNeck();
+      // A seven-note scale has two kinds of positions: vertical boxes and diagonal shapes of three notes on each string.
+      // The switch keeps you near the same frets.
+      const twoKinds = scale.toneList.length === 7;
+      const shapesCtl = twoKinds ? ctl('Shapes', GT.segmented('Position shapes', [['boxes', 'Boxes'], ['nps', '3 per string']], lib.scaleShapes === 'nps' ? 'nps' : 'boxes', v => {
+        saveLib({ scaleShapes: v });
+        const list = scalePositions(r, scale);
+        const next = pos && list.length ? list.reduce((a, p) => Math.abs(p.low - pos.low) < Math.abs(a.low - pos.low) ? p : a) : null;
+        GT.go(scalesView.link(Object.assign({}, state, { pos: next ? next.index : null })), true);
+      }), 'ctl-plain') : null;
       const posOptions = [[0, 'All positions']].concat(positions.slice().sort((a, b) => a.index - b.index).map(p => [p.index, `${p.index}`]));
       const groups = T.SCALE_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, i.name]) }));
       const out = [
@@ -311,13 +342,16 @@
           rootCtl(state, scalesView),
           labelsCtl(rerender),
           ctl('Scale', typePick('Scale', SCALE_QUICK, groups, scale.id, v => GT.go(scalesView.link(Object.assign({}, state, { scale: T.scaleById(v), pos: null })), true)), 'ctl-wide ctl-plain'),
+          shapesCtl,
           positions.length ? ctl('Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true)), 'ctl-plain') : null,
           fretsCtl(rerender)),
         neckSlot, cap,
         formula,
-        h('p', { class: 'small muted lib-note' }, pos ? `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}. ` : '', 'Tap a tone to light it on the neck.'),
+        h('p', { class: 'small muted lib-note' }, pos ? `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low}–${pos.high}. ` : '',
+          pos && twoKinds && lib.scaleShapes !== 'nps' ? 'A box is a pentatonic box with the other notes of the scale added. ' : '', 'Tap a tone to light it on the neck.',
+          caged ? ` The faint outlines are the CAGED shapes of ${tonicName}, the chord on the root.` : null),
         practice('scales'),
-        playAlong(r, scale),
+        playAlong(r, scale, follow),
         pianoBox('scales', tones.concat(Object.assign({}, tones[0], { semi: 12 })), r, 'On a keyboard, a half step (H) is the very next key and a whole step (W) skips one. On the guitar that is 1 fret and 2 frets.')
       ];
       const steps = stepNames(scale);
@@ -344,10 +378,11 @@
     const semis = scale.toneList.map(t => t.semi).concat(12);
     return semis.slice(1).map((s, i) => ({ 1: 'H', 2: 'W', 3: 'W+H', 4: '2W' })[s - semis[i]] || `${s - semis[i]}`);
   }
-  // Positions: pentatonic boxes and 3-notes-per-string. Blues scales use the pentatonic boxes plus the added note.
+  // Positions: pentatonic boxes, and boxes or 3-notes-per-string shapes for seven-note scales.
+  // Blues scales use the pentatonic boxes plus the added note.
   function scalePositions(r, scale) {
     const extra = { blues: 'minor-pentatonic', 'major-blues': 'major-pentatonic' }[scale.id];
-    if (!extra) return T.positions(r, scale, GT.tuning(), settings.frets);
+    if (!extra) return scale.toneList.length === 7 && lib.scaleShapes !== 'nps' ? T.boxes(r, scale, GT.tuning(), settings.frets) : T.positions(r, scale, GT.tuning(), settings.frets);
     const base = T.positions(r, T.scaleById(extra), GT.tuning(), settings.frets);
     const blue = T.tonesOn(r, scale).find(t => !T.scaleById(extra).toneList.some(x => x.label === t.label));
     return base.map(p => {
@@ -407,7 +442,6 @@
       const shape = want === 'neck' || want === 'caged' ? null : shapes.find(s => s.id.toLowerCase() === String(want).toLowerCase()) || shapes[0] || null;
       const showMap = caged && want === 'caged';
       const map = caged ? T.cagedMap(r, chord.id, settings.frets) : [];
-      const placesOf = sh => sh.frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
       const cap = caption();
       let markers;
       const extra = {};
@@ -428,6 +462,12 @@
         if (shape.low > 0) extra.dimOutside = [shape.low, shape.high];
         extra.muted = shape.frets.map((f, s) => f === null ? s : null).filter(s => s !== null);
       } else markers = toneMarkers(tones);
+      // The other notes of the usual scale over the chord, as small faint dots. Full faint dots already mean the chord notes outside a shape.
+      const scale = T.CHORD_SCALE[chord.id] ? T.scaleById(T.CHORD_SCALE[chord.id]) : null;
+      const others = scale ? T.tonesOn(r, scale).filter(t => !tones.some(x => x.pc === t.pc)) : [];
+      const withScale = scale && lib.chordNotes;
+      if (withScale) markers = markers.concat(toneMarkers(others, { kind: 'ghost', small: true }));
+      const scaleNote = withScale ? `The small faint notes are the other notes of ${r} ${lowerName(scale.name)}, the usual scale over ${T.chordName(r, chord)}.` : null;
       const strum = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'strum');
       const arpeggio = () => A.notes(shape ? shapeMidis(shape.frets) : chordMidis(r, chord), 'up', 0.28, 0.5);
       // Short names for the buttons: "C" for the C shape, and "Root on 6th", "5th", "4th" for the movable shapes.
@@ -447,10 +487,11 @@
           ctl('Chord', typePick('Chord', CHORD_QUICK.map(id => [id, T.chordName(r, T.chordById(id))]), groups, chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r }), true)), 'ctl-wide ctl-plain'),
           shapes.length ? ctl('Shape', GT.segmented('Shape', shapeOptions, current, v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true)), 'ctl-plain') : null,
           fretsCtl(rerender)),
-        neck(markers, Object.assign({ onPress: pressPlayer(cap, describeNote(tones)), label: `${chordsView.title(state)} on the neck` }, extra)),
+        neck(markers, Object.assign({ onPress: pressPlayer(cap, describeNote(withScale ? tones.concat(others) : tones)), label: `${chordsView.title(state)} on the neck`,
+          tools: scale ? [layerChip('chordNotes', 'Scale notes', 'Scale notes', `Show the other notes of ${r} ${lowerName(scale.name)}`)] : null }, extra)),
         cap,
         toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
-        mapNote ? h('p', { class: 'small muted lib-note' }, mapNote) : null,
+        mapNote || scaleNote ? h('p', { class: 'small muted lib-note' }, [mapNote, scaleNote].filter(Boolean).join(' ')) : null,
         practice('chords'),
         pianoBox('chords', tones, r, 'A chord takes every other note of its scale. On a keyboard you see the gaps: 4 keys up for a major third, 3 for a minor third.')
       ];
@@ -551,22 +592,26 @@
       const links = T.triadVoicings(r, state.quality, state.set, GT.tuning(), settings.frets + 4).flat()
         .map(v => ({ points: v.frets.map((f, i) => ({ string: v.strings[i], fret: f })).filter(p => p.fret <= settings.frets), cls: 'is-shape' }));
       // The other notes of the scale around the triad, faint, on the same three strings: the notes for a melody between the shapes.
-      const scale = T.scaleById(T.TRIAD_SCALE[state.quality]), scaleTones = T.tonesOn(r, scale);
-      const around = lib.triadScale ? toneMarkers(scaleTones.filter(t => !tones.some(x => x.pc === t.pc)), { only: s => onSet(s), kind: 'ghost' }) : [];
+      const scale = T.scaleById(T.CHORD_SCALE[state.quality]), scaleTones = T.tonesOn(r, scale);
+      const around = lib.triadNotes ? toneMarkers(scaleTones.filter(t => !tones.some(x => x.pc === t.pc)), { only: s => onSet(s), kind: 'ghost' }) : [];
+      // Major and minor triads also sit inside the five CAGED shapes of their chord.
+      const caged = T.CAGED[state.quality] && lib.triadCaged;
       const out = [
         head(triadsView.title(state), `${tones.map(t => t.name).join(' ')} on ${set.name.replace('Strings', 'strings')}`, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum'))),
         controls(
           rootCtl(state, triadsView),
           labelsCtl(rerender),
           ctl('Quality', GT.segmented('Quality', TRIAD_QUALITIES.map(q => [q, { major: 'Major', minor: 'Minor', dim: 'Dim', aug: 'Aug' }[q]]), state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true)), 'ctl-plain'),
-          // The second word goes on a narrow phone, so the switch stays in the row of the quality.
-          ctl('Around the triad', h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib.triadScale), title: `Show the other notes of ${r} ${lowerName(scale.name)}`, 'aria-label': 'Scale notes', onclick: () => { saveLib({ triadScale: !lib.triadScale }); rerender(); } }, 'Scale', h('span', { class: 'chip-more' }, ' notes')), 'ctl-plain'),
           ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map((s, i) => [s.id, [i ? null : h('span', { class: 'seg-word' }, 'Strings '), s.id.split('').reverse().join('–')]]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true)), 'ctl-plain'),
           fretsCtl(rerender)),
-        neck(toneMarkers(tones, { only: s => onSet(s) }).concat(around), { links, onPress: pressPlayer(cap, describeNote(lib.triadScale ? scaleTones : tones)), label: `${triadsView.title(state)} on ${set.name}` }),
+        neck(toneMarkers(tones, { only: s => onSet(s) }).concat(around), { links, regions: caged ? cagedBehind(r, state.quality) : null,
+          tools: [layerChip('triadNotes', 'Scale notes', 'Scale notes', `Show the other notes of ${r} ${lowerName(scale.name)}`),
+            T.CAGED[state.quality] ? layerChip('triadCaged', 'CAGED', 'CAGED shapes', `Show the five CAGED shapes of ${T.chordName(r, chord)}`) : null],
+          onPress: pressPlayer(cap, describeNote(lib.triadNotes ? scaleTones : tones)), label: `${triadsView.title(state)} on ${set.name}` }),
         cap,
         toneRow(tones, t => h('div', { class: 'tone is-still' }, toneInside(t))),
-        h('p', { class: 'small muted lib-note' }, 'A line joins the three notes of one shape. ', lib.triadScale ? `The faint notes are the other notes of ${r} ${lowerName(scale.name)} on the same strings.` : null),
+        h('p', { class: 'small muted lib-note' }, 'A line joins the three notes of one shape. ', lib.triadNotes ? `The faint notes are the other notes of ${r} ${lowerName(scale.name)} on the same strings. ` : null,
+          caged ? `The faint outlines are the CAGED shapes of ${T.chordName(r, chord)}. ${state.set === '456' ? 'Only the E and G shapes use the 6th string, so on these strings a triad is part of one of those two.' : 'Each triad is part of one of them.'}` : null),
         practice('triads'),
         section('Inversions', 'The same three notes with a different note in the bass. Tap a card to hear it. Up the neck the order repeats: root position, first inversion, second inversion.',
           h('div', { class: 'cards' }, voicings.map((list, inversion) => {

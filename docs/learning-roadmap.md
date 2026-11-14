@@ -33,6 +33,9 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 27. A sound switch in the top bar. With the sound off, an ear drill offers to turn it on and does not ask a silent question.
 28. Triads: a line joins the three notes of each shape on the neck and in the inversion cards. A switch shows the other notes of the scale around the triads, faint, on the same strings.
 29. Name these notes: an intervals mode. Each note shows its interval from the first note you tapped.
+30. Faint layers: chips under the neck add the CAGED shapes to triads and scales, and the usual scale to a chord. The scale notes around triads are on at first.
+31. Scale positions: a seven-note scale has vertical boxes as well as shapes with three notes on each string.
+32. Play along: on a scale page the neck lights the notes of the chord that sounds.
 
 ## Next
 

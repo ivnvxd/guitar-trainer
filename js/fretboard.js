@@ -33,6 +33,7 @@
    * options.pressMarkersOnly   only marked positions are buttons
    * options.orientation        'auto' | 'horizontal' | 'vertical'
    * options.turn               show the switch between flat and upright on a narrow screen; it saves the setting
+   * options.tools              elements for the row under the neck, before the switch, for example the chips of faint layers
    * options.leftHanded         mirror the neck
    * options.dimOutside         [low, high]: shade the frets outside this range
    * options.label              accessible name of the board
@@ -91,11 +92,16 @@
     scroll.className = 'neck-scroll';
     scroll.appendChild(svg);
     container.replaceChildren(scroll);
+    const tools = document.createElement('div');
+    tools.className = 'neck-tools';
+    tools.append(...(o.tools || []).filter(Boolean));
     if (o.turn && narrow && !sideways()) {
       const turn = document.createElement('button');
       turn.type = 'button';
       turn.className = 'neck-turn';
-      turn.textContent = vertical ? 'Show flat' : 'Show upright';
+      // On the narrowest phones the short word keeps the switch in the row of the chips.
+      const word = vertical ? 'flat' : 'upright';
+      turn.append(GT.h('span', { class: 'turn-long' }, `Show ${word}`), GT.h('span', { class: 'turn-short' }, word[0].toUpperCase() + word.slice(1)));
       turn.title = vertical ? 'Nut on the left, the neck scrolls sideways' : 'Nut on top, like a chord chart';
       const icon = el('svg', { viewBox: '0 0 24 24', class: 'icon', 'aria-hidden': 'true' });
       el('path', { d: 'M4 12a8 8 0 0 1 13.7-5.6L20 9M20 4v5h-5M20 12a8 8 0 0 1-13.7 5.6L4 15M4 20v-5h5' }, icon);
@@ -105,8 +111,9 @@
         GT.saveSettings({ orientation: next });
         render(container, Object.assign({}, options, { orientation: next }));
       });
-      container.append(turn);
+      tools.append(turn);
     }
+    if (tools.children.length) container.append(tools);
     // String names that stay in view while a flat neck scrolls, so you always see which string is which.
     const pinned = document.createElement('div');
     if (!vertical && !o.bare) {
@@ -194,7 +201,7 @@
         const pressable = o.onPress && (!o.pressMarkersOnly || m);
         if (!m && !pressable) continue;
         const p = xy(along(f), across(s));
-        const g = el('g', { class: `fb-pos${m ? ' fb-' + (m.kind || 'tone') : ''}${m && m.dim ? ' fb-dim' : ''}`, transform: `translate(${p.x} ${p.y})` }, svg);
+        const g = el('g', { class: `fb-pos${m ? ' fb-' + (m.kind || 'tone') : ''}${m && m.dim ? ' fb-dim' : ''}${m && m.small ? ' fb-small' : ''}`, transform: `translate(${p.x} ${p.y})` }, svg);
         const midi = o.tuning[s] + f;
         if (pressable) {
           g.setAttribute('role', 'button');
@@ -214,7 +221,7 @@
             : el('circle', { r: size, class: cls }, g);
           if (m.ring) shape(r + (mini ? 3.5 : 5), 'fb-ring');
           shape(r, 'fb-dot');
-          if (m.label) { const t = el('text', { class: 'fb-label', 'text-anchor': 'middle', y: mini ? 5.2 : 4.5 }, g); t.textContent = m.label; if (m.label.length > 2) t.classList.add('fb-label-long'); }
+          if (m.label) { const t = el('text', { class: 'fb-label', 'text-anchor': 'middle', y: m.small ? 3.4 : mini ? 5.2 : 4.5 }, g); t.textContent = m.label; if (m.label.length > 2) t.classList.add('fb-label-long'); }
         }
       }
     }

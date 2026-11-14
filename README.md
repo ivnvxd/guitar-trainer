@@ -30,11 +30,19 @@ When you publish a new version, change `VERSION` in `sw.js`. Browsers then repla
 
 Library opens first. Its start page has a search box and six topics in the order you learn them: notes, intervals, scales, chords with the CAGED shapes, triads, and keys with the circle of fifths. On each topic page, the root, the type and the position are one tap away, above the neck. A keyboard folds out under the neck to show the same notes on a piano. A row of links leads from each topic to the drills that train it.
 
-A scale page and a key page play along with you. A scale has a drone on its root and one to three chord loops that fit it. A key loops its common progressions. You set the tempo, and the backing goes on while you change the position.
+A scale page and a key page play along with you. A scale has a drone on its root and one to three chord loops that fit it. A key loops its common progressions. You set the tempo, and the backing goes on while you change the position. While a loop plays on a scale page, the notes of the chord that sounds stay bright on the neck.
 
 Name these notes works the other way round. You tap notes on the neck, and the page names the chord and the scales that hold the notes. Its labels show note names, degrees in the chord, or the interval of each note from the first note you tapped.
 
-On the Triads page a line joins the three notes of each shape. A switch adds the other notes of the scale, faint, on the same strings.
+A seven-note scale shows its positions in two ways: as vertical boxes of 4 or 5 frets, or as shapes with three notes on each string. A box is a pentatonic box with the other notes of the scale added.
+
+Faint layers show what is around the topic of a page. Chips under the neck switch them on and off:
+
+- Triads: the other notes of the scale on the same strings (on at first), and the five CAGED shapes of the chord.
+- Scales: the five CAGED shapes of the chord on the root.
+- Chords: the other notes of the usual scale over the chord, as small dots. For example, C mixolydian over C7 and C dorian over Cm7.
+
+On the Triads page a line also joins the three notes of each shape.
 
 A speaker button in the top bar turns all sound off and on.
 

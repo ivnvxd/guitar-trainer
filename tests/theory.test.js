@@ -122,6 +122,27 @@ for (const root of T.ROOTS) {
   }
 }
 
+// Vertical boxes: 5 for every seven-note scale, 4 or 5 frets each, 1 to 4 notes on each string, all in the scale.
+// Four notes on a string come from scales with two half steps close together, such as phrygian dominant.
+for (const root of T.ROOTS) for (const scale of T.SCALES.filter(s => s.toneList.length === 7)) {
+  const list = T.boxes(root, scale);
+  eq(list.length, 5, `${root} ${scale.id} boxes`);
+  const pcs = new Set(T.tonesOn(root, scale).map(t => t.pc));
+  for (const b of list) {
+    ok(b.high - b.low <= 4, `${root} ${scale.id} box ${b.index} spans ${b.low}-${b.high}`);
+    for (const n of b.notes) ok(pcs.has(T.mod(n.midi)), `${root} ${scale.id} box ${b.index} note`);
+    for (let s = 0; s < 6; s++) {
+      const n = b.notes.filter(x => x.string === s).length;
+      ok(n >= 1 && n <= 4, `${root} ${scale.id} box ${b.index} has ${n} notes on string ${s}`);
+    }
+  }
+}
+// G major box 1 is the usual shape around the E-shape G chord: frets 2 to 5.
+const g1 = T.boxes('G', T.scaleById('major')).find(b => b.index === 1);
+eq(`${g1.low}-${g1.high}`, '2-5');
+eq(g1.notes.map(n => `${n.string}/${n.fret}`).join(' '), '0/2 0/3 0/5 1/2 1/3 1/5 2/2 2/4 2/5 3/2 3/4 3/5 4/3 4/5 5/2 5/3 5/5');
+eq(T.boxes('A', T.scaleById('minor-pentatonic')).length, 5, 'a pentatonic scale is its own boxes');
+
 // The chords of every key fill one block on the circle: three positions side by side,
 // three major, three minor and one diminished chord, spelled as in the key.
 for (const k of T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean))) {
@@ -184,8 +205,8 @@ ok(T.scalesWith(pcs('A C D E G'), 9)[0].exact, 'five notes are the whole pentato
 ok(!scaleNames('C E G').some(n => n.endsWith('chromatic')), 'the chromatic scale is not an answer');
 for (const s of T.scalesWith(pcs('C E♭ G♭ A'), 0)) ok(pcs('C E♭ G♭ A').every(pc => T.tonesOn(s.root, s.scale).some(t => t.pc === pc)), `${s.root} ${s.scale.id} holds the notes`);
 
-// The scale around a triad holds the three notes of the triad, on every root.
-for (const [quality, scaleId] of Object.entries(T.TRIAD_SCALE)) for (const root of T.ROOTS) {
+// The scale around a chord holds every note of the chord, on every root.
+for (const [quality, scaleId] of Object.entries(T.CHORD_SCALE)) for (const root of T.ROOTS) {
   const scale = T.tonesOn(root, T.scaleById(scaleId)).map(t => t.pc);
   ok(T.tonesOn(root, T.chordById(quality)).every(t => scale.includes(t.pc)), `${root} ${quality} is inside ${scaleId}`);
 }

@@ -415,9 +415,13 @@
     return letter + accidentalText(mod(pc - LETTER_PC[letter] + 6) - 6);
   }
 
-  // The scale that a triad lives in, for the notes around it: a diminished triad is the first chord of Locrian,
-  // an augmented triad of the whole-tone scale.
-  const TRIAD_SCALE = { major: 'major', minor: 'minor', dim: 'locrian', aug: 'whole-tone' };
+  // The usual scale over a chord, for the notes around it: a diminished triad is the first chord of Locrian,
+  // an augmented triad of the whole-tone scale, a dominant seventh of Mixolydian. A chord with no usual scale is left out.
+  const CHORD_SCALE = {
+    major: 'major', minor: 'minor', dim: 'locrian', aug: 'whole-tone', sus2: 'major', sus4: 'mixolydian', power: 'minor-pentatonic',
+    maj7: 'major', 7: 'mixolydian', m7: 'dorian', m7b5: 'locrian', dim7: 'diminished-wh', mmaj7: 'melodic-minor', '7sus4': 'mixolydian',
+    b5: 'whole-tone', '7b5': 'whole-tone', 6: 'major', m6: 'dorian', add9: 'major', 9: 'mixolydian', maj9: 'major', m9: 'dorian'
+  };
   // Close triad voicings on three adjacent strings. Sets are named by their lowest string index.
   const TRIAD_SETS = [
     { id: '123', name: 'Strings 3–2–1 (G B e)', strings: [3, 4, 5] },
@@ -485,6 +489,24 @@
     return result.sort((a, b) => a.low - b.low);
   }
 
+  // Vertical boxes of 4 or 5 frets. A pentatonic scale is its own five boxes. A seven-note scale takes the five boxes
+  // of the pentatonic on its root (major with a 3, else minor) and fills each with every scale note between its frets.
+  function boxes(rootName, scale, tuning = STANDARD, maxFret = 24) {
+    const size = scale.toneList.length;
+    if (size === 5) return positions(rootName, scale, tuning, maxFret);
+    if (size !== 7) return [];
+    const rootPc = pcOf(rootName);
+    const pent = scaleById(scale.toneList.some(t => t.label === '3') ? 'major-pentatonic' : 'minor-pentatonic');
+    return positions(rootName, pent, tuning, maxFret).map(p => {
+      const notes = [];
+      for (let s = 0; s < tuning.length; s++) for (let f = p.low; f <= p.high; f++) {
+        const t = scale.toneList.find(x => mod(rootPc + x.semi) === mod(tuning[s] + f));
+        if (t) notes.push({ string: s, fret: f, midi: tuning[s] + f, label: t.label });
+      }
+      return { index: p.index, startLabel: notes[0].label, notes, low: p.low, high: p.high };
+    });
+  }
+
   // Close voicing of chord tones near the previous chord, for smooth progressions (MIDI numbers).
   function voiceLead(pcs, prev, low = 52, high = 72) {
     const options = [];
@@ -504,9 +526,9 @@
 
   const theory = {
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
-    TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, TRIAD_SCALE, INVERSIONS, MODE_INDEX,
+    TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
-    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions,
+    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions, boxes,
     placeShape, chordShapes, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
