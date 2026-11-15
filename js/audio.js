@@ -307,19 +307,21 @@
     if (bag) track(o, bag);
   }
   function schedule() {
-    const m = metronome;
+    const m = metronome, run = m.run;
+    // After a pause in the background the clock is behind: go on from now, not with every missed click at once.
+    if (m.nextTime < ctx.currentTime - 0.05) m.nextTime = ctx.currentTime + 0.05;
     while (m.nextTime < ctx.currentTime + 0.12) {
       if (m.idx === 0) {
         if (m.opts.ramp) m.bpm = GT.rhythm.rampBpm(m.base, m.bar, m.opts.ramp);
         m.plan = m.opts.plan ? m.opts.plan(m.bar) : null;
-        if (m.opts.onBar) { const bar = m.bar, bpm = m.bpm, delay = Math.max(0, (m.nextTime - ctx.currentTime) * 1000); setTimeout(() => m.running && m.opts.onBar(bar, bpm), delay); }
+        if (m.opts.onBar) { const bar = m.bar, bpm = m.bpm, delay = Math.max(0, (m.nextTime - ctx.currentTime) * 1000); setTimeout(() => m.running && m.run === run && m.opts.onBar(bar, bpm), delay); }
       }
       const at = m.nextTime, beat = Math.floor(m.idx / m.sub), sub = m.idx % m.sub;
       const c = m.plan ? m.plan[m.idx] : { beat, sub, accent: beat === 0 && sub === 0, sound: true };
       if (c.sound) click(at, c.accent, sub > 0);
       if (sub === 0 && m.onBeat) {
         const delay = Math.max(0, (at - ctx.currentTime) * 1000), silent = !c.sound;
-        setTimeout(() => m.running && m.onBeat(beat, silent), delay);
+        setTimeout(() => m.running && m.run === run && m.onBeat(beat, silent), delay);
       }
       m.idx = (m.idx + 1) % (m.beats * m.sub);
       if (m.idx === 0) m.bar++;
@@ -330,7 +332,8 @@
     if (!context()) return false;
     askedWhileMuted();
     stopMetronome();
-    Object.assign(metronome, { running: true, bpm, base: bpm, beats, sub: opts.sub || 1, bar: 0, idx: 0, plan: null, opts, nextTime: ctx.currentTime + 0.08, onBeat });
+    // run: a new start makes the beat callbacks of the last one stop.
+    Object.assign(metronome, { running: true, run: (metronome.run || 0) + 1, bpm, base: bpm, beats, sub: opts.sub || 1, bar: 0, idx: 0, plan: null, opts, nextTime: ctx.currentTime + 0.08, onBeat });
     schedule();
     metronome.timer = setInterval(schedule, 25);
     return true;
@@ -496,10 +499,17 @@
     // The pitch class of the drone that sounds, or null.
     get droneRoot() { return backing.drone ? backing.drone.pc : null; },
     setVoice(v) { voice = v; },
-    setVolume(v) { volume = v; if (master) master.gain.value = muted ? 0 : v; },
-    setMuted(v) { muted = !!v; if (master) master.gain.value = muted ? 0 : volume; },
+    setVolume(v) { volume = v; if (master) master.gain.value = muted ? 0 : v; if (GT.audio.onVolume) GT.audio.onVolume(); },
+    setMuted(v) { muted = !!v; if (master) master.gain.value = muted ? 0 : volume; if (GT.audio.onVolume) GT.audio.onVolume(); },
+    // A sound asked for while the sound is off: the sound button shows it.
+    askedWhileMuted,
     get muted() { return muted; },
     available: () => !!(root.AudioContext || root.webkitAudioContext),
+    // The one audio context of the site and its main volume, for the player. context() starts it in a tap.
+    context,
+    get master() { return master; },
+    // The player plays songs past the soft tone filter of the plucked sound, with the same volume.
+    get volume() { return muted ? 0 : volume; },
 
     running: () => !!ctx && ctx.state === 'running'
   };

@@ -16,7 +16,7 @@
       last14.push({ key, label: d.toLocaleDateString(undefined, { weekday: 'narrow' }), min: (days[key] ? days[key].ms : 0) / 60000 });
     }
     const maxMin = Math.max(settings.goal || 10, ...last14.map(d => d.min));
-    const head = h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Progress'), h('p', null, 'Your results stay in this browser. Save them to a file to keep a copy or to move them to another device.')));
+    const head = h('div', { class: 'page-head' }, h('div', null, h('div', { class: 'crumb' }, h('a', { href: '#/train' }, 'Train'), ' / Progress'), h('h1', null, 'Progress'), h('p', null, 'Your results stay in this browser. Save them to a file to keep a copy or to move them to another device.')));
     if (!Object.keys(days).length) {
       main.append(head,
         h('div', { class: 'empty' }, h('p', null, 'No practice yet. After your first drill, this page shows your minutes per day, your right answers and your times.'),
@@ -86,7 +86,8 @@
     const file = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
     file.addEventListener('change', async () => {
       const f = file.files[0]; if (!f) return;
-      try { store.importAll(JSON.parse(await f.text())); status.textContent = 'Progress loaded from the file.'; setTimeout(() => GT.render(), 600); }
+      // The page loads again, so the settings and the Library choices in memory come from the file too.
+      try { store.importAll(JSON.parse(await f.text())); status.textContent = 'Progress loaded from the file.'; setTimeout(() => location.reload(), 600); }
       catch (e) { status.textContent = e.message || 'The file could not be read.'; }
       file.value = '';
     });
@@ -162,10 +163,14 @@
         D.field('Count-in', GT.segmented('Count-in', [[true, 'One bar'], [false, 'Off']], settings.countIn !== false, v => set({ countIn: v }))),
         h('p', { class: 'small muted' }, 'One bar of clicks before a strumming pattern or a rhythm starts. Read mode of Tap in time always counts in: you need the tempo before the first note.')),
       block('About',
-        h('p', { class: 'muted' }, 'Everything runs in your browser. Nothing is sent anywhere. The sound is made by the browser, so the site works offline after the first visit.'),
-        h('p', { class: 'muted' }, 'The code is on ', h('a', { href: 'https://github.com/ivnvxd/guitar-trainer', target: '_blank', rel: 'noopener' }, 'GitHub'), '.'),
-        h('p', { class: 'small faint site-version' }, `Version ${GT.version}`))));
+        h('p', { class: 'muted' }, 'Everything runs in your browser. Nothing is sent anywhere, except that YouTube sees which video you open in Slow down. The sound is made by the browser, so the site works offline after the first visit.'),
+        h('p', { class: 'muted' }, 'Found a wrong note or a bug, or have an idea? Report it on GitHub. The code of the site is there too.'),
+        h('div', { class: 'row about-links' },
+          h('a', { class: 'btn', href: `${REPO}/issues/new`, target: '_blank', rel: 'noopener' }, 'Report a problem'),
+          h('a', { class: 'btn', href: REPO, target: '_blank', rel: 'noopener' }, 'Code on GitHub')),
+        h('p', { class: 'small faint site-version' }, h('a', { href: `${REPO}/releases/tag/v${GT.version}`, target: '_blank', rel: 'noopener', title: 'What changed in this version' }, `Version ${GT.version}`)))));
   }
+  const REPO = 'https://github.com/ivnvxd/guitar-trainer';
 
   GT.route('progress', { render: progressPage });
   GT.route('settings', { render: settingsPage });

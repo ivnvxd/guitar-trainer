@@ -298,12 +298,59 @@ eq(T.fingers([null, 3, 2, 0, 1, 0]).join(), ',3,2,,1,', 'open C');
 eq(T.fingers([1, 3, 3, 2, 1, 1]).join(), '1,3,4,2,1,1', 'F barre');
 eq(T.fingers([null, null, 0, 2, 3, 2]).join(), ',,,1,3,2', 'open D');
 
-// The tuner hears the pitch of a plucked string: a tone with overtones, at 48 kHz, within 3 cents.
-for (const hz of [82.41, 110, 146.83, 196, 246.94, 329.63, 440, 87.3, 123.47]) {
-  const rate = 48000, buf = new Float32Array(4096);
+// Sequences on a position: thirds step two notes, groups go two up and one back, and each runs up then down.
+{
+  const box = T.boxes('A', T.scaleById('minor-pentatonic')).find(b => b.index === 1);
+  const names = groups => groups.map(g => g.map(n => T.PC_PLAIN[T.mod(n.midi)]).join('')).join(' ');
+  eq(names(T.sequence(box.notes, 'thirds')).split(' ').slice(0, 3).join(' '), 'AD CE DG', 'thirds of A minor pentatonic box 1');
+  eq(names(T.sequence(box.notes, 'threes')).split(' ').slice(0, 2).join(' '), 'ACD CDE', 'groups of 3');
+  eq(names(T.sequence(box.notes, 'fours')).split(' ')[0], 'ACDE', 'groups of 4');
+  for (const id of ['thirds', 'threes', 'fours', 'updown']) {
+    const g = T.sequence(box.notes, id), flat = g.flat();
+    ok(flat.every(n => box.notes.includes(n)), `${id} uses the notes of the box`);
+    eq(g[0][0].midi, Math.min(...box.notes.map(n => n.midi)), `${id} starts on the lowest note`);
+  }
+  eq(T.sequence(box.notes, 'updown').flat().length, box.notes.length * 2 - 1, 'up and down');
+}
+
+// The key of a list of chords: the tonic first wins a tie of relative keys, a blues reads as a blues,
+// and every chord gets a numeral.
+{
+  const C = (r, id) => ({ root: r, chord: T.chordById(id) });
+  const top = list => { const k = T.keyOf(list)[0]; return `${k.key} ${k.mode} ${k.numerals.join(' ')}`; };
+  eq(top([C('A', 'minor'), C('F', 'major'), C('C', 'major'), C('G', 'major')]), 'A minor i ♭VI ♭III ♭VII');
+  eq(top([C('C', 'major'), C('G', 'major'), C('A', 'minor'), C('F', 'major')]), 'C major I V vi IV');
+  eq(top([C('D', 'm7'), C('G', '7'), C('C', 'maj7')]), 'C major ii7 V7 Imaj7');
+  eq(top([C('A', '7'), C('D', '7'), C('E', '7')]), 'A blues I7 IV7 V7');
+  eq(top([C('A', 'minor'), C('D', 'minor'), C('E', 'major'), C('A', 'minor')]), 'A minor i iv V i');
+  eq(top([C('G', 'major'), C('C', 'add9'), C('D', 'sus4')]), 'G major I IV V');
+  eq(T.keyOf([C('A', 'minor'), C('F', 'major'), C('C', 'major'), C('G', 'major')])[1].key, 'C', 'the relative major comes next');
+  eq(T.keyOf([C('G', 'major'), C('C', 'add9'), C('D', 'sus4')])[0].fits.map(f => f.name).join(' '), 'Am Bm Em F♯°', 'chords that fit');
+  for (const r of T.ROOTS) for (const c of T.CHORDS) { const k = T.keyOf([C(r, c.id)]); ok(k.length >= 12 && k[0].numerals.length === 1, `key of ${r}${c.symbol}`); }
+}
+
+// The note guess of the player: one note with its overtones is that note alone, and a chord gives its notes.
+{
+  const rate = 22050, n = 16384;
+  const tone = (buf, midi) => { const f = 440 * Math.pow(2, (midi - 69) / 12); for (let i = 0; i < n; i++) { let v = 0; [1, 0.7, 0.5, 0.35, 0.25, 0.18].forEach((a, k) => { v += a * Math.sin(2 * Math.PI * f * (k + 1) * i / rate + k); }); buf[i] += 0.3 * v * Math.exp(-i / rate * 1.5); } };
+  const heard = midis => { const b = new Float32Array(n); midis.forEach(m => tone(b, m)); return T.notesAt(b, rate); };
+  eq(heard([48]).map(x => x.midi), [48], 'C3 with its overtones is C alone');
+  eq(heard([40]).map(x => x.midi), [40], 'low E alone');
+  eq(heard([48, 52, 55, 60]).map(x => x.pc).sort((a, b) => a - b), [0, 4, 7], 'C major gives C E G');
+  eq(T.chordsFrom(heard([45, 52, 57, 60, 64]).map(x => x.pc), 9)[0].name, 'Am', 'open A minor reads as Am');
+  eq(T.notesAt(new Float32Array(n), rate), [], 'silence has no notes');
+  // Pure tones of A C♯ E: a lower A would collect their sound as its overtones, but it has no fundamental.
+  const pure = new Float32Array(n);
+  for (const f of [220, 277.18, 329.63]) for (let i = 0; i < n; i++) pure[i] += 0.3 * Math.sin(2 * Math.PI * f * i / rate);
+  eq(T.notesAt(pure, rate).map(x => x.pc).sort((a, b) => a - b), [1, 4, 9], 'pure A C♯ E');
+}
+
+// The tuner hears the pitch of a plucked string: a tone with overtones, at 48 and 44.1 kHz, within 3 cents.
+for (const rate of [48000, 44100]) for (const hz of [82.41, 110, 146.83, 196, 246.94, 329.63, 440, 87.3, 123.47]) {
+  const buf = new Float32Array(4096);
   for (let i = 0; i < buf.length; i++) { const t = i / rate; buf[i] = 0.5 * Math.sin(2 * Math.PI * hz * t) + 0.3 * Math.sin(4 * Math.PI * hz * t + 1) + 0.15 * Math.sin(6 * Math.PI * hz * t + 2); }
   const got = T.pitchOf(buf, rate);
-  ok(got && Math.abs(1200 * Math.log2(got / hz)) < 3, `pitch of ${hz} Hz read as ${got && got.toFixed(2)}`);
+  ok(got && Math.abs(1200 * Math.log2(got / hz)) < 3, `pitch of ${hz} Hz at ${rate} read as ${got && got.toFixed(2)}`);
 }
 eq(T.pitchOf(new Float32Array(4096), 48000), null, 'silence has no pitch');
 

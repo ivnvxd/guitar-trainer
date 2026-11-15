@@ -47,7 +47,10 @@
       if (taps.length >= 3) { const gaps = taps.slice(1).map((t, i) => t - taps[i]); setBpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length)); }
     };
     const onKey = e => {
-      if (['INPUT', 'SELECT'].includes((document.activeElement || {}).tagName)) return;
+      const el = document.activeElement || {};
+      if (['INPUT', 'SELECT'].includes(el.tagName)) return;
+      // Space on a button you reached with the keyboard, or on a link, does that button or link.
+      if (e.key === ' ' && el !== toggle && el.matches && el.matches('a, summary, button:focus-visible')) return;
       if (e.key === ' ') { e.preventDefault(); toggle.click(); }
       else if (e.key === 't' || e.key === 'T') tap();
       else if (e.key === 'ArrowUp' || e.key === '+') setBpm(saved.bpm + 1);
@@ -56,7 +59,7 @@
     document.addEventListener('keydown', onKey);
     drawDots(-1);
     main.append(h('div', { class: 'drill' },
-      h('div', { class: 'crumb' }, h('a', { href: '#/train' }, 'Train'), ' / Tools'),
+      h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')),
       h('h1', null, 'Metronome'),
       h('div', { class: 'prompt', style: 'margin-top:18px;display:grid;gap:18px;justify-items:center;text-align:center' },
         h('div', null, bpmOut, h('div', { class: 'muted small' }, 'beats per minute')),
@@ -136,7 +139,7 @@
     };
     redrawBest();
     main.append(h('div', { class: 'drill' },
-      h('div', { class: 'crumb' }, h('a', { href: '#/train' }, 'Train'), ' / Tools'),
+      h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')),
       h('h1', null, 'One-minute chord changes'),
       h('p', { class: 'muted', style: 'margin-top:6px;max-width:64ch' }, 'Pick two open chords. Switch between them for one minute, strumming once per chord, and count every switch. Clean changes count, rushed ones do not. Beat your best a little each day.'),
       h('div', { class: 'cards', style: 'margin-top:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))' }, chordCard('a'), chordCard('b')),
@@ -147,11 +150,38 @@
     return () => { if (timer) clearInterval(timer); A.stopMetronome(); };
   }
 
+  // The Tools tab: the tools you use with the guitar in your hands.
+  const TOOLS = [
+    { id: 'tune', title: 'Tuner', line: 'Tune your guitar with the microphone.', icon: 'M4 16a8 8 0 0 1 16 0M12 16l4-6M3 20h18' },
+    { id: 'metronome', title: 'Metronome', line: 'Tempo, accents, silent bars and a rising tempo.', icon: 'M8.5 20h7l-2.4-15h-2.2zM12 15l5-8' },
+    { id: 'play', title: 'Slow down', line: 'Slow down a song or a YouTube video, loop a part and play along.', icon: 'M3 12h1.5M7 8v8M11 5v14M15 9v6M19 10.5v3' },
+    { id: 'changes', title: 'Chord changes', line: 'Switch between two open chords for a minute. Beat your count.', icon: 'M5 8h11l-3-3M19 16H8l3 3' }
+  ];
+  function toolsHome(main) {
+    const el = GT.fretboard.el;
+    main.append(
+      h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Tools'), h('p', null, 'For practice with the guitar in your hands.'))),
+      h('div', { class: 'tool-cards' }, TOOLS.map(t => {
+        const svg = el('svg', { viewBox: '0 0 24 24', class: 'tool-icon', 'aria-hidden': 'true' });
+        el('path', { d: t.icon }, svg);
+        return h('a', { class: 'tool-card', href: `#/tools/${t.id}` }, svg, h('h2', null, t.title), h('p', null, t.line));
+      })));
+  }
+  // The Tuner and Slow down are drawn by the Library and the player; here they get the crumb back to Tools.
+  function libraryTool(main, view) {
+    main.append(h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')), h('div', { class: 'lib-main' }, view.render(view.parse([]))));
+  }
+
   let cleanup = null;
   GT.route('tools', {
     render(main, parts) {
       if (cleanup) { cleanup(); cleanup = null; }
-      cleanup = parts[0] === 'changes' ? changes(main) : metronome(main);
+      const id = parts[0];
+      if (id === 'changes') cleanup = changes(main);
+      else if (id === 'metronome') cleanup = metronome(main);
+      else if (id === 'tune') { libraryTool(main, GT.tuner.view); cleanup = GT.tuner.stop; }
+      else if (id === 'play') { libraryTool(main, GT.player.view); cleanup = GT.player.leave; }
+      else toolsHome(main);
     },
     leave() { if (cleanup) { cleanup(); cleanup = null; } }
   });

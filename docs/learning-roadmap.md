@@ -50,6 +50,8 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 44. The daily goal counts real practice time. On the circle a tap turns and a hold plays.
 45. Strumming: write your own pattern on the grid, two to four chords with common progressions, drums, and the pattern in notes. Counting bars loop. A count-in switch.
 46. Scale and arpeggio boxes take a one-fret stretch, so no box misses a note.
+47. Key of your chords with numerals, scale sequences with a best clean tempo, several saved strumming patterns, guitarist spellings in search, a play bar, and fixes for keys, focus, touch sizes, the tuner microphone and offline use.
+48. Slow down: a player for song files, YouTube links and tab recordings, with speed, key, loops, marks, filters and a note guess.
 
 ## Next
 

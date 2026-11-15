@@ -222,6 +222,14 @@
   // pluck (the sound grows), or a pitch other than the last one heard. A note that still rings from the last
   // question does not answer the next one.
   const ear = { on: false, q: null, ui: null, view: null, t0: 0, floor: 1, fresh: false, run: [], last: null };
+  // The microphone stops when the page is hidden: another tab, another app, or a locked phone.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden || !ear.on) return;
+    A.stopListening();
+    ear.on = false;
+    if (ear.view) ear.view.say('The microphone stopped when you left the page. Tap Start listening to go on.');
+    if (ear.restart) ear.restart();
+  });
   function hear(buf, rate) {
     const v = ear.view;
     if (!v) return;
@@ -304,6 +312,8 @@
       const panel = h('div', { class: 'listen' },
         h('div', { class: 'listen-row' }, h('span', { class: 'muted' }, 'Heard'), heard, h('div', { class: 'listen-level', title: 'What the microphone hears' }, level)),
         octaves, ear.on ? null : startBtn, say);
+      // Back on the page after the microphone stopped: the button comes back.
+      ear.restart = () => { startBtn.disabled = false; if (!startBtn.isConnected) panel.insertBefore(startBtn, say); };
       ear.view = { level, say: t => { say.textContent = t; }, heard: m => { heard.textContent = octaveName(m); } };
       q.drawOctaves = drawOctaves;
       ear.q = q; ear.ui = ui; ear.t0 = performance.now(); ear.fresh = false; ear.run = [];
@@ -347,7 +357,7 @@
       ui.board.replaceChildren(...[q.mode === 'staff' ? staff(q.midi) : null, neck].filter(Boolean));
       return { text };
     },
-    stop() { A.stopListening(); Object.assign(ear, { on: false, q: null, ui: null, view: null }); },
+    stop() { A.stopListening(); Object.assign(ear, { on: false, q: null, ui: null, view: null, restart: null }); },
     options(c, set) {
       return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', PLAY_MODES, c.mode, v => set({ mode: v }))),

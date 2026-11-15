@@ -55,20 +55,16 @@
     const last = byId[store.get('lastDrill')] || byId['ear-intervals'];
     const track = (name, intro, rows) => h('section', { class: 'track' },
       h('h2', null, name), h('p', { class: 'track-intro' }, intro), h('div', { class: 'drill-list' }, rows));
-    const tools = track('Tools', 'For practice with the guitar in your hands.', [
-      h('a', { class: 'drill-row', href: '#/tools/metronome' }, h('h3', null, 'Metronome'), h('p', null, 'Tempo, beats per bar and tap tempo.')),
-      h('a', { class: 'drill-row', href: '#/tools/changes' }, h('h3', null, 'One-minute chord changes'), h('p', null, 'Switch between two open chords for a minute. Beat your count.'))]);
     main.append(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Train'), h('p', null, 'Short drills you repeat each day. The site asks again what you miss or answer slowly, and adds new material when you are ready.'))),
       h('div', { class: 'today' },
-        h('div', { class: 'today-goal' }, h('p', null, h('b', null, `${minutes} of ${goal} min`), h('span', null, 'today')), goalNeck(minutes, goal)),
+        h('div', { class: 'today-goal' }, h('p', null, h('b', null, `${minutes} of ${goal} min`), h('span', null, 'today'), h('a', { class: 'today-progress', href: '#/progress' }, 'Your progress')), goalNeck(minutes, goal)),
         h('div', { class: 'stat' }, h('b', null, day.q), h('span', null, 'answers today')),
         h('div', { class: 'stat' }, h('b', null, streak), h('span', null, streak === 1 ? 'day in a row' : 'days in a row')),
         h('a', { class: 'btn btn-primary btn-big', href: '#/train/' + last.id }, day.q ? `Continue: ${last.title}` : `Start: ${last.title}`)),
-      // Three columns on a wide screen: Ear, Neck, and Keys with Rhythm and the tools, so the columns end level.
-      h('div', { class: 'tracks' }, [['ear'], ['neck'], ['keys', 'rhythm']].map((ids, i, cols) => h('div', { class: 'track-col' },
-        ids.map(id => TRACKS.find(t => t.id === id)).map(t => track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow))),
-        i === cols.length - 1 ? tools : null))));
+      // Three columns on a wide screen: Ear, Neck, and Keys with Rhythm. The tools have their own tab.
+      h('div', { class: 'tracks' }, [['ear'], ['neck'], ['keys', 'rhythm']].map(ids => h('div', { class: 'track-col' },
+        ids.map(id => TRACKS.find(t => t.id === id)).map(t => track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow)))))));
   }
   // Today's goal as a short neck: one fret for each minute of the goal, one dot for each minute done.
   function goalNeck(minutes, goal) {
@@ -357,6 +353,10 @@
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag) || settingsPanel.contains(document.activeElement)) return;
       if (session.done) return;
+      // Space and Enter on a link or a fold do what they do there. So do they on a button you reached with the keyboard.
+      // A button you clicked keeps the focus too, and then Space still replays or goes on, and the other keys work.
+      const el = document.activeElement;
+      if ((e.key === ' ' || e.key === 'Enter') && el && el.closest && (el.closest('a, summary') || (tag === 'BUTTON' && el.matches(':focus-visible')))) return;
       if (e.key === ' ' || e.key === 'Enter') {
         if (tag === 'BUTTON' && e.key === 'Enter') return;
         e.preventDefault();

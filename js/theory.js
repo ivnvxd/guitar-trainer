@@ -441,6 +441,47 @@
       return { degree: i + 1, label: t.label, roman: romanOf(t.label, chord), root: chordRoot, chord, name: chord ? chordRoot + chord.symbol : `${chordRoot} (${formula})` };
     });
   }
+  // The likely key of a list of chords ([{ root, chord }]), best first. Each chord of the key scores 3, a chord whose
+  // notes are all in the key 2 (sus, add9, power chords), a common chord from outside the key 1.5 (a secondary
+  // dominant, a borrowed chord, the major V of a minor key). The tonic chord first adds 2, last adds 1, so Am F C G
+  // reads as A minor before C major. Only dominant chords on I, IV and V read as a blues on the first root.
+  // numerals: one for each chord, in the order given. fits: the chords of the key on roots that are not in the list yet.
+  const DEGREE_LABELS = ['1', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♭6', '6', '♭7', '7'];
+  const DOMINANT = ['7', '9', '13', '11', '7sharp9', '7b9', '7sus4'];
+  function keyOf(chords) {
+    if (!chords.length) return [];
+    const pcsOf = c => c.chord.toneList.map(t => mod(pcOf(c.root) + t.semi));
+    const firstPc = pcOf(chords[0].root);
+    const blues = chords.length > 1 && chords.every(c => DOMINANT.includes(c.chord.id) && [0, 5, 7].includes(mod(pcOf(c.root) - firstPc)));
+    const out = [];
+    if (blues) out.push({ key: chords[0].root, mode: 'blues', score: 99, numerals: chords.map(c => romanOf(DEGREE_LABELS[mod(pcOf(c.root) - firstPc)], c.chord)), fits: [] });
+    for (const k of CIRCLE.flatMap(e => [e, e.alt].filter(Boolean))) for (const mode of ['major', 'minor']) {
+      const key = mode === 'major' ? k.major : k.minor, keyPc = pcOf(key);
+      const scale = scaleById(mode === 'major' ? 'major' : 'minor');
+      const inKey = new Set(scale.toneList.map(t => mod(keyPc + t.semi)));
+      const tri = diatonic(key, mode), sev = diatonic(key, mode, true), outs = outsideChords(key, mode);
+      let score = 0;
+      const numerals = chords.map(c => {
+        const pc = pcOf(c.root), label = DEGREE_LABELS[mod(pc - keyPc)];
+        const own = tri.concat(sev).find(x => x.pc === pc && x.chord.id === c.chord.id);
+        if (own) { score += 3 + (own.root === c.root ? 0.1 : 0); return romanOf(scale.toneList[own.degree - 1].label, c.chord); }
+        if (inKey.has(pc) && pcsOf(c).every(x => inKey.has(x))) { score += 2; return romanOf(scale.toneList.find(t => mod(keyPc + t.semi) === pc).label, c.chord); }
+        const near = outs.find(x => x.pc === pc && x.chord.id === c.chord.id);
+        if (near) { score += 1.5; return near.roman; }
+        return romanOf(label, c.chord);
+      });
+      const tonic = c => pcOf(c.root) === keyPc && c.chord.toneList.some(t => t.label === (mode === 'major' ? '3' : '♭3'));
+      if (tonic(chords[0])) score += 2;
+      if (chords.length > 1 && tonic(chords[chords.length - 1])) score += 1;
+      const have = new Set(chords.map(c => pcOf(c.root)));
+      const fits = tri.filter(x => !have.has(x.pc)).map(x => ({ root: x.root, chord: x.chord, name: x.name, roman: x.roman }));
+      out.push({ key, mode, score, numerals, fits });
+    }
+    // The same key under two names (F♯ and G♭): keep the better spelled one.
+    const seen = new Set();
+    return out.sort((a, b) => b.score - a.score).filter(r => { const id = `${pcOf(r.key)}:${r.mode}`; if (seen.has(id)) return false; seen.add(id); return true; });
+  }
+
   // Reverse lookup: the chords that a set of notes spells. pcs are pitch classes in any order,
   // bass is the pitch class of the lowest note. A chord whose root is in the bass comes first,
   // then the common chords before the rare ones. "missing" asks for chords that need that many more notes.
@@ -624,6 +665,28 @@
     });
   }
 
+  // Sequences to practise a position: the notes in the order you play them, up and then down.
+  // Thirds pair each note with the one two steps up. Groups of 3 go two up and one back (1 2 3, 2 3 4 ...),
+  // groups of 4 the same with four notes. Each group is a list of notes, so a page can mark where a group starts.
+  const SEQUENCES = [
+    { id: 'updown', name: 'Up and down', short: 'Scale' }, { id: 'thirds', name: 'Thirds', short: 'Thirds' },
+    { id: 'threes', name: 'Groups of 3', short: 'Threes' }, { id: 'fours', name: 'Groups of 4', short: 'Fours' }
+  ];
+  function sequence(notes, id) {
+    const up = notes.slice().sort((a, b) => a.midi - b.midi || a.string - b.string), n = up.length, down = up.slice().reverse();
+    if (id === 'updown') return [up, down.slice(1)].filter(g => g.length);
+    const out = [];
+    if (id === 'thirds') {
+      for (let i = 0; i + 2 < n; i++) out.push([up[i], up[i + 2]]);
+      for (let i = 0; i + 2 < n; i++) out.push([down[i], down[i + 2]]);
+      return out;
+    }
+    const k = id === 'fours' ? 4 : 3;
+    for (let i = 0; i + k <= n; i++) out.push(up.slice(i, i + k));
+    for (let i = 0; i + k <= n; i++) out.push(down.slice(i, i + k));
+    return out;
+  }
+
   // Slash chords: the shapes of a chord with another note in the bass, for example C/E or C/B♭.
   // The bass note goes on a string under the shape, within reach of the hand (C/G: 3 3 2 0 1 0). When no string
   // under it fits, a string of the shape that plays the bass note becomes the lowest one (C/E: x x 2 0 1 0).
@@ -721,6 +784,12 @@
 
   // The frequency of a buffer, or null when it is too quiet or has no clear pitch. Periods from 60 Hz to 1000 Hz.
   function pitchOf(buf, rate) {
+    // Above 30 kHz, half the samples are enough: the pitch comes out the same, with a quarter of the work.
+    if (rate > 30000) {
+      const half = new Float32Array(buf.length >> 1);
+      for (let i = 0; i < half.length; i++) half[i] = (buf[2 * i] + buf[2 * i + 1]) * 0.5;
+      return pitchOf(half, rate / 2);
+    }
     let rms = 0;
     for (const v of buf) rms += v * v;
     if (Math.sqrt(rms / buf.length) < 0.008) return null;
@@ -741,6 +810,65 @@
     const a = c[at - 1], b = c[at], d = c[at + 1], shift = (a - d) / (2 * (a - 2 * b + d) || 1);
     return rate / (at + (Number.isFinite(shift) ? shift : 0));
   }
+  // An FFT in place, for the note guess. re and im have a length that is a power of 2.
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k, b = a + len / 2, tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+        }
+      }
+    }
+  }
+  // The notes that sound in a short stretch of a recording, strongest first: [{ midi, pc, strength }] from E1 to C6.
+  // A note is as strong as its first six harmonics together. The strongest note is taken, its harmonics are taken
+  // out of the spectrum, and the search goes on. So one note with its overtones (C with the G and E above it)
+  // reads as C alone, and a chord as its notes. A note below a quarter of the strongest one does not count.
+  function notesAt(samples, rate, max = 6) {
+    let n = 1;
+    while (n * 2 <= Math.min(samples.length, 16384)) n *= 2;
+    if (n < 2048) return [];
+    const re = new Float64Array(n), im = new Float64Array(n);
+    for (let i = 0; i < n; i++) re[i] = samples[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)));
+    fft(re, im);
+    const mag = new Float64Array(n / 2);
+    for (let k = 0; k < mag.length; k++) mag[k] = Math.hypot(re[k], im[k]);
+    const bin = f => f * n / rate;
+    // The loudest bin near a frequency: a recording can be a little sharp or flat.
+    const near = f => { const b = bin(f); let m = 0; for (let k = Math.floor(b) - 1; k <= Math.ceil(b) + 1; k++) if (k > 0 && k < mag.length) m = Math.max(m, mag[k]); return m; };
+    const weights = [1, 0.8, 0.64, 0.5, 0.4, 0.32];
+    // A note needs its own fundamental: without it, a note an octave below would collect the harmonics of others.
+    const strength = midi => {
+      const f = 440 * Math.pow(2, (midi - 69) / 12), parts = weights.map((w, h) => f * (h + 1) < rate / 2 - 50 ? near(f * (h + 1)) : 0);
+      if (parts[0] < 0.15 * Math.max(...parts)) return 0;
+      return parts.reduce((s, m, h) => s + weights[h] * m, 0);
+    };
+    const out = [];
+    let first = 0;
+    for (let round = 0; round < max; round++) {
+      let best = null;
+      for (let m = 28; m <= 84; m++) { const v = strength(m); if (!best || v > best.v) best = { m, v }; }
+      if (!best || !(best.v > 0)) break;
+      if (!first) first = best.v;
+      if (best.v < first * 0.25) break;
+      out.push({ midi: best.m, pc: mod(best.m), strength: best.v / first });
+      const f = 440 * Math.pow(2, (best.m - 69) / 12);
+      for (let h = 1; h <= 12; h++) { const b = bin(f * h); for (let k = Math.floor(b) - 2; k <= Math.ceil(b) + 2; k++) if (k > 0 && k < mag.length) mag[k] = 0; }
+    }
+    return out;
+  }
+
   // Close voicing of chord tones near the previous chord, for smooth progressions (MIDI numbers).
   function voiceLead(pcs, prev, low = 52, high = 72) {
     const options = [];
@@ -762,8 +890,8 @@
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
-    tonesOn, chordName, signature, diatonic, outsideChords, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes,
-    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,
+    tonesOn, chordName, signature, diatonic, outsideChords, keyOf, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes, SEQUENCES, sequence,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

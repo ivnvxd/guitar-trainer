@@ -114,12 +114,16 @@
   for (const type of ['pointerdown', 'click', 'change']) root.addEventListener(type, remember, true);
   function keepPlace(draw) {
     const y = root.scrollY, tap = lastTap && Date.now() - lastTap.at < 2000 ? lastTap : null;
+    // The keyboard focus goes back to the same control, so Tab goes on from there and not from the top.
+    const focused = document.activeElement, hadFocus = !!(focused && focused !== document.body && focused.closest && focused.closest('#main'));
     lastTap = null;
     draw();
     root.scrollTo(0, y);
     if (!tap) return;
     const same = twins(tap.tag, tap.key), el = same[tap.nth] || (same.length === 1 ? same[0] : null);
     if (!el || !el.getClientRects().length) return;
+    // Only with a mouse and keys: on a touch screen, focus on a new list could open it again.
+    if (hadFocus && el.focus && !matchMedia('(pointer: coarse)').matches) el.focus({ preventScroll: true });
     if (tap.row) {
       const row = el.closest(`[class="${tap.row}"]`);
       if (row) row.scrollLeft += el.getBoundingClientRect().left - tap.left;
@@ -134,7 +138,8 @@
     else location.hash = hash;
   }
   function render() {
-    const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
+    // A broken link (for example a lone %) opens what it can, not a blank page.
+    const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(p => { try { return decodeURIComponent(p); } catch (e) { return p; } });
     const name = views[parts[0]] ? parts[0] : 'library';
     const rest = views[parts[0]] ? parts.slice(1) : [];
     if (current && current.leave) current.leave();
@@ -148,7 +153,9 @@
     const tools = document.getElementById('page-tools');
     if (tools) tools.replaceChildren();
     current = views[name];
-    document.querySelectorAll('[data-nav]').forEach(a => a.setAttribute('aria-current', String(a.dataset.nav === name)));
+    // Progress belongs to Train: the Train tab stays lit on it.
+    const tab = name === 'progress' ? 'train' : name;
+    document.querySelectorAll('[data-nav]').forEach(a => a.setAttribute('aria-current', String(a.dataset.nav === tab)));
     current.render(main, rest);
     const title = main.querySelector('h1');
     document.title = (title ? title.textContent + ' · ' : '') + GT.siteName;
@@ -176,28 +183,33 @@
   const pick = list => list[Math.floor(Math.random() * list.length)];
 
   // A segmented control: one choice of several. Arrow keys move the choice, as in a radio group.
+  // It shows the new choice itself, so it is right also on a page that does not draw again after a change.
   function segmented(label, options, value, onChange, cls = '') {
-    const at = options.findIndex(([v]) => v === value);
-    const choose = v => { if (v !== value) onChange(v); };
+    let now = value;
+    const at = () => Math.max(0, options.findIndex(([v]) => v === now));
+    const show = () => buttons.forEach((b, i) => { b.setAttribute('aria-checked', String(options[i][0] === now)); b.tabIndex = i === at() ? 0 : -1; });
+    const choose = v => { if (v === now) return; now = v; show(); onChange(v); };
     const onKey = e => {
       const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
       if (!step) return;
       e.preventDefault();
       e.stopPropagation();
-      choose(options[(Math.max(at, 0) + step + options.length) % options.length][0]);
-      // A change often redraws the page. Put the focus back on the new choice, so the arrow keys go on.
-      const now = document.querySelector(`[role="radiogroup"][aria-label="${label}"] [aria-checked="true"]`);
-      if (now) now.focus({ preventScroll: true });
+      const i = (at() + step + options.length) % options.length;
+      choose(options[i][0]);
+      // A change often draws the page again. Put the focus on the new choice, so the arrow keys go on.
+      const there = document.querySelector(`[role="radiogroup"][aria-label="${label}"] [aria-checked="true"]`);
+      (there || buttons[i]).focus({ preventScroll: true });
     };
-    return h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label, onkeydown: onKey },
-      options.map(([v, text], i) => h('button', {
-        type: 'button', role: 'radio', 'aria-checked': String(v === value), tabindex: i === Math.max(at, 0) ? '0' : '-1',
-        onclick: () => choose(v)
-      }, text)));
+    const buttons = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', onclick: () => choose(v) }, text));
+    show();
+    return h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label, onkeydown: onKey }, buttons);
   }
 
   GT.siteName = 'Guitar Trainer';
   // The version of the files in use. It must match VERSION in sw.js, which a new upload changes.
-  GT.version = 12;
+  // The version of the site: major.minor.patch. The first number goes up for a redesign, the middle one for new
+  // features, the last one for fixes only. Give VERSION in sw.js the same version when you publish new files.
+  // Each version has a release with its notes on GitHub, tagged v and the version.
+  GT.version = '1.13.0';
   Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented });
 })(window);

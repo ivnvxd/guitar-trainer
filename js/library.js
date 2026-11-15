@@ -27,6 +27,7 @@
     { id: 'rhythm', name: 'Rhythm', title: 'Rhythm and strumming', line: 'Strumming patterns to play along with, and how to count notes, rests and time signatures.', find: 'rhythm strumming strum pattern counting note values rests time signature meter swing triplets sixteenths eighths' }
   ];
   // A tool beside the topics: from notes on the neck to their name.
+  const PLAYER = { id: 'play', name: 'Slow down', title: 'Slow down', line: 'Slow down a song file or a YouTube video without changing its pitch. Loop a part, change the key, and play along.', find: 'slow down player transcribe loop youtube speed tempo pitch transpose song learn by ear practice recording' };
   const TUNE = { id: 'tune', name: 'Tuner', title: 'Tuner', line: 'Tune your guitar with the microphone of your phone or computer.', find: 'tuner tune tuning microphone pitch strings' };
   // A second tool: the scales that fit the chords of a song.
   const FIT = { id: 'fit', name: 'Scales for chords', title: 'Scales for chords', line: 'Add the chords of a song and get the scales that hold every note of them. Loop the chords and play over them.', find: 'scale chord fit over solo improvise what scale progression song chords to scales' };
@@ -259,8 +260,56 @@
   const backing = { id: null, scope: null, onStep: null, at: null };
   const TEMPOS = { min: 48, max: 160, step: 4 };
   const tempo = () => Math.max(TEMPOS.min, Math.min(TEMPOS.max, lib.tempo || 84));
+  // While a backing plays, a small bar at the bottom of the screen shows the chord that sounds and a Stop button,
+  // so you can stop it from anywhere on a long page.
+  const playBar = { el: null };
+  function showPlayBar(name, chord) {
+    if (!playBar.el) {
+      playBar.name = h('span', { class: 'play-bar-name' });
+      playBar.chord = h('b', { class: 'play-bar-chord' });
+      playBar.el = h('div', { class: 'play-bar', role: 'region', 'aria-label': 'The backing that plays' }, h('span', { class: 'play-bar-dot', 'aria-hidden': 'true' }), playBar.name, playBar.chord,
+        h('button', { type: 'button', class: 'btn', onclick: () => stopBacking() }, '■ Stop'));
+      document.body.append(playBar.el);
+    }
+    playBar.name.textContent = name;
+    playBar.chord.textContent = chord || '';
+    playBar.el.hidden = false;
+    document.body.classList.add('has-play-bar');
+  }
+  function hidePlayBar() {
+    if (playBar.el) playBar.el.hidden = true;
+    document.body.classList.remove('has-play-bar');
+  }
+  // A change you cannot see is lost. After a tap far from the neck, bring the neck (or a part of it) into view,
+  // smoothly, and only when no part of it shows: a tap near it keeps the page where it is.
+  function bringIntoView(box) {
+    if (!box) return;
+    const top = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+    const nav = document.querySelector('.topbar nav'), bottom = nav && getComputedStyle(nav).position === 'fixed' ? nav.offsetHeight : 0;
+    const r = box.getBoundingClientRect();
+    if (r.bottom > top + 8 && r.top < innerHeight - bottom - 8) return;
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    root.scrollTo({ top: Math.max(0, root.scrollY + r.top - top - 12), behavior: smooth ? 'smooth' : 'auto' });
+  }
+  // A vertical neck is long: after a pick of a box or a shape, show its frets when they are below or above the screen.
+  function showFrets(low, high) {
+    if (!FB.isUpright(settings.orientation) || FB.sideways()) return;
+    requestAnimationFrame(() => {
+      const cells = [...document.querySelectorAll('#main .neck .fb-pos')].filter(g => Number(g.dataset.fret) >= low && Number(g.dataset.fret) <= high);
+      if (!cells.length) return;
+      const rs = cells.map(c => c.getBoundingClientRect()), topY = Math.min(...rs.map(r => r.top)), botY = Math.max(...rs.map(r => r.bottom));
+      const top = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+      const nav = document.querySelector('.topbar nav'), bottom = nav && getComputedStyle(nav).position === 'fixed' ? nav.offsetHeight : 0;
+      if (topY >= top && botY <= innerHeight - bottom) return;
+      const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+      root.scrollTo({ top: Math.max(0, root.scrollY + topY - top - 40), behavior: smooth ? 'smooth' : 'auto' });
+    });
+  }
+  // The player stops a backing when it plays a song.
+  GT.stopBacking = () => stopBacking();
   function stopBacking() {
     A.stopLoop();
+    hidePlayBar();
     if (backing.onStep) backing.onStep(null);
     Object.assign(backing, { id: null, scope: null, onStep: null, at: null });
     document.querySelectorAll('.prog[aria-pressed="true"]').forEach(b => b.setAttribute('aria-pressed', 'false'));
@@ -290,6 +339,7 @@
     const groups = item => item.chords.reduce((list, c, i) => { const last = list[list.length - 1]; if (last && last.name === c.name) last.to = i; else list.push({ name: c.name, from: i, to: i }); return list; }, []);
     const step = item => i => {
       backing.at = i;
+      if (i !== null && backing.id === item.id) showPlayBar(item.name, item.chords[i] && item.chords[i].name);
       const row = document.querySelector(`.prog[data-id="${item.id}"]`);
       if (row) row.querySelectorAll('.prog-chords span').forEach(x => x.classList.toggle('is-now', i !== null && i >= Number(x.dataset.from) && i <= Number(x.dataset.to)));
       if (onStep) onStep(item, i);
@@ -300,6 +350,7 @@
       A.setDrums(!!lib.drums);
       if (!A.startLoop(loopMidis(item.chords), tempo(), 4, i => backing.onStep && backing.onStep(i))) return;
       Object.assign(backing, { id: item.id, scope, onStep: step(item) });
+      showPlayBar(item.name, item.chords[0] && item.chords[0].name);
       const row = document.querySelector(`.prog[data-id="${item.id}"]`);
       if (row) row.setAttribute('aria-pressed', 'true');
     };
@@ -352,16 +403,72 @@
   }
 
   // A run of notes as tab: up across the strings and back down, high e on top.
-  function tabOf(notes) {
+  // Tab of notes in the order you play them, in blocks of perLine notes so that a block fits a phone.
+  // Without a run, the notes go up and down.
+  function tabOf(notes, run, perLine = 0) {
     const names = openStrings().map(m => T.PC_PLAIN[T.mod(m - capo())]);
-    const up = notes.slice().sort((a, b) => a.string - b.string || a.fret - b.fret);
-    const run = up.concat(up.slice(0, -1).reverse());
-    const lines = [5, 4, 3, 2, 1, 0].map(s => ({ s, text: (s === 5 && names[s] === 'E' ? 'e' : names[s]).padEnd(2) + '|-' }));
-    for (const n of run) {
-      const fret = String(n.fret + capo());
-      for (const l of lines) l.text += (l.s === n.string ? fret : '-'.repeat(fret.length)) + '-';
-    }
-    return lines.map(l => l.text + '|').join('\n');
+    if (!run) { const up = notes.slice().sort((a, b) => a.string - b.string || a.fret - b.fret); run = up.concat(up.slice(0, -1).reverse()); }
+    const blocks = [];
+    for (let i = 0; i < run.length; i += perLine || run.length) blocks.push(run.slice(i, i + (perLine || run.length)));
+    return blocks.map(block => {
+      const lines = [5, 4, 3, 2, 1, 0].map(s => ({ s, text: (s === 5 && names[s] === 'E' ? 'e' : names[s]).padEnd(2) + '|-' }));
+      for (const n of block) {
+        const fret = String(n.fret + capo());
+        for (const l of lines) l.text += (l.s === n.string ? fret : '-'.repeat(fret.length)) + '-';
+      }
+      return lines.map(l => l.text + '|').join('\n');
+    }).join('\n\n');
+  }
+  // Practise a position: up and down, or a sequence, as tab and as sound at your tempo, one note on each eighth.
+  // The page keeps the best tempo you played it clean at, for each scale, root, position and sequence.
+  function sequenceSection(state, pos) {
+    const kind = T.SEQUENCES.some(x => x.id === lib.seqKind) ? lib.seqKind : 'updown';
+    const groups = T.sequence(pos.notes, kind), run = groups.flat();
+    // The first note of each group sounds a little louder.
+    const startAt = new Set();
+    groups.reduce((at, g) => { startAt.add(at); return at + g.length; }, 0);
+    const id = `${state.scale.id}:${state.root}:${lib.scaleShapes || 'boxes'}:${pos.index}:${kind}`;
+    const best = (lib.seqBest || {})[id];
+    const light = n => {
+      document.querySelectorAll('#main .neck .is-playing').forEach(g => g.classList.remove('is-playing'));
+      const g = n && document.querySelector(`#main .neck .fb-pos[data-string="${n.string}"][data-fret="${n.fret}"]`);
+      if (g) g.classList.add('is-playing');
+    };
+    // Whole bars: the run starts again on beat 1 each time.
+    const steps = Math.ceil(run.length / 8) * 8;
+    const play = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
+      if (A.rhythmRunning) { A.stopRhythm(); play.textContent = '▶ Play'; light(null); return; }
+      A.silence(); stopBacking();
+      const started = A.startRhythm({ beats: 4, get barSeconds() { return 4 * 60 / tempo(); }, bars: 0, countIn: settings.countIn === false ? 0 : 4, clicks: true,
+        events: bar => {
+          const half = 30 / tempo(), out = [];
+          for (let j = 0; j < 8; j++) {
+            const k = (bar * 8 + j) % steps, n = run[k];
+            if (n) out.push({ t: j * half, sound: 'bass', midis: [n.midi], dur: half * 0.95, accent: startAt.has(k), step: k });
+          }
+          return out;
+        },
+        onStep: k => light(run[k]) });
+      if (started !== null) play.textContent = '■ Stop';
+    } }, '▶ Play');
+    const out = h('output', null, `${tempo()} bpm`);
+    const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); out.textContent = `${v} bpm`; };
+    const clean = h('button', { type: 'button', class: 'btn', title: 'Save this tempo as your best clean one', onclick: () => {
+      if (best && best >= tempo()) return;
+      A.stopRhythm();
+      saveLib({ seqBest: Object.assign({}, lib.seqBest, { [id]: tempo() }) });
+      rerender();
+    } }, '✓ Clean');
+    const name = T.SEQUENCES.find(x => x.id === kind).name;
+    return section('Practise the position', 'Scale goes up and down. Thirds skip a note, and Threes and Fours go up in groups (1 2 3, 2 3 4). Play along with the sound, one note on each eighth, then on your own. Start slow. When you play it clean, tap Clean to save the tempo, then go 4 bpm faster.',
+      GT.segmented('Sequence', T.SEQUENCES.map(x => [x.id, x.short]), kind, v => { A.stopRhythm(); saveLib({ seqKind: v }); rerender(); }, 'seq-pick'),
+      h('div', { class: 'row seq-row' },
+        h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo' },
+          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+')),
+        h('div', { class: 'row seq-actions' }, play, clean)),
+      h('p', { class: 'small muted' }, best ? `Your best clean tempo for ${name.toLowerCase()} here: ${best} bpm.` : `No clean tempo saved yet for ${name.toLowerCase()} here.`),
+      h('pre', { class: 'tab', 'aria-label': `Position ${pos.index}, ${name.toLowerCase()}, as tab` }, tabOf(pos.notes, run, 12)));
   }
   // ---------- scales ----------
   const scalesView = {
@@ -438,7 +545,11 @@
           labelsCtl(rerender),
           ctl('Scale', typePick('Scale', SCALE_QUICK, groups, scale.id, v => GT.go(scalesView.link(Object.assign({}, state, { scale: T.scaleById(v), pos: null })), true)), 'ctl-wide ctl-plain'),
           shapesCtl,
-          positions.length ? ctl('Position', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true)), 'ctl-plain') : null,
+          positions.length ? ctl(lib.scaleShapes === 'nps' && twoKinds ? 'Position' : 'Box', GT.segmented('Position', posOptions, pos ? pos.index : 0, v => {
+            GT.go(scalesView.link(Object.assign({}, state, { pos: v || null })), true);
+            const next = positions.find(p => p.index === v);
+            if (next) showFrets(next.low, next.high);
+          }), 'ctl-plain ctl-named') : null,
           ctl('Compare', h('select', { class: 'more' + (cmp ? ' is-on' : ''), 'aria-label': 'Compare with another scale', onchange: e => { saveLib({ compare: e.target.value || null }); rerender(); } },
             h('option', { value: '', selected: !cmp }, 'Compare with another scale'),
             T.SCALE_GROUPS.map(g => h('optgroup', { label: g.name }, g.items.filter(i => i.id !== scale.id).map(i => h('option', { value: i.id, selected: !!cmp && cmp.id === i.id }, `Compare with ${r} ${lowerName(i.name)}`))))), 'ctl-wide ctl-plain'),
@@ -450,7 +561,7 @@
           pos && twoKinds && lib.scaleShapes !== 'nps' ? 'A box is a pentatonic box with the other notes of the scale added. A note one fret outside it takes a stretch. ' : '', 'Tap a tone to light it on the neck.',
           caged ? ` The faint outlines are the CAGED shapes of ${tonicName}, the chord on the root.` : null,
           cmp ? ` Compared with ${r} ${lowerName(cmp.name)}: ${onlyThere.length ? `the dashed notes (${onlyThere.map(t => t.name).join(' ')}) are only in ${r} ${lowerName(cmp.name)}` : `it has no other notes`}${onlyHere.length ? `, and the ringed notes (${onlyHere.map(t => t.name).join(' ')}) are only in ${r} ${lowerName(scale.name)}` : ''}.` : null),
-        pos ? section('As tab', `Position ${pos.index} up and down, from the lowest note. The numbers are frets.`, h('pre', { class: 'tab', 'aria-label': `Position ${pos.index} as tab` }, tabOf(pos.notes))) : null,
+        pos ? sequenceSection(state, pos) : null,
         practice('scales'),
         playAlong(r, scale, follow),
         pianoBox('scales', tones.concat(Object.assign({}, tones[0], { semi: 12 })), r, 'On a keyboard, a half step (H) is the very next key and a whole step (W) skips one. On the guitar that is 1 fret and 2 frets.')
@@ -630,7 +741,7 @@
         // A card shows its shape on the neck and plays it, as the inversion cards on the Triads page do.
         const href = '#/' + chordsView.link(Object.assign({}, state, { shape: s.id }));
         return h('a', { class: 'card', href, style: 'text-decoration:none;color:inherit', 'aria-current': String(!!shape && shape.id === s.id),
-          onclick: e => { e.preventDefault(); GT.go(href, true); A.notes(shapeMidis(s.frets), 'strum'); } },
+          onclick: e => { e.preventDefault(); GT.go(href, true); A.notes(shapeMidis(s.frets), 'strum'); requestAnimationFrame(() => bringIntoView(document.querySelector('#main .neck'))); } },
           h('h3', null, title), h('p', null, sub || (s.low === 0 ? (capo() ? `At the capo, fret ${capo()}` : 'Open position') : `Frets ${s.low + capo()}–${s.high + capo()}`)),
           miniNeck(m, s.low, s.high, `${title} of ${chordsView.title(state)}`, mutedStrings, { links: [{ points: placesOf(s), cls: 'is-shape' }] }));
       };
@@ -770,7 +881,10 @@
       const addRoot = h('select', { 'aria-label': 'Root of the chord to add' }, T.ROOTS.map(rt => h('option', { value: rt, selected: rt === (lastChord ? lastChord.root : 'C') }, rt)));
       const addType = h('select', { 'aria-label': 'Type of the chord to add' }, T.CHORD_GROUPS.map(g => h('optgroup', { label: g.name }, g.items.map(i => h('option', { value: i.id, selected: i.id === 'major' }, `${i.name}${i.symbol ? ` (${i.symbol})` : ''}`)))));
       const add = h('button', { type: 'button', class: 'btn btn-primary', disabled: chords.length >= 8, onclick: () => go(chords.concat({ root: addRoot.value, chord: T.chordById(addType.value) })) }, 'Add');
-      const list = h('div', { class: 'chips fit-chords', role: 'list', 'aria-label': 'Your chords' }, chords.map((c, i) => h('span', { class: 'chip fit-chord', role: 'listitem' }, name(c),
+      // The likely key gives each chord its numeral.
+      const keys = T.keyOf(chords), key = keys[0];
+      // Even rows: up to four chords in one row, more in two.
+      const list = h('div', { class: 'chips fit-chords', role: 'list', 'aria-label': 'Your chords', style: `--cols:${chords.length <= 4 ? chords.length : Math.ceil(chords.length / 2)}` }, chords.map((c, i) => h('span', { class: 'chip fit-chord', role: 'listitem' }, h('span', { class: 'fit-chord-name' }, key ? h('small', null, key.numerals[i]) : null, h('span', null, name(c))),
         h('button', { type: 'button', class: 'fit-remove', 'aria-label': `Remove ${name(c)}`, onclick: () => go(chords.filter((_, k) => k !== i)) }, '×'))));
       const examples = [
         ['ii–V–I in C', [['D', 'm7'], ['G', '7'], ['C', 'maj7']]],
@@ -808,7 +922,17 @@
       const follow = (item, i) => { now = i === null ? null : new Set(item.chords[i].pcs); drawNeck(); };
       const loop = backingList(`fit:${chords.map(name).join(' ')}`, [{ id: 'fit:' + chords.map(name).join(' '), name: 'Your chords', chords: chords.map(c => ({ name: name(c), pcs: pcsOfChord(c) })) }], follow);
       const row = (href, title, text, tag) => h('a', { class: 'found', href: '#/' + href }, h('span', { class: 'found-text' }, h('b', null, title), text ? h('small', null, text) : null), tag ? h('span', { class: 'found-tag' }, tag) : null);
-      out.push(list,
+      // The key, the runner-up when it is close (Am F C G is also C major), and the other chords of the key.
+      const keyName = k => k.mode === 'blues' ? `${k.key} blues` : `${k.key} ${k.mode}`;
+      const other = keys[1] && key.mode !== 'blues' && key.score - keys[1].score <= 2.5 ? keys[1] : null;
+      const keyBox = h('div', { class: 'fit-key' },
+        h('p', null, 'Key: ', h('b', null, keyName(key)), other ? ` (or ${keyName(other)})` : null, '. ',
+          key.mode === 'blues' ? 'Dominant chords on I, IV and V are the chords of a blues.'
+            : h('a', { href: '#/' + keysView.link({ key: key.key, mode: key.mode }) }, 'See it on the circle of fifths')),
+        key.fits.length ? h('p', { class: 'small muted' }, `Other chords of ${keyName(key)}. Tap one to add it.`) : null,
+        key.fits.length ? h('div', { class: 'chips fit-more' }, key.fits.map(f => h('button', { type: 'button', class: 'chip', disabled: chords.length >= 8,
+          onclick: () => go(chords.concat({ root: rootForLink(f.root), chord: f.chord })) }, h('small', null, f.roman), f.name))) : null);
+      out.push(list, keyBox,
         neckSlot, cap,
         h('p', { class: 'small muted lib-note' }, `The neck shows ${best.root} ${lowerName(best.scale.name)}. The bright notes are in your chords; the faint ones are the rest of the scale.`,
           fits.length ? null : ' No scale holds every note of these chords, so it is the scale that misses the fewest.'),
@@ -832,6 +956,8 @@
   // The pitch comes from the autocorrelation of 4096 samples, about ten times a second. The tuner ignores the capo.
   // tuner is set from the tap on Start until Stop, also while the microphone starts.
   let tuner = null;
+  // The microphone stops when the page is hidden: another tab, another app, or a locked phone.
+  document.addEventListener('visibilitychange', () => { if (document.hidden && tuner && tuner.onHide) tuner.onHide(); });
   function stopTuner() {
     if (!tuner) return;
     tuner = null;
@@ -849,7 +975,7 @@
   GT.micError = micError;
   const tuneView = {
     parse: () => ({}),
-    link: () => 'library/tune',
+    link: () => 'tools/tune',
     title: () => TUNE.title,
     render() {
       const strings = GT.tuning();
@@ -873,19 +999,24 @@
       const needle = el('line', { x1: 0, y1: 0, x2: 0, y2: -84, class: 'tuner-needle' });
       el('circle', { r: 6, class: 'tuner-hub' });
       const note = h('b', { class: 'tuner-name' }, '–');
-      const detail = h('p', { class: 'tuner-detail', 'aria-live': 'polite' }, 'Tap Start, then play one string.');
+      const detail = h('p', { class: 'tuner-detail' }, 'Tap Start, then play one string.');
+      // A screen reader hears a message, a new string or a change in tune, not every reading.
+      const live = h('p', { class: 'visually-hidden', 'aria-live': 'polite' });
       const level = h('i'), meter = h('div', { class: 'tuner-level', title: 'What the microphone hears' }, level);
       // The strings of your tuning. The string you play lights up, and a tuned string gets a check mark.
       // A tap plays the note of a string, to tune by ear.
       const chips = h('div', { class: 'tuner-strings', role: 'group', 'aria-label': 'Strings of your tuning. Tap one to hear it.' },
         strings.map((m, s) => h('button', { type: 'button', class: 'tuner-string', dataset: { s }, 'aria-label': `${ordinal(s)} string, ${name(m)}. Play it.`, onclick: () => A.note(m, 0, 2.5) },
           h('small', null, String(6 - s)), h('b', null, T.PC_PLAIN[T.mod(m)]), h('span', { class: 'tuner-check', 'aria-hidden': 'true' }, '✓'))));
-      const box = h('div', { class: 'tuner' }, gauge, note, detail, meter, chips);
-      const say = text => { detail.textContent = text; };
+      const box = h('div', { class: 'tuner' }, gauge, note, detail, live, meter, chips);
+      let spoken = '';
+      const tell = (key, text) => { if (key !== spoken) { spoken = key; live.textContent = text; } };
+      const say = (text, key = text) => { detail.textContent = text; tell(key, text); };
       const reset = () => { note.textContent = '–'; needle.setAttribute('transform', 'rotate(0)'); box.classList.remove('is-on', 'is-in', 'is-near'); level.style.width = '0%'; chips.querySelectorAll('.tuner-string').forEach(b => b.classList.remove('is-heard')); };
       const start = h('button', { type: 'button', class: 'btn btn-primary tuner-start', onclick: async () => {
         if (tuner) { stopTuner(); start.textContent = 'Start the tuner'; start.classList.add('btn-primary'); reset(); say('The tuner is off.'); return; }
         const me = tuner = {};
+        me.onHide = () => { start.click(); say('The tuner stopped when you left the page. Tap Start to go on.'); };
         start.textContent = 'Stop';
         start.classList.remove('btn-primary');
         say('Waiting for the microphone…');
@@ -923,7 +1054,8 @@
           if (inTune === 8) { chips.querySelector(`[data-s="${s}"]`).classList.add('is-tuned'); }
           chips.querySelectorAll('.tuner-string').forEach(b => b.classList.toggle('is-heard', near && Number(b.dataset.s) === s));
           say(near ? `${ordinal(s)} string: ${good ? 'in tune' : `${off < 0 ? 'tune up' : 'tune down'}, ${Math.abs(off)} cents ${off < 0 ? 'low' : 'high'}`}.`
-            : `${name(midi)}, ${Math.abs(cents) <= 5 ? 'in tune' : `${Math.abs(cents)} cents ${cents < 0 ? 'low' : 'high'}`}. No string of your tuning is near.`);
+            : `${name(midi)}, ${Math.abs(cents) <= 5 ? 'in tune' : `${Math.abs(cents)} cents ${cents < 0 ? 'low' : 'high'}`}. No string of your tuning is near.`,
+            near ? `${s}:${good ? 'in' : off < 0 ? 'low' : 'high'}` : `${midi}:${Math.abs(cents) <= 5}`);
         };
         try {
           if (!await A.listen(frame) || tuner !== me) return;
@@ -1502,7 +1634,7 @@
   // Open chords sound as they are played: the frets of the shape on the strings of standard tuning.
   const openMidis = o => o.frets.map((f, s) => f === null ? null : T.STANDARD[s] + f).filter(m => m !== null);
   const LESSON_SHORT = { beats: 'Beats', eighths: 'Eighths', rests: 'Rests', dots: 'Dots, ties', sixteenths: 'Sixteenths', triplets: 'Triplets', signatures: 'Meters', swing: 'Swing' };
-  const STRUM_QUICK = [['quarters', 'Quarters'], ['eighths', 'Eighths'], ['d-du-udu', 'D – DU – UDU'], ['custom', 'Your pattern']];
+  const STRUM_QUICK = [['quarters', 'Quarters'], ['eighths', 'Eighths'], ['d-du-udu', 'D – DU – UDU'], ['custom', 'Your patterns']];
   const STRUM_GROUPS = [
     { name: 'Eighths in 4/4', items: R.PATTERNS.filter(p => p.sub === 2 && p.sig[0] === 4).map(p => [p.id, p.name]) },
     { name: 'Sixteenths', items: R.PATTERNS.filter(p => p.sub === 4).map(p => [p.id, p.name]) },
@@ -1514,9 +1646,23 @@
   const strum = { on: false, resume: false, now: null, tool: 'strum' };
   // Swing: a ready pattern takes the Swing switch of the page, your pattern keeps its own.
   const swingOf = p => (p.id === 'custom' ? p.swing : p.swing || lib.strumSwing) && p.sub === 2 && !R.compound(p.sig) ? 2 / 3 : 0.5;
-  // Your pattern, kept in the browser: a grid, its slots and its swing.
-  const customOf = () => { const c = lib.strumCustom || {}; return R.customPattern(c.grid, c.slots || 'x.xx.xxx', c.swing); };
-  const saveCustom = patch => saveLib({ strumCustom: Object.assign({}, lib.strumCustom, patch) });
+  // Your patterns, kept in the browser: each has an id, a name, a grid, its slots and its swing.
+  // The one pattern of earlier versions becomes Pattern 1.
+  if (!lib.strumMine) saveLib({ strumMine: lib.strumCustom ? [Object.assign({ id: 'p1', name: 'Pattern 1' }, lib.strumCustom)] : [] });
+  const mineList = () => lib.strumMine;
+  const mineById = id => mineList().find(m => m.id === id);
+  const asPattern = m => Object.assign(R.customPattern(m.grid, m.slots, m.swing), { mine: m.id, name: m.name });
+  // A new pattern takes the next free number.
+  function newMine(fields) {
+    let n = 1;
+    while (mineList().some(m => m.id === `p${n}` || m.name === `Pattern ${n}`)) n++;
+    const m = Object.assign({ id: `p${n}`, name: `Pattern ${n}`, grid: '4-8', slots: 'x.xx.xxx', swing: false }, fields);
+    saveLib({ strumMine: mineList().concat(m), strumMineAt: m.id });
+    return m;
+  }
+  // strum/custom opens the pattern you used last; with none, a new one.
+  const customOf = id => asPattern(mineById(id) || mineById(lib.strumMineAt) || mineList()[mineList().length - 1] || newMine({}));
+  const saveMine = (id, patch) => saveLib({ strumMine: mineList().map(m => m.id === id ? Object.assign({}, m, patch) : m) });
   // The loop reads the tempo, the chords, the click and the pattern each bar, so a change is heard from the next bar on.
   function strumLoop(countIn) {
     const first = strum.now;
@@ -1570,9 +1716,10 @@
   const rhythmView = {
     parse(p) {
       if (p[0] === 'count') return { part: 'count', lesson: R.LESSONS.find(l => l.id === p[1]) || R.LESSONS[0] };
-      return { part: 'strum', pattern: p[1] === 'custom' ? customOf() : R.patternById(p[1]) || R.PATTERNS[2] };
+      if (p[1] === 'custom' || /^mine-/.test(p[1] || '')) return { part: 'strum', pattern: customOf((p[1] || '').slice(5)) };
+      return { part: 'strum', pattern: R.patternById(p[1]) || R.PATTERNS[2] };
     },
-    link: s => s.part === 'count' ? `library/rhythm/count/${s.lesson.id}` : `library/rhythm/strum/${s.pattern.id}`,
+    link: s => s.part === 'count' ? `library/rhythm/count/${s.lesson.id}` : `library/rhythm/strum/${s.pattern.mine ? 'mine-' + s.pattern.mine : s.pattern.id}`,
     title: s => s.part === 'count' ? s.lesson.name : s.pattern.name,
     render(state) {
       const partCtl = ctl('Show', GT.segmented('Rhythm page', [['strum', 'Strumming'], ['count', 'Counting']], state.part, v => GT.go(rhythmView.link(rhythmView.parse([v])), true)), 'ctl-plain');
@@ -1603,7 +1750,9 @@
           practice('rhythm')
         ];
       }
-      const p = state.pattern.id === 'custom' ? customOf() : state.pattern;
+      // Read your pattern again: an edit saves it and draws the page again.
+      const p = state.pattern.mine ? customOf(state.pattern.mine) : state.pattern;
+      if (p.mine) saveLib({ strumMineAt: p.mine });
       strum.now = p;
       if (strum.resume) { strum.resume = false; if (A.startRhythm(strumLoop(false)) !== null) strum.on = true; }
       const playing = () => strum.on && A.rhythmRunning;
@@ -1613,22 +1762,35 @@
         toggle.textContent = playing() ? '■ Stop' : '▶ Play';
         if (!playing()) { grid.light(-1); notes.light(-1); }
       } }, playing() ? '■ Stop' : '▶ Play');
-      const pick = id => { strum.resume = playing(); GT.go(rhythmView.link({ part: 'strum', pattern: id === 'custom' ? customOf() : R.patternById(id) }), true); };
-      // A tap on a cell puts the picked stroke there. An edit of a ready pattern makes it your pattern.
+      const open = pattern => { strum.resume = playing(); GT.go(rhythmView.link({ part: 'strum', pattern }), true); };
+      const pick = id => open(id === 'custom' ? customOf() : R.patternById(id));
+      // A tap on a cell puts the picked stroke there. An edit of a ready pattern makes a new pattern of yours.
       const edit = i => {
         const slots = [...p.slots];
         slots[i] = R.paint(slots[i], strum.tool);
-        if (p.id === 'custom') { saveCustom({ grid: p.grid, slots: slots.join('') }); rerender(); return; }
-        saveLib({ strumCustom: { grid: R.gridOf(p).id, slots: slots.join(''), swing: swingOf(p) !== 0.5 } });
-        pick('custom');
+        if (p.mine) { saveMine(p.mine, { slots: slots.join('') }); rerender(); return; }
+        open(asPattern(newMine({ grid: R.gridOf(p).id, slots: slots.join(''), swing: swingOf(p) !== 0.5 })));
       };
       // Another grid for your pattern: each stroke keeps its place in the bar where the new grid has a slot there.
       const regrid = id => {
         const g = R.GRIDS.find(x => x.id === id), from = R.strokes(p), step = R.beatTicks(g.sig) / g.sub;
         const slots = Array.from({ length: R.beatsIn(g.sig) * g.sub }, (_, k) => { const s = from.find(x => x.tick === k * step); return s ? p.slots[from.indexOf(s)] : '.'; });
-        saveCustom({ grid: id, slots: slots.join('') });
-        pick('custom');
+        saveMine(p.mine, { grid: id, slots: slots.join('') });
+        open(customOf(p.mine));
       };
+      // Your patterns: pick one or start a new one, rename it, or delete it.
+      const mineCtl = p.mine ? ctl('Yours', h('div', { class: 'row strum-mine' },
+        h('select', { class: 'more is-on strum-select', 'aria-label': 'Your patterns', onchange: e => open(e.target.value === 'new' ? asPattern(newMine({ grid: p.grid })) : customOf(e.target.value)) },
+          mineList().map(m => h('option', { value: m.id, selected: m.id === p.mine }, m.name)), h('option', { value: 'new' }, 'New pattern')),
+        h('button', { type: 'button', class: 'btn', onclick: () => {
+          const name = (root.prompt('Name of the pattern', p.name) || '').trim();
+          if (name) { saveMine(p.mine, { name: name.slice(0, 40) }); rerender(); }
+        } }, 'Rename'),
+        h('button', { type: 'button', class: 'btn', onclick: () => {
+          if (!root.confirm(`Delete ${p.name}?`)) return;
+          saveLib({ strumMine: mineList().filter(m => m.id !== p.mine), strumMineAt: null });
+          open(mineList().length ? customOf() : R.patternById('d-du-udu'));
+        } }, 'Delete')), 'ctl-plain') : null;
       const STROKE_TOOLS = [['strum', '↓↑', 'Strum'], ['accent', '>', 'Accent'], ['chuck', '×', 'Chuck'], ['bass', 'B', 'Bass'], ['miss', '–', 'Miss']];
       const toolRow = h('div', { class: 'stroke-tools', role: 'group', 'aria-label': 'Stroke for a tap on the grid' }, STROKE_TOOLS.map(([id, sym, name]) =>
         h('button', { type: 'button', class: `stroke-tool is-${id}`, 'aria-pressed': String(strum.tool === id), onclick: e => {
@@ -1646,8 +1808,8 @@
       const progSelect = h('select', { class: 'more', 'aria-label': 'Common progressions', onchange: e => e.target.value && setChords(e.target.value.split(' ')) },
         h('option', { value: '', selected: true }, 'Progressions'),
         STRUM_PROGRESSIONS.map(x => h('option', { value: x.join(' ') }, x.join(' – '))));
-      const canSwing = p.sub === 2 && !R.compound(p.sig) && (p.id === 'custom' || !p.swing);
-      const swingOn = p.id === 'custom' ? p.swing : !!lib.strumSwing;
+      const canSwing = p.sub === 2 && !R.compound(p.sig) && (p.mine || !p.swing);
+      const swingOn = p.mine ? p.swing : !!lib.strumSwing;
       const grid = R.grid(p, h, edit);
       // The same bar in notes. A ghost stroke keeps the last note lit: it still rings.
       const asBar = R.patternBar(p);
@@ -1657,20 +1819,24 @@
         head(p.name, `Strumming in ${p.sig.join('/')}, ${p.sub === 4 ? 'sixteenths' : p.sub === 3 && R.compound(p.sig) ? 'eighths in two groups of three' : p.sub === 3 ? 'triplets' : 'eighths'}`, toggle),
         controls(partCtl,
           ctl('Pattern', typePick('Pattern', STRUM_QUICK, STRUM_GROUPS, p.id, pick), 'ctl-wide ctl-plain'),
-          p.id === 'custom' ? ctl('Grid', h('div', { class: 'row strum-chords-pick' },
+          mineCtl,
+          p.mine ? ctl('Grid', h('div', { class: 'row strum-chords-pick' },
             h('select', { class: 'more is-on strum-select', 'aria-label': 'Grid of your pattern', onchange: e => regrid(e.target.value) }, R.GRIDS.map(g => h('option', { value: g.id, selected: g.id === p.grid }, g.name))),
-            h('button', { type: 'button', class: 'btn', disabled: !/[^.]/.test(p.slots), onclick: () => { saveCustom({ grid: p.grid, slots: '.'.repeat(p.slots.length) }); rerender(); } }, 'Clear')), 'ctl-plain') : null,
+            h('button', { type: 'button', class: 'btn', disabled: !/[^.]/.test(p.slots), onclick: () => { saveMine(p.mine, { slots: '.'.repeat(p.slots.length) }); rerender(); } }, 'Clear')), 'ctl-plain') : null),
+        // How to change the pattern, above the grid that you change.
+        h('p', { class: 'small muted lib-note strum-howto' }, p.mine ? 'Pick a stroke, then tap a cell to put it there. Tap it again to take it out.'
+          : 'To change this pattern, pick a stroke and tap a cell. The change becomes a new pattern of yours, and this one stays as it is.'),
+        h('div', { class: 'strum-stage' }, toolRow, grid, h('div', { class: 'strum-notes' }, notes),
+          h('div', { class: 'strum-chords' }, list.map(name => h('b', { class: 'strum-chord' }, name)))),
+        // The loop: chords, tempo and sound, under the grid.
+        section('Play along', null, controls(
           ctl('Chords', h('div', { class: 'strum-chords-edit' },
             h('div', { class: 'strum-chord-grid' }, [0, 1, 2, 3].map(chordSelect)),
             h('div', { class: 'strum-prog' }, progSelect, GT.segmented('Bars for each chord', [[1, '1 bar'], [2, '2 bars']], strumBars(), v => { saveLib({ strumBars: v }); rerender(); }))), 'ctl-wide ctl-plain'),
           ctl('Tempo', tempoRow([
-            canSwing ? h('button', { type: 'button', class: 'chip', 'aria-pressed': String(swingOn), title: 'Play the eighths long-short', onclick: () => { if (p.id === 'custom') saveCustom({ swing: !swingOn }); else saveLib({ strumSwing: !swingOn }); rerender(); } }, 'Swing') : null,
-            h('button', { type: 'button', class: 'chip', 'aria-pressed': String(lib.strumClick !== false), title: 'A click on each beat', onclick: () => { saveLib({ strumClick: lib.strumClick === false }); rerender(); } }, 'Click')]), 'ctl-plain'),
-          ctl('Sound', GT.segmented('Sound of the loop', [['guitar', 'Guitar'], ['both', 'Guitar + drums'], ['drums', 'Drums only']], strumSound(), v => { saveLib({ strumSound: v }); rerender(); }), 'ctl-plain')),
-        h('div', { class: 'strum-stage' }, toolRow, grid, h('div', { class: 'strum-notes' }, notes),
-          h('div', { class: 'strum-chords' }, list.map(name => h('b', { class: 'strum-chord' }, name)))),
-        h('p', { class: 'small muted lib-note' }, p.id === 'custom' ? 'Pick a stroke, then tap a cell to put it there. Tap it again to take it out.'
-          : 'To change the pattern, pick a stroke and tap a cell. The change makes it Your pattern, in place of the one you made before. This one stays as it is.'),
+            canSwing ? h('button', { type: 'button', class: 'chip chip-toggle', 'aria-pressed': String(swingOn), title: 'Play the eighths long-short', onclick: () => { if (p.mine) saveMine(p.mine, { swing: !swingOn }); else saveLib({ strumSwing: !swingOn }); rerender(); } }, 'Swing') : null,
+            h('button', { type: 'button', class: 'chip chip-toggle', 'aria-pressed': String(lib.strumClick !== false), title: 'A click on each beat', onclick: () => { saveLib({ strumClick: lib.strumClick === false }); rerender(); } }, 'Click')]), 'ctl-plain'),
+          ctl('Sound', GT.segmented('Sound of the loop', [['guitar', 'Guitar'], ['both', 'Guitar + drums'], ['drums', 'Drums only']], strumSound(), v => { saveLib({ strumSound: v }); rerender(); }), 'ctl-plain'))),
         h('p', { class: 'lib-note' }, p.line),
         h('p', { class: 'small muted lib-note' }, `Keep the hand moving down and up in ${p.sub === 4 ? 'sixteenths' : p.sub === 3 && !R.compound(p.sig) ? 'triplets' : 'eighths'} the whole time. A faint arrow is a ghost stroke: the hand moves but misses the strings. × is a muted strum, B the bass note, > an accent.${settings.countIn === false ? '' : ' One bar of clicks counts you in.'}`),
         section('The chords', `${strumBars() === 2 ? 'Two bars' : 'One bar'} each, then again from the first.`, h('div', { class: 'strum-shapes', style: `--n:${list.length}` }, list.map(name => {
@@ -1682,7 +1848,9 @@
     }
   };
 
-  const VIEWS = { rhythm: rhythmView, notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView, name: nameView, fit: fitView, tune: tuneView };
+  const VIEWS = { rhythm: rhythmView, notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView, name: nameView, fit: fitView };
+  // The Tuner and Slow down live in Tools now. Old links to them go there.
+  GT.tuner = { view: tuneView, stop: () => stopTuner() };
   let rerender = () => {};
 
   // ---------- start page ----------
@@ -1699,7 +1867,8 @@
     TOPICS.forEach((t, i) => add(t.title, 'Topic', 'library/' + t.id, 'topic:' + t.id, t.find, i - 30));
     add(LOOKUP.title, 'Tool', 'library/name', 'topic:name', LOOKUP.find, -24);
     add(FIT.title, 'Tool', 'library/fit', 'topic:fit', FIT.find, -23);
-    add(TUNE.title, 'Tool', 'library/tune', 'topic:tune', TUNE.find, -22);
+    add(TUNE.title, 'Tool', 'tools/tune', 'topic:tune', TUNE.find, -22);
+    add(PLAYER.title, 'Tool', 'tools/play', 'topic:play', PLAYER.find, -21);
     for (const r of T.ROOTS) {
       // "am" means A minor: the chord, the key and the scale.
       const short = plain(r) + 'm';
@@ -1721,7 +1890,21 @@
     for (const i of T.INTERVALS) add(i.name, 'Interval', intervalsView.link({ interval: i, root: 'C' }), 'interval:' + i.id, `${i.short} interval ${i.name.replace(/\d(st|nd|rd|th)/, n => WORDS[n] || n)}`);
     return index;
   }
+  // The ways guitarists write chords and scales, in the form of the index: "C maj7" and "CM7" are Cmaj7, "C min7" is Cm7,
+  // and "Am pentatonic" is the A minor pentatonic scale. Case counts here: M is major, m is minor.
+  function guitaristWords(query) {
+    const ROOT = '([A-Ga-g])\\s*(#|b|♯|♭)?';
+    // "Am blues" is the A blues scale, which is a minor scale already.
+    return query
+      .replace(new RegExp(`^\\s*${ROOT}\\s*m\\s+(?=blues)`), (_, r, a) => `${r}${a || ''} `)
+      .replace(new RegExp(`^\\s*${ROOT}\\s*m\\s+(?=pent|harm|melod|natural|scale|key)`), (_, r, a) => `${r}${a || ''} minor `)
+      .replace(new RegExp(`^\\s*${ROOT}\\s*min(?=\\d)`, 'i'), (_, r, a) => `${r}${a || ''}m`)
+      .replace(new RegExp(`^\\s*${ROOT}\\s+(?=(maj\\d|m\\d|m\\(|m7♭5|dim|aug|sus\\d|add\\d|\\d)\\S*\\s*$)`, 'i'), (_, r, a) => `${r}${a || ''}`)
+      .replace(new RegExp(`^\\s*${ROOT}M(?=\\d|\\s|$)`), (_, r, a) => `${r}${a || ''}maj`)
+      .replace(/^\s*([A-Ga-g](?:#|b|♯|♭)?)maj$/, '$1 major');
+  }
   function find(query) {
+    query = guitaristWords(query);
     // A slash chord such as "C/E" or "Am7/G" opens the chord with that note in the bass.
     const slash = /^\s*([a-g])\s*(#|b|♯|♭|sharp|flat)?\s*([^/]*?)\s*\/\s*([a-g])\s*(#|b|♯|♭|sharp|flat)?\s*$/i.exec(query);
     if (slash) {
@@ -1783,6 +1966,17 @@
       box.append(svg);
       return box;
     }
+    // Slow down: a waveform with a loop marked on it.
+    if (id === 'play') {
+      const el = FB.el, svg = el('svg', { viewBox: '0 0 120 64', class: 'thumb-wave' });
+      el('rect', { x: 44, y: 8, width: 34, height: 48, rx: 4, class: 'is-loop' }, svg);
+      [6, 14, 22, 18, 30, 12, 26, 34, 20, 28, 38, 24, 16, 30, 22, 12, 26, 18, 10, 20, 14, 8].forEach((v, i) => {
+        const x = 6 + i * 5;
+        el('line', { x1: x, x2: x, y1: 32 - v / 1.4, y2: 32 + v / 1.4, class: x > 44 && x < 78 ? 'is-in' : 'is-out' }, svg);
+      });
+      box.append(svg);
+      return box;
+    }
     // Rhythm: the strokes of D – D U – U D U, down strokes bright, ghost strokes faint.
     if (id === 'rhythm') {
       const el = FB.el, svg = el('svg', { viewBox: '0 0 120 64', class: 'thumb-strum' });
@@ -1838,14 +2032,12 @@
         h('div', { class: 'topic-text' }, h('h2', null, LOOKUP.title), h('p', null, LOOKUP.line))),
       h('a', { class: 'topic topic-tool', href: '#/' + (last.fit ? last.fit.href : 'library/fit') },
         thumb(FIT.id),
-        h('div', { class: 'topic-text' }, h('h2', null, FIT.title), h('p', null, FIT.line))),
-      h('a', { class: 'topic topic-tool', href: '#/library/tune' },
-        thumb(TUNE.id),
-        h('div', { class: 'topic-text' }, h('h2', null, TUNE.title), h('p', null, TUNE.line)))));
+        h('div', { class: 'topic-text' }, h('h2', null, FIT.title), h('p', null, FIT.line)))));
     document.title = `Library · ${GT.siteName}`;
   }
 
   function render(main, parts) {
+    if (parts[0] === 'tune' || parts[0] === 'play') { history.replaceState(null, '', `#/tools/${parts[0]}`); GT.render(); return; }
     main.replaceChildren();
     // The microphone is on only while the tuner is on the screen.
     stopTuner();
@@ -1888,8 +2080,7 @@
     const tabs = h('div', { class: 'lib-tabs' },
       TOPICS.map(t => h('a', { href: tabLink(t.id), 'aria-current': String(t.id === tab) }, t.name)),
       h('a', { href: '#/library/name', class: 'lib-tool-link', 'aria-current': String(tab === LOOKUP.id) }, LOOKUP.name),
-      h('a', { href: '#/' + (lib.last && lib.last.fit ? lib.last.fit.href : 'library/fit'), class: 'lib-tool-link', 'aria-current': String(tab === FIT.id) }, FIT.name),
-      h('a', { href: '#/library/tune', class: 'lib-tool-link', 'aria-current': String(tab === TUNE.id) }, TUNE.name));
+      h('a', { href: '#/' + (lib.last && lib.last.fit ? lib.last.fit.href : 'library/fit'), class: 'lib-tool-link', 'aria-current': String(tab === FIT.id) }, FIT.name));
     const nav = h('nav', { class: 'lib-nav', 'aria-label': 'Library topics' },
       h('a', { href: '#/library', class: 'lib-home-link', 'aria-label': 'Search the Library', title: 'Search the Library', onclick: toSearch }, GT.drills.icon('search')), tabs);
     const body = h('div', { class: 'lib-main' }, view.render(state));
@@ -1907,6 +2098,9 @@
     lastRender = rerender;
   }
 
-  GT.route('library', { render, leave: stopTuner, resize: () => { if (!tuner && lastRender) lastRender(); } });
+  // The play bar shows on Library pages while a backing plays, and goes with the backing when you leave the Library.
+  GT.route('library', { render: (main, parts) => { render(main, parts); if (backing.id && A.loopRunning && playBar.el) { playBar.el.hidden = false; document.body.classList.add('has-play-bar'); } else hidePlayBar(); },
+    // The player keeps its parts: a resize does not draw it again.
+    leave: () => { stopTuner(); hidePlayBar(); }, resize: () => { if (!tuner && lastRender) lastRender(); } });
   GT.library = { lowerName };
 })(window);

@@ -16,6 +16,16 @@
   </script>
   <meta name="description" content="Guitar theory on the neck: notes, intervals, scales, chords, triads and keys, with ear training and fretboard drills.">
   <title>Guitar Trainer</title>
+  <!-- The preview of a shared link -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Guitar Trainer">
+  <meta property="og:title" content="Guitar Trainer">
+  <meta property="og:description" content="Guitar theory on the neck: notes, intervals, scales, chords, triads and keys, with ear training and fretboard drills.">
+  <meta property="og:url" content="https://guitar.ivnv.dev/">
+  <meta property="og:image" content="https://guitar.ivnv.dev/icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta name="twitter:card" content="summary">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -27,6 +37,7 @@
   <script src="js/fretboard.js" defer></script>
   <script src="js/core.js" defer></script>
   <script src="js/progress.js" defer></script>
+  <script src="js/player.js" defer></script>
   <script src="js/library.js" defer></script>
   <script src="js/train.js" defer></script>
   <script src="js/drills-ear.js" defer></script>
@@ -45,7 +56,7 @@
       <nav aria-label="Main">
         <a data-nav="library" href="#/library"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h4v15H5zM10.5 4.5h4v15h-4zM16 5.2l3.6-.9 3 14.6-3.6.8z"/></svg>Library</a>
         <a data-nav="train" href="#/train"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V9m5 9V5m5 13v-6m5 6V8"/></svg>Train</a>
-        <a data-nav="progress" href="#/progress"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M6 15l4-4 3 3 6-6M15 8h4v4"/></svg>Progress</a>
+        <a data-nav="tools" href="#/tools"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16a8 8 0 0 1 16 0M12 16l4-6M3 20h18"/></svg>Tools</a>
         <a data-nav="settings" href="#/settings"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"/></svg>Settings</a>
       </nav>
       <div class="page-tools" id="page-tools"></div>
