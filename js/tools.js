@@ -47,19 +47,19 @@
       if (taps.length >= 3) { const gaps = taps.slice(1).map((t, i) => t - taps[i]); setBpm(60000 / (gaps.reduce((a, b) => a + b, 0) / gaps.length)); }
     };
     const onKey = e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = document.activeElement || {};
       if (['INPUT', 'SELECT'].includes(el.tagName)) return;
       // Space on a button you reached with the keyboard, or on a link, does that button or link.
       if (e.key === ' ' && el !== toggle && el.matches && el.matches('a, summary, button:focus-visible')) return;
       if (e.key === ' ') { e.preventDefault(); toggle.click(); }
       else if (e.key === 't' || e.key === 'T') tap();
-      else if (e.key === 'ArrowUp' || e.key === '+') setBpm(saved.bpm + 1);
-      else if (e.key === 'ArrowDown' || e.key === '-') setBpm(saved.bpm - 1);
+      else if (e.key === 'ArrowUp' || e.key === '+') { e.preventDefault(); setBpm(saved.bpm + 1); }
+      else if (e.key === 'ArrowDown' || e.key === '-') { e.preventDefault(); setBpm(saved.bpm - 1); }
     };
     document.addEventListener('keydown', onKey);
     drawDots(-1);
     main.append(h('div', { class: 'drill' },
-      h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')),
       h('h1', null, 'Metronome'),
       h('div', { class: 'prompt', style: 'margin-top:18px;display:grid;gap:18px;justify-items:center;text-align:center' },
         h('div', null, bpmOut, h('div', { class: 'muted small' }, 'beats per minute')),
@@ -106,7 +106,8 @@
       Object.keys(saved.best).length ? '' : h('p', { class: 'muted small' }, 'No counts yet. Save your first count above.'));
     const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => {
       // The played part of the minute counts as practice time.
-      if (timer) { clearInterval(timer); timer = null; GT.progress.logTime(Math.min(60000, 64000 - (endAt - performance.now()) - 4000)); startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
+      // Stop, also during the count-in: the clicks stop too.
+      if (timer) { clearInterval(timer); timer = null; A.stopMetronome(); GT.progress.logTime(Math.max(0, Math.min(60000, 64000 - (endAt - performance.now()) - 4000))); startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
       // A count-in of four clicks, then 60 seconds.
       A.startMetronome(60, 4, beat => { if (beat === 3) { A.stopMetronome(); } });
       status.textContent = 'Get ready: four clicks, then go.';
@@ -139,7 +140,6 @@
     };
     redrawBest();
     main.append(h('div', { class: 'drill' },
-      h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')),
       h('h1', null, 'One-minute chord changes'),
       h('p', { class: 'muted', style: 'margin-top:6px;max-width:64ch' }, 'Pick two open chords. Switch between them for one minute, strumming once per chord, and count every switch. Clean changes count, rushed ones do not. Beat your best a little each day.'),
       h('div', { class: 'cards', style: 'margin-top:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))' }, chordCard('a'), chordCard('b')),
@@ -161,15 +161,21 @@
     const el = GT.fretboard.el;
     main.append(
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Tools'), h('p', null, 'For practice with the guitar in your hands.'))),
-      h('div', { class: 'tool-cards' }, TOOLS.map(t => {
+      h('div', { class: 'tool-cards' }, TOOLS.map((t, i) => {
         const svg = el('svg', { viewBox: '0 0 24 24', class: 'tool-icon', 'aria-hidden': 'true' });
         el('path', { d: t.icon }, svg);
-        return h('a', { class: 'tool-card', href: `#/tools/${t.id}` }, svg, h('h2', null, t.title), h('p', null, t.line));
+        return h('a', { class: 'tool-card', href: `#/tools/${t.id}` }, svg, h('h2', null, h('span', { class: 'topic-no' }, i + 1), h('span', null, t.title)), h('p', null, t.line));
       })));
   }
-  // The Tuner and Slow down are drawn by the Library and the player; here they get the crumb back to Tools.
+  // The submenu of the Tools tab, on each tool page: the tools in a row, as in the Library.
+  const toolsNav = id => {
+    const nav = GT.subnav('Tools', { href: '#/tools', label: 'All tools', icon: 'grid' }, TOOLS.map(t => ({ href: `#/tools/${t.id}`, text: t.title, current: t.id === id })));
+    nav.classList.add('tools-subnav');
+    return nav;
+  };
+  // The Tuner and Slow down are drawn by the Library and the player.
   function libraryTool(main, view) {
-    main.append(h('div', { class: 'crumb' }, h('a', { href: '#/tools' }, 'Tools')), h('div', { class: 'lib-main' }, view.render(view.parse([]))));
+    main.append(...view.render(view.parse([])));
   }
 
   let cleanup = null;
@@ -177,6 +183,8 @@
     render(main, parts) {
       if (cleanup) { cleanup(); cleanup = null; }
       const id = parts[0];
+      // A tool page starts with the submenu row; the page of the tool goes under it.
+      if (TOOLS.some(t => t.id === id)) { const page = h('div', { class: 'lib-main' }); main.append(h('div', { class: 'lib' }, toolsNav(id), page)); main = page; }
       if (id === 'changes') cleanup = changes(main);
       else if (id === 'metronome') cleanup = metronome(main);
       else if (id === 'tune') { libraryTool(main, GT.tuner.view); cleanup = GT.tuner.stop; }

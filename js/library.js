@@ -900,7 +900,15 @@
       ];
       if (!chords.length) return out;
       const pcs = [...new Set(chords.flatMap(pcsOfChord))];
-      const fits = T.scalesWith(pcs, T.pcOf(chords[0].root)).slice(0, 8);
+      // Scales with the same notes (A minor, C major, D Dorian …) share one card: the first one leads it.
+      const groups = [];
+      for (const f of T.scalesWith(pcs, T.pcOf(chords[0].root))) {
+        const notes = f.scale.toneList.map(t => T.mod(T.pcOf(f.root) + t.semi)).sort((a, b) => a - b).join();
+        const g = groups.find(x => x.notes === notes);
+        if (g) g.others.push(f); else groups.push({ notes, head: f, others: [] });
+      }
+      groups.splice(8);
+      const fits = groups.map(g => g.head);
       // No scale holds every note, as over a blues: the scales that miss the fewest, on the root of the first chord first.
       const firstPc = T.pcOf(chords[0].root);
       const near = fits.length ? [] : T.SCALES.filter(sc => sc.id !== 'chromatic').flatMap(scale => T.PC_PLAIN.map((root, rpc) => {
@@ -937,15 +945,24 @@
         h('p', { class: 'small muted lib-note' }, `The neck shows ${best.root} ${lowerName(best.scale.name)}. The bright notes are in your chords; the faint ones are the rest of the scale.`,
           fits.length ? null : ' No scale holds every note of these chords, so it is the scale that misses the fewest.'),
         section('Play along', 'Loop your chords, one bar each, and play the scale over them. The notes of the chord that sounds stay bright.', h('div', { class: 'row backing-row' }, tempoCtl()), loop),
-        fits.length ? section('Scales that fit', `Each scale holds every note of ${chords.map(name).join(', ')}. Scales on the root of the first chord come first.`,
-          h('div', { class: 'found-list' }, fits.map(f => row(scalesView.link({ scale: f.scale, root: rootForLink(f.root) }), `${f.root} ${lowerName(f.scale.name)}`,
-            f.exact ? 'The same notes, no more' : `${f.scale.toneList.length - pcs.length} more note${f.scale.toneList.length - pcs.length > 1 ? 's' : ''}`, f.onBass ? `On ${chords[0].root}` : null))))
+        fits.length ? section('Scales that fit', `Each scale holds every note of ${chords.map(name).join(', ')}. Scales on the root of the first chord come first. Scales with the same notes share a card.`,
+          h('div', { class: 'found-list' }, groups.map(({ head: f, others }) => h('div', { class: 'found-group' },
+            row(scalesView.link({ scale: f.scale, root: rootForLink(f.root) }), `${f.root} ${lowerName(f.scale.name)}`,
+              f.exact ? 'The same notes, no more' : `${f.scale.toneList.length - pcs.length} more note${f.scale.toneList.length - pcs.length > 1 ? 's' : ''}`, f.onBass ? `On ${chords[0].root}` : null),
+            others.length ? h('p', { class: 'found-also' }, 'Same notes: ', others.flatMap((o, i) => [i ? ', ' : null,
+              h('a', { href: '#/' + scalesView.link({ scale: o.scale, root: rootForLink(o.root) }) }, `${o.root} ${lowerName(o.scale.name)}`)]).filter(Boolean)) : null))))
           : section('Near fits', 'No scale holds every note of these chords. These miss the fewest. Over a blues, players use the minor pentatonic or the blues scale and bend the missing notes.',
             h('div', { class: 'found-list' }, near.map(f => row(scalesView.link({ scale: f.scale, root: rootForLink(f.root) }), `${f.root} ${lowerName(f.scale.name)}`, `Misses ${f.miss.map(pc => T.PC_PLAIN[pc]).join(' ')}`, f.onRoot ? `On ${chords[0].root}` : null)))),
-        chords.length > 1 ? section('Over each chord', 'The usual scale over each chord on its own. Change scale with the chord, or keep one scale from the list above.',
+        // In a major or minor key, each chord gets the mode of the key on its root (F in A minor: F Lydian), so the
+        // notes stay those of the key. A chord outside the key, and every chord of a blues, gets its usual scale.
+        chords.length > 1 ? section('Over each chord', key.mode === 'blues'
+          ? 'The usual scale over each chord on its own. Change scale with the chord, or keep one scale from the list above.'
+          : `In ${keyName(key)}, each chord takes the mode of the key that starts on its root: the same notes as the key, around a new center. A chord outside the key takes its usual scale.`,
           h('div', { class: 'found-list' }, chords.map(c => {
-            const id = T.CHORD_SCALE[c.chord.id], sc = id && T.scaleById(id);
-            return sc ? row(scalesView.link({ scale: sc, root: rootForLink(c.root) }), name(c), `${c.root} ${lowerName(sc.name)}`) : null;
+            const own = key.mode === 'blues' ? null : T.modeInKey(c.root, c.chord, key.key, key.mode);
+            const id = T.CHORD_SCALE[c.chord.id], sc = own || (id && T.scaleById(id));
+            return sc ? row(scalesView.link({ scale: sc, root: rootForLink(c.root) }), name(c), `${c.root} ${lowerName(sc.name)}`,
+              key.mode === 'blues' || own ? null : 'Outside the key') : null;
           }))) : null);
       return out;
     }
@@ -2026,13 +2043,14 @@
             h('h2', null, h('span', { class: 'topic-no' }, i + 1), h('span', { class: 'topic-name' }, t.title)),
             i === 0 ? h('span', { class: 'topic-start' }, 'Start here') : null,
             h('p', null, t.line),
-            last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null))))),
-      h('a', { class: 'topic topic-tool', href: '#/' + (tool ? tool.href : 'library/name') },
-        thumb(LOOKUP.id),
-        h('div', { class: 'topic-text' }, h('h2', null, LOOKUP.title), h('p', null, LOOKUP.line))),
-      h('a', { class: 'topic topic-tool', href: '#/' + (last.fit ? last.fit.href : 'library/fit') },
-        thumb(FIT.id),
-        h('div', { class: 'topic-text' }, h('h2', null, FIT.title), h('p', null, FIT.line)))));
+            last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null)))),
+        // The two tools end the list, with a dashed border and no number: nine cards, three full rows on a computer.
+        h('li', null, h('a', { class: 'topic topic-tool', href: '#/' + (tool ? tool.href : 'library/name') },
+          thumb(LOOKUP.id),
+          h('div', { class: 'topic-text' }, h('h2', null, LOOKUP.title), h('p', null, LOOKUP.line)))),
+        h('li', null, h('a', { class: 'topic topic-tool', href: '#/' + (last.fit ? last.fit.href : 'library/fit') },
+          thumb(FIT.id),
+          h('div', { class: 'topic-text' }, h('h2', null, FIT.title), h('p', null, FIT.line)))))));
     document.title = `Library · ${GT.siteName}`;
   }
 
@@ -2092,6 +2110,7 @@
     if (tools) tools.replaceChildren(shareMenu());
     const chosen = tabs.querySelector('[aria-current="true"]');
     if (chosen) tabs.scrollLeft += chosen.getBoundingClientRect().left - tabs.getBoundingClientRect().left - (tabs.clientWidth - chosen.offsetWidth) / 2;
+    GT.fadeEdges(tabs);
     document.title = `${view.title(state)} · ${GT.siteName}`;
     // The start page opens each topic where you left it.
     if (tab !== LOOKUP.id) saveLib({ last: Object.assign({}, lib.last, { [tab]: { href: view.link(state), title: view.title(state) } }) });

@@ -16,7 +16,7 @@
       last14.push({ key, label: d.toLocaleDateString(undefined, { weekday: 'narrow' }), min: (days[key] ? days[key].ms : 0) / 60000 });
     }
     const maxMin = Math.max(settings.goal || 10, ...last14.map(d => d.min));
-    const head = h('div', { class: 'page-head' }, h('div', null, h('div', { class: 'crumb' }, h('a', { href: '#/train' }, 'Train'), ' / Progress'), h('h1', null, 'Progress'), h('p', null, 'Your results stay in this browser. Save them to a file to keep a copy or to move them to another device.')));
+    const head = h('div', null, GT.trainNav('progress'), h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Progress'), h('p', null, 'Your results stay in this browser. Save them to a file to keep a copy or to move them to another device.'))));
     if (!Object.keys(days).length) {
       main.append(head,
         h('div', { class: 'empty' }, h('p', null, 'No practice yet. After your first drill, this page shows your minutes per day, your right answers and your times.'),

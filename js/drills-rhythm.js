@@ -107,6 +107,8 @@
     tap.taps = [];
     tap.running = true;
     const start = A.startRhythm(Object.assign({}, o, { onEnd: () => setTimeout(() => {
+      // The drill stopped meanwhile (you left it, or changed an option).
+      if (!tap.taps) return;
       tap.running = false;
       const taps = tap.taps.slice();
       tap.taps = null;

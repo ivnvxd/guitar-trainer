@@ -366,6 +366,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .lib { display: grid; gap: 18px; }
 .lib-tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 4px; margin: -4px; }
 .lib-tabs::-webkit-scrollbar { display: none; }
+/* A row wider than the screen fades at the side where more items hide, so no item looks cut by mistake. */
+.lib-tabs.fade-left { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px); mask-image: linear-gradient(to right, transparent, #000 32px); }
+.lib-tabs.fade-right { -webkit-mask-image: linear-gradient(to left, transparent, #000 32px); mask-image: linear-gradient(to left, transparent, #000 32px); }
+.lib-tabs.fade-left.fade-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
 .lib-tabs a { flex: none; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; font-weight: 650; font-size: 15px; border: 1px solid transparent; transition: color .15s, background-color .15s; }
 @media (hover: hover) { .lib-tabs a:hover { color: var(--text); background: var(--surface-2); } }
 .lib-tabs a[aria-current="true"] { color: var(--text); background: var(--surface); border-color: var(--line-strong); box-shadow: var(--shadow); }
@@ -496,6 +500,8 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .search-hint { margin-top: 8px; }
 .found-list { display: grid; gap: 4px; margin-top: 10px; }
 .found-list:empty { display: none; }
+.found-group { display: grid; }
+.found-also { margin: 6px 14px 8px; font-size: 13px; color: var(--muted); }
 .found { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); text-decoration: none; }
 .found:hover, .found:focus-visible { border-color: var(--accent); }
 .found > span:last-child:not(.found-text) { color: var(--muted); font-size: 13px; text-align: right; }
@@ -517,7 +523,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .topic-text p { margin-top: 5px; color: var(--muted); font-size: 14.5px; }
 .topic-text .topic-last { color: var(--accent-text); font-size: 13.5px; }
 /* The lookup tool: one wide card under the six topics. */
-.topic-tool { margin-top: 12px; height: auto; border-style: dashed; border-color: var(--line-strong); }
+.topic-tool { border-style: dashed; border-color: var(--line-strong); }
 
 /* Circle of fifths. The wheel turns the chosen key to the top; the words turn back so they stay upright. */
 .circle-wrap { display: grid; grid-template-columns: minmax(280px, 440px) minmax(0, 1fr); gap: 32px; align-items: start; margin-top: 18px; }
@@ -563,8 +569,16 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .goal-neck.is-done .goal-dot { fill: var(--ok); }
 .today .stat b { font-size: 26px; display: block; line-height: 1.1; letter-spacing: -.02em; }
 .today .stat span { font-size: 13px; color: var(--muted); }
-.tracks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px 28px; margin-top: 34px; align-items: start; }
-.track-col { display: grid; gap: 34px; align-content: start; }
+.today-section { margin-top: 30px; }
+.drill-row .drill-why { color: var(--accent-text); font-size: 13px; font-weight: 600; }
+/* Today: Next up in one row on a wide screen, and the four tracks as cards. */
+@media (min-width: 700px) { .next-list { grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); } }
+.track-cards { margin-top: 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.track-card { align-content: start; }
+.track-card .meter-bar { flex: 1 1 auto; }
+@media (max-width: 699px) { .track-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* A track page on a wide screen: its drills in two columns that fill top to bottom, so no card stands alone on a row. */
+@media (min-width: 700px) { .drill-list.track-page { display: block; columns: 2; column-gap: 8px; } .track-page > .drill-row { break-inside: avoid; margin-bottom: 6px; } }
 .track-intro { color: var(--muted); font-size: 14px; margin-top: 4px; }
 .drill-list { margin-top: 12px; display: grid; gap: 6px; }
 .drill-row { display: grid; gap: 4px; padding: 13px 14px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text); text-decoration: none; transition: border-color .15s, transform .15s, background-color .15s; }
@@ -704,7 +718,6 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
   .circle-col { max-width: 440px; width: 100%; margin: 0 auto; }
   .keys-more { grid-template-columns: minmax(0, 1fr); }
   .topics { grid-template-columns: minmax(0, 1fr); }
-  .tracks { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 660px) {
   /* A filter on the bar would hold the fixed tab bar inside it, so the bar is solid on a phone. */
@@ -768,8 +781,10 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
   .pickset input[type="checkbox"] { position: absolute; opacity: 0; width: 100%; height: 100%; inset: 0; margin: 0; }
   .pickset label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
   .pickset .muted { display: none; }
-  .drill-bar > .row { width: 100%; }
-  .drill-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex: 1 1 100%; gap: 5px; }
+  /* The drill name and Options on one line, the score boxes under them. */
+  .drill-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .drill-bar > .row { display: contents; }
+  .drill-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-column: 1 / -1; grid-row: 2; gap: 5px; }
   .drill-stats span { display: grid; justify-items: center; padding: 6px 2px; border-radius: 12px; font-size: 11.5px; line-height: 1.25; text-align: center; }
   .drill-stats b { margin: 0; font-size: 15px; }
   /* Cards are one row that you swipe: one in view and most of the next, so the chart in a card stays readable. */
@@ -834,9 +849,9 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
   /* The row of layer chips under the neck stays on the screen too. */
   .lib-stage .neck:has(.neck-tools) svg.fb-horizontal { max-height: max(150px, calc(100vh - 182px)); max-height: max(150px, calc(100dvh - 182px)); }
   /* A drill: the neck on the left, the question and its answers on the right. */
-  .drill .crumb { display: none; }
-  .drill-bar { margin-bottom: 8px; gap: 6px 12px; }
-  .drill-bar > .row { width: auto; }
+  .drill .crumb, .drill .page-subnav { display: none; }
+  .drill-bar { display: flex; margin-bottom: 8px; gap: 6px 12px; }
+  .drill-bar > .row { display: flex; width: auto; }
   .drill-stats { display: flex; flex: none; }
   .drill-stats span { display: inline; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; }
   .drill-stats b { margin-right: 5px; font-size: 13.5px; }
@@ -871,7 +886,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
   .answer span:not(.kbd) { display: none; }
 }
 /* Key hints help only with a keyboard. */
-@media (hover: none) and (pointer: coarse) { .drill-keys, .kbd { display: none; } }
+@media (hover: none) and (pointer: coarse) { .drill-keys, .kbd, .mouse-only { display: none; } }
 
 /* Settings: one note picker for each string of a custom tuning, low string first. */
 .tuning-edit { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
@@ -1068,7 +1083,6 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .lesson-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 560px) { .lesson-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); } .lesson-chips .chip { justify-content: center; } }
 /* The Library start page: an odd last topic takes the whole row, as the tools under it do. */
-.topics > li:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .rhythm-card { display: grid; gap: 4px; padding: 12px 12px 6px; }
 .rhythm-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 /* Strumming: the count over the strokes, one column for each slot of the bar. */
@@ -1189,6 +1203,19 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .thumb-wave .is-in { stroke: var(--accent); }
 .thumb-wave .is-loop { fill: var(--accent-soft-2); }
 .player-source { display: grid; gap: 10px; }
+/* With a song open, the box to open another one folds into one button. */
+.player-fold > summary { display: none; }
+.player-fold.is-folded > summary { display: inline-flex; list-style: none; cursor: pointer; }
+.player-fold > summary::-webkit-details-marker { display: none; }
+.player-fold.is-folded { margin-top: 12px; }
+.player-fold.is-folded[open] > summary { margin-bottom: 4px; }
+.player-fold.is-folded:not([open]) + .player-say:empty { min-height: 0; margin: 0; }
+/* The dock while Play is off the screen. */
+.player-dock { padding: 6px; gap: 6px; }
+.player-dock-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2em; text-align: center; }
+.player-dock .chip { min-height: 36px; }
+.player-blocked { display: grid; gap: 12px; justify-items: start; }
+.player-blocked p { margin: 0; }
 .player-open { gap: 8px 10px; align-items: center; }
 .player-link { flex: 1 1 220px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
 .player-rec-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1197,7 +1224,7 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-now { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 6px 0 8px; font-size: 16px; }
 .player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-media { display: grid; gap: 10px; }
-.player-yt iframe { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 0; border-radius: var(--radius-sm); }
+.player-yt iframe { display: block; width: 100%; height: auto; max-height: 60vh; aspect-ratio: 16 / 9; border: 0; border-radius: var(--radius-sm); }
 .player-video { display: block; width: 100%; max-height: 50vh; border-radius: var(--radius-sm); background: #000; }
 .player-wave { display: block; width: 100%; height: 76px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); touch-action: pan-y; cursor: pointer;
   --wave: var(--line-strong); --wave-played: var(--accent); --wave-loop: var(--accent-soft-2); --wave-mark: var(--seventh); --wave-head: var(--text); }
@@ -1226,8 +1253,31 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 @media (max-width: 560px) { .tool-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
 .tool-card { display: grid; align-content: start; gap: 6px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); color: inherit; text-decoration: none; transition: border-color .15s, background-color .15s; }
 @media (hover: hover) { .tool-card:hover { border-color: var(--line-hover); background: var(--surface-2); } }
-.tool-card h2 { margin: 4px 0 0; font-size: 17px; }
+.tool-card h2 { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 17px; }
 .tool-card p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
 .tool-icon { width: 30px; height: 30px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .today-goal p { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; margin: 0; }
 .today-progress { margin-left: auto; font-size: 14px; }
+
+/* The Library start page on a computer: nine cards in three full rows, the picture above the text. */
+/* Three cards in a row with the picture on top: on a computer, a tablet, and a phone held sideways. */
+@media (min-width: 700px) {
+  .topics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .topics .topic { flex-direction: column; align-items: stretch; gap: 14px; }
+  .topics .topic-thumb { flex: none; height: 118px; display: flex; align-items: center; justify-content: center; }
+  .topics .topic-thumb .neck-scroll { height: 100%; display: flex; justify-content: center; overflow: visible; }
+  .topics .topic-thumb svg { width: auto; height: 100%; max-width: 100%; }
+}
+/* A submenu row on top of a page that has no Library frame, such as Train and Progress. */
+.page-subnav { margin-bottom: 18px; }
+@media (max-width: 560px) {
+  .page-subnav .lib-tabs, .tools-subnav .lib-tabs { gap: 2px; }
+  .page-subnav .lib-tabs a, .tools-subnav .lib-tabs a { padding: 8px 7.5px; font-size: 14px; }
+  .page-subnav .lib-tabs .lib-tool-link { margin-left: 6px; }
+  /* On a phone the Tools tab at the bottom leads to all the tools, so the row has room for the four tools. */
+  .tools-subnav .lib-home-link { display: none; }
+  /* Scales for chords: the two lists and Add on one line. With Clear: the two lists on top, Add and Clear under them. */
+  .fit-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
+  .fit-add:has(> :nth-child(4)) { grid-template-columns: 1fr 1fr; }
+}
+.track-page { margin-top: 4px; }

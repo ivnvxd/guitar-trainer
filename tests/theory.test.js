@@ -325,6 +325,25 @@ eq(T.fingers([null, null, 0, 2, 3, 2]).join(), ',,,1,3,2', 'open D');
   eq(top([C('A', 'minor'), C('D', 'minor'), C('E', 'major'), C('A', 'minor')]), 'A minor i iv V i');
   eq(top([C('G', 'major'), C('C', 'add9'), C('D', 'sus4')]), 'G major I IV V');
   eq(T.keyOf([C('A', 'minor'), C('F', 'major'), C('C', 'major'), C('G', 'major')])[1].key, 'C', 'the relative major comes next');
+  // The mode over each chord of a key has only the notes of the key.
+  const modeIn = (r, id, key, mode) => { const s = T.modeInKey(r, T.chordById(id), key, mode); return s ? s.id : null; };
+  eq(['A minor', 'F major', 'C major', 'G major', 'D minor', 'E minor', 'B dim'].map(x => modeIn(...x.split(' '), 'A', 'minor')).join(' '),
+    'minor lydian major mixolydian dorian phrygian locrian', 'modes over the chords of A minor');
+  eq(['C maj7', 'D m7', 'G 7', 'B m7b5'].map(x => modeIn(...x.split(' '), 'C', 'major')).join(' '), 'major dorian mixolydian locrian', 'modes over the seventh chords of C major');
+  eq(modeIn('E', 'major', 'A', 'minor'), null, 'E major is outside A minor');
+  eq(modeIn('B♭', 'major', 'F', 'major'), 'lydian', 'B♭ in F major is Lydian');
+  for (const k of T.ROOTS) for (const mode of ['major', 'minor']) {
+    const keyPc = T.pcOf(k), scale = T.scaleById(mode);
+    for (const t of scale.toneList) {
+      const rootPc = T.mod(keyPc + t.semi);
+      for (const c of [T.chordById('major'), T.chordById('minor'), T.chordById('dim')]) {
+        const s = T.modeInKey(T.PC_PLAIN[rootPc], c, k, mode);
+        if (!s) continue;
+        const keyNotes = scale.toneList.map(x => T.mod(keyPc + x.semi)).sort((a, b) => a - b).join();
+        ok(s.toneList.map(x => T.mod(rootPc + x.semi)).sort((a, b) => a - b).join() === keyNotes, `${T.PC_PLAIN[rootPc]} ${s.id} has the notes of ${k} ${mode}`);
+      }
+    }
+  }
   eq(T.keyOf([C('G', 'major'), C('C', 'add9'), C('D', 'sus4')])[0].fits.map(f => f.name).join(' '), 'Am Bm Em F♯°', 'chords that fit');
   for (const r of T.ROOTS) for (const c of T.CHORDS) { const k = T.keyOf([C(r, c.id)]); ok(k.length >= 12 && k[0].numerals.length === 1, `key of ${r}${c.symbol}`); }
 }

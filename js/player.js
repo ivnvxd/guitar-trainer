@@ -128,15 +128,19 @@
     P.peaks = peaks.map(p => p / top);
   }
   // Decoded sound into the player: both channels go to the engine, and only the mono copy stays here.
-  async function loadDecoded(buf, name, key, media) {
-    if (buf.duration > MAX_SECONDS) throw new Error(`This song is ${fmt(buf.duration)} long. The player takes up to 10 minutes: cut the file shorter, or open a part of it.`);
+  const tooLong = seconds => `This song is ${fmt(seconds)} long. The player takes up to 10 minutes: cut the file shorter, or open a part of it.`;
+  // False when a later open started meanwhile: that one wins.
+  async function loadDecoded(buf, name, key, media, my) {
+    if (buf.duration > MAX_SECONDS) throw new Error(tooLong(buf.duration));
     const node = await engine();
-    keepMono(buf);
+    if (my !== opening) return false;
     const chans = [0, buf.numberOfChannels > 1 ? 1 : 0].map(ch => buf.getChannelData(ch).slice());
     await node.dropBuffers();
     await node.addBuffers(chans, chans.map(c => c.buffer));
+    if (my !== opening) return false;
+    keepMono(buf);
     unloadYouTube();
-    Object.assign(P, { kind: 'file', name, key, duration: buf.duration });
+    Object.assign(P, { kind: 'file', name, key, duration: buf.duration, ytError: null });
     restore(key);
     if (P.videoUrl) URL.revokeObjectURL(P.videoUrl);
     P.video = null; P.videoUrl = null;
@@ -147,23 +151,45 @@
     }
     route();
     remember();
+    return true;
   }
   // A file over 300 MB is a long video: its sound would not fit in a phone's memory.
   const MAX_BYTES = 300 * 1024 * 1024;
+  // Each open counts. When a later open starts while an earlier one still decodes, the earlier one gives up.
+  let opening = 0;
+  // The length of a file from its header, before the page decodes it: a long mp3 is small as a file but large
+  // when decoded. NaN when the browser cannot tell.
+  function lengthOf(file) {
+    return new Promise(resolve => {
+      const url = URL.createObjectURL(file), m = document.createElement(/^video\//.test(file.type) ? 'video' : 'audio');
+      const done = d => { clearTimeout(late); m.onloadedmetadata = m.onerror = null; m.removeAttribute('src'); m.load(); URL.revokeObjectURL(url); resolve(d); };
+      const late = setTimeout(() => done(NaN), 2500);
+      m.preload = 'metadata';
+      m.onloadedmetadata = () => done(m.duration);
+      m.onerror = () => done(NaN);
+      m.src = url;
+      m.load();
+    });
+  }
   async function openFile(file) {
     stop();
+    const my = ++opening;
     if (file.size > MAX_BYTES) { say(`${file.name} is ${Math.round(file.size / 1048576)} MB. The player takes files up to 300 MB: use the sound only (mp3 or m4a), or a shorter part.`); return; }
     say(`Opening ${file.name}…`);
     try {
       const c = A.context();
       if (!c) throw new Error('This browser cannot play sound.');
       if (c.state !== 'running') c.resume().catch(() => {});
+      const length = await lengthOf(file);
+      if (my !== opening) return;
+      if (isFinite(length) && length > MAX_SECONDS) throw new Error(tooLong(length));
       let buf;
       try { buf = await c.decodeAudioData(await file.arrayBuffer()); } catch (e) { throw new Error(`The browser cannot read the sound of ${file.name}. Try an mp3, m4a, wav or mp4 file.`); }
-      await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null);
+      if (my !== opening) return;
+      if (!await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null, my)) return;
       say('');
       drawAll();
-    } catch (e) { say(e.message || 'The file did not open.'); }
+    } catch (e) { if (my === opening) say(e.message || 'The file did not open.'); }
   }
 
   // ---------- playing a file ----------
@@ -222,9 +248,15 @@
       P.node.stop();
       P.pos = P.a;
       P.waiting = true;
-      P.waitTimer = setTimeout(() => { P.waiting = false; P.lastT = P.a; if (P.playing) schedule({ active: true, input: P.a }); }, P.gap * 1000);
+      if (P.video) P.video.pause();
+      P.waitTimer = setTimeout(() => {
+        P.waiting = false; P.lastT = P.a;
+        if (!P.playing) return;
+        schedule({ active: true, input: P.a });
+        if (P.video) { P.video.currentTime = P.a; P.video.play().catch(() => {}); }
+      }, P.gap * 1000);
     } else schedule({ input: P.a });
-    if (P.video) P.video.currentTime = P.a;
+    if (P.video) { P.video.currentTime = P.a; P.video.playbackRate = Math.max(0.25, P.rate); }
     show();
   }
   // The engine reports where it is about 20 times a second.
@@ -265,21 +297,25 @@
     if (P.yt && P.yt.destroy) { try { P.yt.destroy(); } catch (e) { /* gone */ } }
     P.yt = null; P.ytId = null;
   }
-  async function openYouTube(text) {
+  // at: the second to start from, when you come back to the page.
+  async function openYouTube(text, at = 0) {
     const id = ytIdOf(text);
     if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…'); return; }
     stop();
+    const my = ++opening;
     say('Opening the video…');
-    try { await loadYouTubeApi(); } catch (e) { say(e.message); return; }
+    try { await loadYouTubeApi(); } catch (e) { if (my === opening) say(e.message); return; }
+    if (my !== opening) return;
     unloadYouTube();
     if (P.node) { try { await P.node.dropBuffers(); } catch (e) { /* none */ } }
+    if (my !== opening) return;
     P.mono = null; P.peaks = null; P.video = null;
-    Object.assign(P, { kind: 'youtube', ytId: id, key: `yt:${id}`, name: (saved.songs[`yt:${id}`] || {}).name || 'YouTube video', duration: 0 });
+    Object.assign(P, { kind: 'youtube', ytId: id, ytError: null, key: `yt:${id}`, name: (saved.songs[`yt:${id}`] || {}).name || 'YouTube video', duration: 0 });
     restore(P.key);
     P.semis = 0; P.cents = 0; P.filter = 'none';
     drawAll();
     P.yt = new root.YT.Player(P.ui.ytBox, {
-      videoId: id, playerVars: { playsinline: 1, rel: 0, modestbranding: 1 },
+      videoId: id, playerVars: Object.assign({ playsinline: 1, rel: 0, modestbranding: 1 }, at >= 1 ? { start: Math.floor(at) } : {}),
       events: {
         onReady: () => {
           P.duration = P.yt.getDuration() || 0;
@@ -292,14 +328,21 @@
         },
         onStateChange: e => { P.playing = e.data === 1; show(); },
         onPlaybackRateChange: e => { P.rate = e.data; show(); },
-        onError: e => say([101, 150].includes(e.data)
-          ? 'The owner of this video does not let it play on other sites. Watch it on YouTube, or record a part of it from there on a computer.'
-          : 'YouTube could not play this video. Check the link.')
+        onError: e => {
+          P.ytError = [101, 150].includes(e.data)
+            ? 'The owner of this video does not let it play on other sites. Watch it on YouTube, or record a part of it from there on a computer.'
+            : 'YouTube could not play this video. Check the link.';
+          say(''); stop(); drawMedia(); draw();
+        }
       }
     });
     // Loops: the page asks YouTube where it is ten times a second, and jumps back at B.
+    P.pos = at;
     P.ytTimer = setInterval(() => {
       if (!P.yt || !P.yt.getCurrentTime) return;
+      // Before the first play YouTube reports 0, also when the video will start further on.
+      const state = P.yt.getPlayerState ? P.yt.getPlayerState() : 1;
+      if (state === -1 || state === 5) { show(); return; }
       P.pos = P.yt.getCurrentTime();
       if (P.playing && P.loop && P.a !== null && P.b !== null && P.b > P.a && P.pos >= P.b) nextPass();
       show();
@@ -343,13 +386,14 @@
   }
   async function openRecording(r) {
     stop();
+    const my = ++opening;
     say(`Opening ${r.name}…`);
     try {
       const c = A.context();
       const buf = await c.decodeAudioData(await r.blob.arrayBuffer());
-      await loadDecoded(buf, r.name, `rec:${r.id}`, null);
+      if (my !== opening || !await loadDecoded(buf, r.name, `rec:${r.id}`, null, my)) return;
       say('');
-    } catch (e) { say(e.message || 'The recording did not open.'); }
+    } catch (e) { if (my === opening) say(e.message || 'The recording did not open.'); }
     drawAll();
   }
 
@@ -411,6 +455,11 @@
     const u = P.ui;
     if (u.time) u.time.textContent = `${fmt(P.pos)} / ${fmt(P.duration)}`;
     if (u.play) u.play.textContent = P.playing ? '❚❚ Pause' : '▶ Play';
+    if (u.dock && !u.dock.hidden) {
+      u.dockPlay.textContent = P.playing ? '❚❚ Pause' : '▶ Play';
+      u.dockTime.textContent = fmt(P.pos);
+      u.dockLoop.setAttribute('aria-pressed', String(!!P.loop));
+    }
     if (u.rateOut) u.rateOut.textContent = `${Math.round(P.rate * 100)}%`;
     if (u.rateIn && document.activeElement !== u.rateIn) u.rateIn.value = Math.round(P.rate * 100);
     if (u.seek && document.activeElement !== u.seek) { u.seek.max = Math.max(1, P.duration); u.seek.value = P.pos; }
@@ -426,6 +475,28 @@
     remember();
     if (P.playing && isFile()) schedule();
     show();
+  }
+  // [ and ]: 5% slower or faster. YouTube has only its own speeds, so there the next one of those.
+  function stepRate(dir) {
+    if (P.kind !== 'youtube') { setRate(P.rate + dir * 0.05); return; }
+    const rates = dir > 0 ? P.ytRates.filter(r => r > P.rate + 0.001) : P.ytRates.filter(r => r < P.rate - 0.001).reverse();
+    if (rates.length) setRate(rates[0]);
+  }
+  // A and B: the loop changes at once, also while the song plays.
+  function setA() {
+    P.a = P.pos;
+    if (P.b !== null && P.b <= P.a) P.b = null;
+    remember();
+    if (P.playing && isFile()) schedule();
+    draw();
+  }
+  function setB() {
+    if (P.a === null || P.pos <= P.a) return false;
+    P.b = P.pos; P.loop = true;
+    remember();
+    if (P.playing && isFile()) schedule();
+    draw();
+    return true;
   }
   function addMarker() {
     if (!P.kind) return;
@@ -447,6 +518,9 @@
   function drawMedia() {
     const u = P.ui;
     if (!u.media) return;
+    // A video that YouTube will not play here: only the message and a link show, in the panel.
+    u.media.hidden = !!P.ytError;
+    if (P.ytError && u.ytBox && u.ytBox.isConnected) return;
     const parts = [];
     if (P.kind === 'youtube') { u.ytBox = h('div'); parts.push(h('div', { class: 'player-yt' }, u.ytBox)); }
     if (P.video) parts.push(h('div', { class: 'player-video-box' }, P.video));
@@ -467,12 +541,19 @@
     if (!box) return;
     const u = P.ui;
     const parts = [];
-    if (P.kind) {
+    if (P.ytError) {
+      if (u.now) u.now.replaceChildren();
+      u.time = u.play = null;
+      parts.push(h('div', { class: 'controls player-blocked' }, h('p', null, P.ytError),
+        h('a', { class: 'btn', href: `https://www.youtube.com/watch?v=${P.ytId}`, target: '_blank', rel: 'noopener' }, 'Open the video on YouTube')));
+    } else if (P.kind) {
       u.time = h('span', { class: 'player-time' });
       if (u.now) u.now.replaceChildren(h('span', { class: 'player-name' }, ...[h('b', null, P.name), P.kind === 'youtube' ? h('span', { class: 'muted small' }, ' on YouTube') : null].filter(Boolean)), u.time);
       u.play = h('button', { type: 'button', class: 'btn btn-primary player-play', onclick: () => P.playing ? stop() : play() }, '▶ Play');
-      parts.push(h('div', { class: 'row player-transport' },
-        btn('−5 s', () => seek(P.pos - 5), { 'aria-label': 'Back 5 seconds' }), u.play, btn('+5 s', () => seek(P.pos + 5), { 'aria-label': 'On 5 seconds' })));
+      const transport = h('div', { class: 'row player-transport' },
+        btn('−5 s', () => seek(P.pos - 5), { 'aria-label': 'Back 5 seconds' }), u.play, btn('+5 s', () => seek(P.pos + 5), { 'aria-label': 'On 5 seconds' }));
+      parts.push(transport);
+      watchTransport(transport);
       // Speed
       u.rateOut = h('output', { class: 'player-rate' });
       u.rateIn = h('input', { type: 'range', min: 25, max: 150, step: P.kind === 'youtube' ? 25 : 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) });
@@ -489,8 +570,8 @@
       // Loop
       rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Loop'),
         h('div', { class: 'row player-chips' },
-          btn(P.a === null ? 'Set A' : `A ${fmt(P.a)}`, () => { P.a = P.pos; if (P.b !== null && P.b <= P.a) P.b = null; remember(); draw(); }, { title: 'Key A' }),
-          btn(P.b === null ? 'Set B' : `B ${fmt(P.b)}`, () => { if (P.a !== null && P.pos > P.a) { P.b = P.pos; P.loop = true; remember(); if (P.playing && isFile()) schedule(); draw(); } else say('Set A first, then play on and set B after it.'); }, { title: 'Key B' }),
+          btn(P.a === null ? 'Set A' : `A ${fmt(P.a)}`, setA, { title: 'Key A' }),
+          btn(P.b === null ? 'Set B' : `B ${fmt(P.b)}`, () => { if (!setB()) say('Set A first, then play on and set B after it.'); }, { title: 'Key B' }),
           chip('Loop', P.loop, () => set({ loop: !P.loop }), 'Key L'),
           P.a !== null || P.b !== null ? btn('Clear', () => set({ a: null, b: null, loop: false })) : null)));
       rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Each pass'),
@@ -515,13 +596,42 @@
         parts.push(h('section', { class: 'lib-section' }, h('div', { class: 'section-head' }, h('h2', null, 'Notes here'), btn('What notes are here?', () => showNotes())),
           h('p', { class: 'small muted' }, 'Pause where a chord or a note rings, then tap. The page lists the loudest notes at that spot and guesses the chord. It is a guess: a full band often confuses it.'), u.notes));
       }
-      parts.push(h('p', { class: 'small muted' }, 'Keys: Space play or pause, ← → 5 seconds, A and B set the loop, L loop on or off, M mark a part, [ and ] slower and faster.'));
+      parts.push(h('p', { class: 'small muted drill-keys' }, 'Keys: Space play or pause, ← → 5 seconds, A and B set the loop, L loop on or off, M mark a part, [ and ] slower and faster.'));
     }
+    if (!P.kind || P.ytError) watchTransport(null);
     box.replaceChildren(...parts);
     show();
   }
-  // A new song: the media part and the panel.
-  function drawAll() { drawMedia(); draw(); }
+  // A new song: the media part and the panel. The box to open a song folds into one line.
+  function drawAll() { drawMedia(); draw(); foldSource(); }
+  function foldSource() {
+    const f = P.ui.fold;
+    if (!f) return;
+    f.classList.toggle('is-folded', !!P.kind);
+    f.open = !P.kind;
+  }
+  // The dock: a small bar at the bottom while Play is off the screen, with back 5 seconds, Play, the time and Loop.
+  function watchTransport(row) {
+    const u = P.ui;
+    if (u.watch) { u.watch.disconnect(); u.watch = null; }
+    if (!row || !root.IntersectionObserver) { dock(false); return; }
+    u.watch = new IntersectionObserver(([e]) => dock(!e.isIntersecting));
+    u.watch.observe(row);
+  }
+  function dock(on) {
+    const u = P.ui;
+    if (on && !u.dock) {
+      u.dockPlay = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => P.playing ? stop() : play() });
+      u.dockTime = h('span', { class: 'player-dock-time' });
+      u.dockLoop = h('button', { type: 'button', class: 'chip chip-toggle', title: 'Key L', onclick: () => set({ loop: !P.loop }) }, 'Loop');
+      u.dock = h('div', { class: 'play-bar player-dock', role: 'region', 'aria-label': 'Player' },
+        btn('−5 s', () => seek(P.pos - 5), { 'aria-label': 'Back 5 seconds' }), u.dockPlay, u.dockTime, u.dockLoop);
+      document.body.append(u.dock);
+    }
+    if (u.dock) u.dock.hidden = !on;
+    document.body.classList.toggle('has-play-bar', !!on);
+    show();
+  }
   function showNotes() {
     const u = P.ui;
     if (!u.notes) return;
@@ -551,12 +661,12 @@
     if (k === ' ') { e.preventDefault(); P.playing ? stop() : play(); }
     else if (k === 'ArrowLeft') { e.preventDefault(); seek(P.pos - 5); }
     else if (k === 'ArrowRight') { e.preventDefault(); seek(P.pos + 5); }
-    else if (k === 'a' || k === 'A') { P.a = P.pos; if (P.b !== null && P.b <= P.a) P.b = null; remember(); draw(); }
-    else if (k === 'b' || k === 'B') { if (P.a !== null && P.pos > P.a) { P.b = P.pos; P.loop = true; remember(); if (P.playing && isFile()) schedule(); draw(); } }
+    else if (k === 'a' || k === 'A') setA();
+    else if (k === 'b' || k === 'B') setB();
     else if (k === 'l' || k === 'L') set({ loop: !P.loop });
     else if (k === 'm' || k === 'M') addMarker();
-    else if (k === '[') setRate(P.rate - 0.05);
-    else if (k === ']') setRate(P.rate + 0.05);
+    else if (k === '[') stepRate(-1);
+    else if (k === ']') stepRate(1);
   }
 
   // ---------- the page ----------
@@ -570,6 +680,8 @@
       const file = h('input', { type: 'file', accept: 'audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.mp4,.mov,.webm', hidden: true, onchange: e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; } });
       const link = h('input', { type: 'url', class: 'player-link', placeholder: 'Paste a YouTube link', 'aria-label': 'YouTube link', enterkeyhint: 'go',
         onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); openYouTube(link.value); } } });
+      // A dock of an earlier drawing of the page goes.
+      if (P.ui && P.ui.box) { watchTransport(null); if (P.ui.dock) P.ui.dock.remove(); }
       P.ui = { box: h('div', { class: 'player' }), media: h('div', { class: 'player-media' }), now: h('div', { class: 'player-now' }), say: h('p', { class: 'player-say', role: 'status' }) };
       const recBtn = canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null;
       P.ui.recBtn = recBtn;
@@ -584,16 +696,18 @@
       refreshRecs();
       const source = h('div', { class: 'controls player-source', role: 'group', 'aria-label': 'Open a song' },
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
-          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac or a video. Or drop it on this page.')),
+          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac or a video.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
         h('div', { class: 'row player-open' }, link, btn('Open', () => openYouTube(link.value))),
         recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null,
         recList);
+      P.ui.fold = h('details', { class: 'player-fold' }, h('summary', { class: 'btn' }, 'Open another song'), source);
+      foldSource();
       // A file dropped anywhere on the page opens.
       const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); } },
         h('div', { class: 'lib-title' }, h('div', null, h('h1', null, 'Slow down'), h('p', { class: 'muted lib-sub' }, 'Learn a song by ear: slow it down without changing its pitch, loop a part, change its key.'))),
-        source, P.ui.say, P.ui.now, P.ui.media, P.ui.box);
+        P.ui.fold, P.ui.say, P.ui.now, P.ui.media, P.ui.box);
       // Back on the page: a YouTube video opens again (its frame went with the page), a file is still here.
-      if (P.kind === 'youtube' && P.ytId) { const at = P.pos; setTimeout(() => openYouTube(P.ytId).then(() => { P.pos = at; }), 0); }
+      if (P.kind === 'youtube' && P.ytId) { const at = P.pos; setTimeout(() => openYouTube(P.ytId, at), 0); }
       else drawAll();
       root.removeEventListener('keydown', onKey);
       root.addEventListener('keydown', onKey);
@@ -603,6 +717,8 @@
   // Leaving the page: the song stops, the keys stop working and the recording ends.
   function leave() {
     stop();
+    watchTransport(null);
+    if (P.ui.dock) { P.ui.dock.remove(); P.ui.dock = null; }
     root.removeEventListener('keydown', onKey);
     if (P.rec) P.rec.stop();
     // The YouTube frame goes with the page. The link stays, so the video opens again when you come back.

@@ -534,6 +534,16 @@
     return letter + accidentalText(mod(pc - LETTER_PC[letter] + 6) - 6);
   }
 
+  // The scale over a chord in a major or minor key: the mode of the key that starts on the chord's root, so it has
+  // only the notes of the key (F in A minor: F Lydian). null when a note of the chord is outside the key.
+  function modeInKey(root, chord, key, mode) {
+    const base = mod(pcOf(key) + (mode === 'minor' ? 3 : 0)), pc = pcOf(root);
+    const inKey = scaleById('major').toneList.map(t => mod(base + t.semi));
+    if (!chord.toneList.every(t => inKey.includes(mod(pc + t.semi)))) return null;
+    const degree = inKey.indexOf(pc);
+    return scaleById(Object.keys(MODE_INDEX).find(id => MODE_INDEX[id] === degree));
+  }
+
   // The usual scale over a chord, for the notes around it: a diminished triad is the first chord of Locrian,
   // an augmented triad of the whole-tone scale, a dominant seventh of Mixolydian. A chord with no usual scale is left out.
   const CHORD_SCALE = {
@@ -891,7 +901,7 @@
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, outsideChords, keyOf, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes, SEQUENCES, sequence,
-    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, voiceLead,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, modeInKey, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

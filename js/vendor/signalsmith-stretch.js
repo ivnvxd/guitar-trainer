@@ -1,5 +1,6 @@
 /* Signalsmith Stretch Web 1.3.2 (npm: signalsmith-stretch), time-stretch and pitch-shift as WASM in an AudioWorklet.
-   Unchanged copy of SignalsmithStretch.js from the npm package.
+   Copy of SignalsmithStretch.js from the npm package, with one change marked "Guitar Trainer": after a second
+   of silence the engine skips its work, so a stopped player costs no battery on the other pages.
 
    MIT License
    
@@ -271,6 +272,13 @@ function registerWorkletProcessor(Module, audioNodeKey) {
 				this.timeMap.shift();
 			}
 			let currentMapSegment = this.timeMap[0];
+
+			// Guitar Trainer: after a second without sound the stretch holds only silence, so it can skip the work.
+			if (currentMapSegment.active) this.idleSamples = 0;
+			else if ((this.idleSamples = (this.idleSamples || 0) + outputList[0][0].length) > sampleRate) {
+				outputList[0].forEach(channel => channel.fill(0));
+				return true;
+			}
 
 			let wasmModule = this.wasmModule;
 			wasmModule._setTransposeSemitones(currentMapSegment.semitones, currentMapSegment.tonalityHz/sampleRate);

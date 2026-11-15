@@ -7,11 +7,20 @@
   const P = GT.progress, A = GT.audio;
 
   const TRACKS = [
-    { id: 'ear', name: 'Ear', intro: 'Hear it, name it, find it on the guitar.' },
-    { id: 'neck', name: 'Neck', intro: 'Find notes, triads and shapes without counting frets.' },
-    { id: 'keys', name: 'Keys and progressions', intro: 'Recall keys and chord numbers without working them out.' },
-    { id: 'rhythm', name: 'Rhythm', intro: 'Hear a rhythm and name it, tap it in time, and keep the beat without the click.' }
+    { id: 'ear', name: 'Ear', short: 'Ear', intro: 'Hear it, name it, find it on the guitar.' },
+    { id: 'neck', name: 'Neck', short: 'Neck', intro: 'Find notes, triads and shapes without counting frets.' },
+    { id: 'keys', name: 'Keys and progressions', short: 'Keys', intro: 'Recall keys and chord numbers without working them out.' },
+    { id: 'rhythm', name: 'Rhythm', short: 'Rhythm', intro: 'Hear a rhythm and name it, tap it in time, and keep the beat without the click.' }
   ];
+  // The submenu of Train, as in the Library: Today (the page with the day's goal), the four tracks, and Progress.
+  function trainNav(current) {
+    const nav = GT.subnav('Train', null, [{ href: '#/train', text: 'Today', current: current === 'today' }]
+      .concat(TRACKS.map(t => ({ href: `#/train/${t.id}`, text: t.short, current: current === t.id })),
+        { href: '#/progress', text: 'Progress', current: current === 'progress', apart: true }));
+    nav.classList.add('page-subnav');
+    return nav;
+  }
+  GT.trainNav = trainNav;
   const list = [];
   const byId = {};
   const drills = { add(def) { list.push(def); byId[def.id] = def; }, list, byId };
@@ -53,18 +62,55 @@
     const minutes = Math.round(day.ms / 60000);
     const streak = P.streak();
     const last = byId[store.get('lastDrill')] || byId['ear-intervals'];
-    const track = (name, intro, rows) => h('section', { class: 'track' },
-      h('h2', null, name), h('p', { class: 'track-intro' }, intro), h('div', { class: 'drill-list' }, rows));
+    const next = nextUp(last);
     main.append(
+      trainNav('today'),
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Train'), h('p', null, 'Short drills you repeat each day. The site asks again what you miss or answer slowly, and adds new material when you are ready.'))),
       h('div', { class: 'today' },
         h('div', { class: 'today-goal' }, h('p', null, h('b', null, `${minutes} of ${goal} min`), h('span', null, 'today'), h('a', { class: 'today-progress', href: '#/progress' }, 'Your progress')), goalNeck(minutes, goal)),
         h('div', { class: 'stat' }, h('b', null, day.q), h('span', null, 'answers today')),
         h('div', { class: 'stat' }, h('b', null, streak), h('span', null, streak === 1 ? 'day in a row' : 'days in a row')),
         h('a', { class: 'btn btn-primary btn-big', href: '#/train/' + last.id }, day.q ? `Continue: ${last.title}` : `Start: ${last.title}`)),
-      // Three columns on a wide screen: Ear, Neck, and Keys with Rhythm. The tools have their own tab.
-      h('div', { class: 'tracks' }, [['ear'], ['neck'], ['keys', 'rhythm']].map(ids => h('div', { class: 'track-col' },
-        ids.map(id => TRACKS.find(t => t.id === id)).map(t => track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow)))))));
+      // Today shows what to do now. The full lists of drills are on the track pages.
+      next.length ? h('section', { class: 'today-section' }, h('h2', null, 'Next up'),
+        h('p', { class: 'track-intro' }, 'Picked for today: answers you missed come first, then drills you left for a while, then something new.'),
+        h('div', { class: 'drill-list next-list', style: `--n:${next.length}` }, next.map(([d, why]) => drillRow(d, why)))) : null,
+      h('section', { class: 'today-section' }, h('h2', null, 'All drills'),
+        h('div', { class: 'track-cards' }, TRACKS.map(trackCard))));
+  }
+  // Up to three drills for today, other than the one the Continue button opens. Two from the drills you started
+  // (the most answers missed last time first, then the ones you left longest ago), then a new one from each track.
+  function nextUp(skip) {
+    const DAY = 86400000;
+    const rows = list.filter(d => d !== skip).map(d => {
+      const config = loadConfig(d), data = P.stats(statsId(d, config));
+      let seen = 0, again = 0, last = 0;
+      for (const item of d.pool(config)) {
+        const s = data[item]; if (!s) continue;
+        seen++; if (s.box === 0) again++; last = Math.max(last, s.last || 0);
+      }
+      return { d, seen, again, days: last ? Math.floor((Date.now() - last) / DAY) : 0 };
+    });
+    const started = rows.filter(r => r.seen);
+    const old = started.filter(r => r.again).sort((x, y) => y.again - x.again).map(r => [r.d, `Missed last time: ${r.again}`])
+      .concat(started.filter(r => !r.again && r.days >= 2).sort((x, y) => y.days - x.days).map(r => [r.d, `Last practiced ${r.days} days ago`]));
+    const fresh = TRACKS.map(t => rows.find(r => r.d.track === t.id && !r.seen)).filter(Boolean).map(r => [r.d, 'New']);
+    return old.slice(0, 2).concat(fresh, old.slice(2)).slice(0, 3);
+  }
+  // A card for each track on Today: how many of its drills you started, and how much of it is solid.
+  function trackCard(t) {
+    const ds = list.filter(d => d.track === t.id);
+    let solid = 0, total = 0, started = 0;
+    ds.forEach(d => { const c = loadConfig(d), s = P.summary(statsId(d, c), d.pool(c)); solid += s.mastered; total += s.total; if (s.n) started++; });
+    return h('a', { class: 'drill-row track-card', href: `#/train/${t.id}` }, h('h3', null, t.name),
+      h('div', { class: 'meter' }, h('div', { class: 'meter-bar' }, h('i', { style: `width:${total ? solid / total * 100 : 0}%` }))),
+      h('p', null, `${started} of ${ds.length} drills started`));
+  }
+  // A track on its own page: its drills, as the Library has a page for each topic.
+  function trackPage(main, t) {
+    main.append(trainNav(t.id),
+      h('div', { class: 'page-head' }, h('div', null, h('h1', null, t.name), h('p', null, t.intro))),
+      h('div', { class: 'drill-list track-page' }, list.filter(d => d.track === t.id).map(d => drillRow(d))));
   }
   // Today's goal as a short neck: one fret for each minute of the goal, one dot for each minute done.
   function goalNeck(minutes, goal) {
@@ -76,11 +122,12 @@
     for (let m = 0; m < Math.min(minutes, goal); m++) el('circle', { cx: m * W + W / 2, cy: H / 2, r: 9, class: 'goal-dot' }, svg);
     return svg;
   }
-  function drillRow(d) {
+  // why: the reason Next up picked the drill.
+  function drillRow(d, why) {
     const config = loadConfig(d);
     const s = P.summary(statsId(d, config), d.pool(config));
     return h('a', { class: 'drill-row', href: '#/train/' + d.id },
-      h('h3', null, d.title), h('p', null, d.blurb),
+      h('h3', null, d.title), why ? h('p', { class: 'drill-why' }, why) : null, h('p', null, d.blurb),
       s.n ? h('div', { class: 'meter' }, h('div', { class: 'meter-bar' }, h('i', { style: `width:${s.mastered / s.total * 100}%` })),
         `${Math.round(s.accuracy * 100)}% right, ${s.mastered} of ${s.total} solid`) : null);
   }
@@ -237,6 +284,9 @@
     function submit(value) {
       if (session.answered || !session.q) return;
       session.answered = true;
+      // The key that gave this answer (Enter or Space on a fret) must not also go on to the next question.
+      session.justAnswered = true;
+      setTimeout(() => { session.justAnswered = false; }, 0);
       spent();
       const q = session.q;
       const correct = d.check(q, value);
@@ -349,7 +399,7 @@
       begin(only, Math.min(20, Math.max(6, only.length * 2)));
     }
     function onKey(e) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (session.justAnswered || e.metaKey || e.ctrlKey || e.altKey) return;
       const tag = (document.activeElement && document.activeElement.tagName) || '';
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(tag) || settingsPanel.contains(document.activeElement)) return;
       if (session.done) return;
@@ -388,7 +438,7 @@
       feedback);
     stage.append(promptBox);
     main.append(h('div', { class: 'drill' },
-      h('div', { class: 'crumb' }, h('a', { href: '#/train' }, 'Train'), ` / ${TRACKS.find(t => t.id === d.track).name}`),
+      trainNav(d.track),
       h('div', { class: 'drill-bar' }, h('h1', null, d.title), h('div', { class: 'row' }, statLine, settingsBtn)),
       settingsPanel,
       stage,
@@ -409,8 +459,8 @@
   GT.route('train', {
     render(main, parts) {
       if (cleanup) { cleanup(); cleanup = null; }
-      const d = byId[parts[0]];
-      if (d) cleanup = run(main, d); else hub(main);
+      const d = byId[parts[0]], track = TRACKS.find(t => t.id === parts[0]);
+      if (d) cleanup = run(main, d); else if (track) trackPage(main, track); else hub(main);
     },
     leave() { if (cleanup) { cleanup(); cleanup = null; } },
     resize() { if (redraw) redraw(); }

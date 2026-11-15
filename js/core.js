@@ -210,6 +210,31 @@
   // The version of the site: major.minor.patch. The first number goes up for a redesign, the middle one for new
   // features, the last one for fixes only. Give VERSION in sw.js the same version when you publish new files.
   // Each version has a release with its notes on GitHub, tagged v and the version.
-  GT.version = '1.13.0';
-  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented });
+  GT.version = '1.14.0';
+  // A submenu row as in the Library: a round button to the start page of the section (or none), then its pages.
+  // items: [{ href, text, current, apart }]. An item with apart: true stands after a thin line.
+  // The chosen page scrolls to the middle of the row when the row is wider than the screen.
+  function subnav(label, home, items) {
+    const tabs = h('div', { class: 'lib-tabs' }, items.map(it => h('a', { href: it.href, class: it.apart ? 'lib-tool-link' : null, 'aria-current': String(!!it.current) }, it.text)));
+    const nav = h('nav', { class: 'lib-nav', 'aria-label': label },
+      home ? h('a', { href: home.href, class: 'lib-home-link', 'aria-label': home.label, title: home.label, 'aria-current': String(!!home.current) }, GT.drills.icon(home.icon)) : null, tabs);
+    requestAnimationFrame(() => {
+      const chosen = tabs.querySelector('[aria-current="true"]');
+      if (chosen) tabs.scrollLeft += chosen.getBoundingClientRect().left - tabs.getBoundingClientRect().left - (tabs.clientWidth - chosen.offsetWidth) / 2;
+    });
+    fadeEdges(tabs);
+    return nav;
+  }
+  // A row that scrolls sideways fades at the side where more items hide (classes fade-left and fade-right).
+  function fadeEdges(row) {
+    const mark = () => {
+      row.classList.toggle('fade-left', row.scrollLeft > 2);
+      row.classList.toggle('fade-right', row.scrollWidth - row.clientWidth - row.scrollLeft > 2);
+    };
+    row.addEventListener('scroll', mark, { passive: true });
+    if (root.ResizeObserver) new ResizeObserver(mark).observe(row);
+    requestAnimationFrame(mark);
+  }
+
+  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented, subnav, fadeEdges });
 })(window);
