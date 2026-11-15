@@ -69,4 +69,41 @@ eq(R.pulse([0, 0.5, 1, 1.5], 0.5), { drift: 0, spread: 0 }, 'an even pulse');
 ok(R.pulse([0, 0.55, 1.1, 1.65], 0.5).drift < 0, 'slower taps drift below the click');
 eq(R.pulse([0.1, 0.6, 1.1, 1.6], 0.5).drift, 0, 'a fixed delay does not count as drift');
 
+// Your pattern: every grid fills its bar, and a tap puts a stroke in or takes it out.
+for (const g of R.GRIDS) {
+  const p = R.customPattern(g.id, 'xXmb');
+  eq(p.slots.length, R.beatsIn(g.sig) * g.sub, `${g.id} slots`);
+  eq(R.strokes(p).filter((s, i) => i % g.sub === 0).every(s => s.dir === 'D'), true, `${g.id} beats start down`);
+}
+eq(R.customPattern('6-8', 'x.x').slots, 'x.x...', 'short slots are filled with ghost strokes');
+eq(R.customPattern('3-8', 'xxxxxxxxxx').slots, 'xxxxxx', 'long slots are cut');
+eq(R.customPattern('4-8', 'x', true).swing, true); eq(R.customPattern('6-8', 'x', true).swing, false, '6/8 does not swing');
+eq(R.paint('.', 'strum'), 'x'); eq(R.paint('x', 'strum'), '.'); eq(R.paint('x', 'chuck'), 'm'); eq(R.paint('M', 'chuck'), 'm');
+eq(R.gridOf(R.patternById('six-eight')).id, '6-8'); eq(R.gridOf(R.patternById('funk')).id, '4-16');
+
+// A pattern as notes: the bar fills its meter, its notes start where the strokes sound, and a tie never starts
+// a sound. Random patterns in every grid too.
+eq(R.patternBar(R.patternById('d-du-udu')).bar, 'q e e~ e e e e', 'D – D U – U D U as notes');
+eq(R.patternBar(R.patternById('offbeats')).bar, 'er e er e er e er e', 'short chords leave rests');
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const randomPatterns = R.GRIDS.flatMap(g => Array.from({ length: 200 }, () => R.customPattern(g.id, Array.from({ length: 16 }, () => 'x.mb.X'[Math.floor(rand() * 6)]).join(''))));
+for (const p of R.PATTERNS.concat(randomPatterns)) {
+  const { bar, at } = R.patternBar(p), ev = R.parse(bar);
+  eq(R.length(ev), R.barTicks(p.sig), `${p.id} ${p.slots} fills the bar: ${bar}`);
+  const step = R.beatTicks(p.sig) / p.sub, sounding = [...p.slots].map((c, i) => c === '.' ? -1 : i * step).filter(t => t >= 0);
+  eq(R.onsets(ev), sounding, `${p.id} ${p.slots} starts where it sounds: ${bar}`);
+  for (const [slot, k] of Object.entries(at)) eq(R.onsets(ev.slice(0, k + 1)).pop(), slot * step, `${p.id} ${p.slots} lights slot ${slot}`);
+}
+
+// Drums: the kick on beat 1, a hi-hat on every beat, and every hit inside the bar.
+for (const g of R.GRIDS) {
+  const d = R.drumBeat(g.sig, g.sub);
+  eq(d.find(x => x.tick === 0 && x.kind === 'kick') !== undefined, true, `${g.id} kick on 1`);
+  for (let b = 0; b < R.beatsIn(g.sig); b++) eq(d.some(x => x.kind === 'hat' && x.tick === b * R.beatTicks(g.sig)), true, `${g.id} hat on beat ${b + 1}`);
+  eq(d.every(x => x.tick >= 0 && x.tick < R.barTicks(g.sig)), true, `${g.id} drums inside the bar`);
+}
+eq(R.drumBeat([4, 4], 2).filter(x => x.kind === 'snare').map(x => x.tick), [12, 36], 'snare on 2 and 4');
+eq(R.drumBeat([6, 8], 3).filter(x => x.kind === 'snare').map(x => x.tick), [18], '6/8: snare on 4');
+
 console.log(`rhythm: ${checks} checks passed`);

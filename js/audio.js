@@ -347,7 +347,7 @@
   // o: { bpm, beats (in a bar), barSeconds, bars (how many; 0 loops), countIn (clicks before), clicks (a click on
   //      each beat), events(bar) → [{ t (seconds into the bar), sound, dir, accent, dur, midis, step }],
   //      onStep(step, bar), onEnd() }
-  // sound is 'strum', 'chuck', 'bass', 'tone' or 'none' (a ghost stroke: only onStep runs).
+  // sound is 'strum', 'chuck', 'bass', 'tone', a drum ('kick', 'snare', 'hat') or 'none' (a ghost stroke: only onStep runs).
   // It returns the audio time at which bar 0 starts, so a drill can compare taps with it.
   const rhythm = { o: null, bar: 0, next: 0, timer: null, nodes: new Set(), waits: new Set() };
   function noiseHit(at, gainValue, freqValue, len, bag) {
@@ -366,6 +366,7 @@
     const play = voice === 'soft' ? playSoft : playPluck;
     if (ev.sound === 'bass') { play(ev.midis[0], at, ev.dur, ev.accent ? 0.42 : 0.32, bag); return; }
     if (ev.sound === 'tone') { playSoft(ev.midis[0], at, ev.dur, ev.accent ? 0.5 : 0.38, bag); return; }
+    if (ev.sound === 'kick' || ev.sound === 'snare' || ev.sound === 'hat') { drum(ev.sound, at, bag); return; }
     const list = ev.dir === 'U' ? ev.midis.slice(-4).reverse() : ev.midis;
     if (ev.sound === 'chuck') {
       noiseHit(at, ev.accent ? 0.35 : 0.22, 2400, 0.05, bag);

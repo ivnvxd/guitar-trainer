@@ -38,7 +38,7 @@ Three tools sit beside the topics:
 - Scales for chords takes the chords of a song and lists the scales that hold every note of them. It loops the chords so you can play over them. When no scale fits, as over a blues, it lists the scales that miss the fewest notes.
 - Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning. The string you play lights up, a tuned string gets a check mark, and a bar shows that the microphone hears you.
 
-A seven-note scale shows its positions in two ways: as vertical boxes of 4 or 5 frets, or as shapes with three notes on each string. A box is a pentatonic box with the other notes of the scale added. A position that does not fit the frets shown stops at the nut or the last fret. A picked position also shows as tab. A second scale on the same root can show on the same neck, to compare them.
+A seven-note scale shows its positions in two ways: as vertical boxes of 4 or 5 frets, or as shapes with three notes on each string. A box is a pentatonic box with the other notes of the scale added, some of them one fret outside it, as in the CAGED scale shapes. A position that does not fit the frets shown stops at the nut or the last fret. A picked position also shows as tab. A second scale on the same root can show on the same neck, to compare them.
 
 A chord page has:
 
@@ -65,8 +65,8 @@ On the Triads page a line also joins the three notes of each shape.
 
 The Rhythm topic has two parts:
 
-- Strumming: 15 patterns on a grid that counts "1 & 2 &". Arrows show down and up strokes, faint arrows the ghost strokes, × the muted strums and > the accents. A pattern loops with two open chords of your choice, one bar each, after one bar of clicks. You set the tempo, swing and a click.
-- Counting: lessons on beats and bars, eighths, rests, dots and ties, sixteenths, triplets, time signatures and swing. Each bar is drawn with its count under it and plays after a count-in.
+- Strumming: 15 patterns on a grid that counts "1 & 2 &". Arrows show down and up strokes, faint arrows the ghost strokes, × the muted strums and > the accents. Under the grid, the same bar shows in rhythm notation. To write your own pattern, pick a stroke and tap the cells of the grid. Your pattern can use 4/4 in eighths, sixteenths or triplets, 3/4 or 6/8. A pattern loops with two to four open chords, one or two bars each, and a list of common progressions fills them. The loop can play the guitar, the guitar with drums, or drums only, so that you strum it yourself. You set the tempo, swing and a click.
+- Counting: lessons on beats and bars, eighths, rests, dots and ties, sixteenths, triplets, time signatures and swing. Each bar is drawn with its count under it, and Play repeats it until you stop it.
 
 On the circle of fifths a tap turns the circle to a key. Touch and hold a cell, or right-click it, to hear its chord.
 
@@ -86,7 +86,7 @@ Train has four tracks and two tools:
 - Rhythm: name the rhythm you hear, and tap in time. Tap in time has three modes: read a bar and tap it, hear a bar and tap it back, and keep the pulse when the click stops. It measures the delay of your device once, with twelve taps on clicks.
 - Tools: a metronome and one-minute chord changes. The metronome can click between the beats, click on 2 and 4 only, leave out whole bars or single beats, and raise the tempo every four bars.
 
-The daily goal counts real practice time: the time a drill page is in use, and the time a metronome, a play-along loop or a strumming pattern runs. Settings shows the version of the site in use.
+The daily goal counts real practice time: the time a drill page is in use, and the time a metronome, a play-along loop or a strumming pattern runs. Settings can turn off the count-in, the bar of clicks before a rhythm starts. Settings also shows the version of the site in use.
 
 Each drill asks again what you miss or answer slowly. In the ear drills you choose the set you start with. When you answer about 85 percent right, the drill adds the next group to your set.
 

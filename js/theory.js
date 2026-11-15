@@ -567,21 +567,60 @@
     return result.sort((a, b) => a.low - b.low);
   }
 
+  // The notes of some tones (a scale or a chord) in one pentatonic box p, as one run from low to high: each pitch once.
+  // A pitch between the frets of the box goes there. A pitch that the box frets miss (a one-fret stretch) goes on the
+  // string where the hand spans fewer frets: the A-shape C major box plays 3 5 6 on the B string, the G-shape 4 5 7
+  // on the G string. Below the lowest box note and above the highest one, only the frets of the box count.
+  function fillBox(p, tones, rootPc, tuning, maxFret) {
+    const toneOf = midi => tones.find(t => mod(rootPc + t.semi) === mod(midi));
+    const midis = p.notes.map(n => n.midi), bottom = Math.min(...midis), top = Math.max(...midis);
+    // A box cut at the nut or the last fret takes the frets up to that end.
+    const low = p.partial && p.low <= 2 ? 0 : p.low, high = p.partial && p.high >= maxFret - 2 ? maxFret : p.high;
+    const notes = [];
+    for (let s = 0; s < tuning.length; s++) for (let f = low; f <= high; f++) {
+      const midi = tuning[s] + f, t = toneOf(midi);
+      if (!t || notes.some(n => n.midi === midi)) continue;
+      // A pitch inside the box on two strings: keep the place of the pentatonic note, else the first string.
+      const own = p.notes.find(n => n.midi === midi);
+      if (own && own.string !== s) continue;
+      if ((midi < bottom && s !== 0) || (midi > top && s !== tuning.length - 1)) continue;
+      notes.push({ string: s, fret: f, midi, label: t.label });
+    }
+    for (let midi = bottom + 1; midi < top; midi++) {
+      const t = toneOf(midi);
+      if (!t || notes.some(n => n.midi === midi)) continue;
+      // The best place is inside the box, then the one that keeps the box narrow, then the one with the hand narrow on its string.
+      let best = null;
+      const all = notes.map(n => n.fret);
+      for (let s = 0; s < tuning.length; s++) {
+        const f = midi - tuning[s];
+        if (f < 0 || f > maxFret) continue;
+        const out = Math.max(0, low - f, f - high);
+        if (out > 2) continue;
+        const frets = p.notes.filter(n => n.string === s).map(n => n.fret).concat(f);
+        const score = out * 100 + (Math.max(f, ...all) - Math.min(f, ...all)) * 10 + Math.max(...frets) - Math.min(...frets);
+        if (!best || score < best.score) best = { score, note: { string: s, fret: f, midi, label: t.label } };
+      }
+      if (best) notes.push(best.note);
+    }
+    notes.sort((a, b) => a.string - b.string || a.fret - b.fret);
+    const frets = notes.map(n => n.fret);
+    return { index: p.index, partial: p.partial, notes, low: Math.min(...frets), high: Math.max(...frets) };
+  }
+
   // Vertical boxes of 4 or 5 frets. A pentatonic scale is its own five boxes. A seven-note scale takes the five boxes
-  // of the pentatonic on its root (major with a 3, else minor) and fills each with every scale note between its frets.
+  // of the pentatonic on its root (major with a 3, else minor) and fills each with the other scale notes, one or two
+  // of them a fret outside the box. A blues scale is its pentatonic boxes with the added note.
+  const BLUES_BASE = { blues: 'minor-pentatonic', 'major-blues': 'major-pentatonic' };
   function boxes(rootName, scale, tuning = STANDARD, maxFret = 24) {
     const size = scale.toneList.length;
     if (size === 5) return positions(rootName, scale, tuning, maxFret);
-    if (size !== 7) return [];
+    if (size !== 7 && !BLUES_BASE[scale.id]) return [];
     const rootPc = pcOf(rootName);
-    const pent = scaleById(scale.toneList.some(t => t.label === '3') ? 'major-pentatonic' : 'minor-pentatonic');
+    const pent = scaleById(BLUES_BASE[scale.id] || (scale.toneList.some(t => t.label === '3') ? 'major-pentatonic' : 'minor-pentatonic'));
     return positions(rootName, pent, tuning, maxFret).map(p => {
-      const notes = [];
-      for (let s = 0; s < tuning.length; s++) for (let f = p.low; f <= p.high; f++) {
-        const t = scale.toneList.find(x => mod(rootPc + x.semi) === mod(tuning[s] + f));
-        if (t) notes.push({ string: s, fret: f, midi: tuning[s] + f, label: t.label });
-      }
-      return { index: p.index, startLabel: notes[0].label, notes, low: p.low, high: p.high };
+      const box = fillBox(p, scale.toneList, rootPc, tuning, maxFret);
+      return Object.assign(box, { startLabel: box.notes[0].label, partial: p.partial });
     });
   }
 
@@ -677,14 +716,7 @@
   function arpeggioBoxes(rootName, chordId, tuning = STANDARD, maxFret = 24) {
     const chord = chordById(chordId), rootPc = pcOf(rootName);
     const pent = scaleById(chord.toneList.some(t => t.label === '3') ? 'major-pentatonic' : 'minor-pentatonic');
-    return positions(rootName, pent, tuning, maxFret).map(p => {
-      const notes = [];
-      for (let s = 0; s < tuning.length; s++) for (let f = p.low; f <= p.high; f++) {
-        const t = chord.toneList.find(x => mod(rootPc + x.semi) === mod(tuning[s] + f));
-        if (t) notes.push({ string: s, fret: f, midi: tuning[s] + f, label: t.label });
-      }
-      return { index: p.index, notes, low: p.low, high: p.high };
-    }).filter(p => p.notes.length);
+    return positions(rootName, pent, tuning, maxFret).map(p => fillBox(p, chord.toneList, rootPc, tuning, maxFret)).filter(p => p.notes.length);
   }
 
   // The frequency of a buffer, or null when it is too quiet or has no clear pitch. Periods from 60 Hz to 1000 Hz.

@@ -96,6 +96,26 @@
     { id: 'funk', name: 'Sixteenths with chucks on 2 and 4', sig: [4, 4], sub: 4, slots: 'x.xxM.x.x.xxM.xx', line: 'Keep the hand moving in sixteenths and hit only the marked strokes. The chucks fall on 2 and 4.' }
   ];
   const patternById = id => PATTERNS.find(p => p.id === id);
+  // The grids of a pattern you write yourself. Triplets and 6/8 start each beat with a down stroke.
+  const GRIDS = [
+    { id: '4-8', name: '4/4 eighths', sig: [4, 4], sub: 2 },
+    { id: '4-16', name: '4/4 sixteenths', sig: [4, 4], sub: 4 },
+    { id: '4-3', name: '4/4 triplets', sig: [4, 4], sub: 3, beat: 'DUD' },
+    { id: '3-8', name: '3/4', sig: [3, 4], sub: 2 },
+    { id: '6-8', name: '6/8', sig: [6, 8], sub: 3, beat: 'DDU' }
+  ];
+  const gridOf = p => GRIDS.find(g => g.sig[0] === p.sig[0] && g.sig[1] === p.sig[1] && g.sub === p.sub) || GRIDS[0];
+  // Your pattern: a grid and its slots. Slots that do not fit the grid are cut, or filled with ghost strokes.
+  // swing: the eighths long-short, for a grid of eighths in 2/4, 3/4 or 4/4.
+  function customPattern(gridId, slots, swing = false) {
+    const g = GRIDS.find(x => x.id === gridId) || GRIDS[0], n = beatsIn(g.sig) * g.sub;
+    const fixed = [...(slots || '')].filter(c => 'xXmMb.'.includes(c)).slice(0, n).join('').padEnd(n, '.');
+    return { id: 'custom', name: 'Your pattern', grid: g.id, sig: g.sig, sub: g.sub, slots: fixed, swing: !!swing && g.sub === 2 && !compound(g.sig),
+      strokes: g.beat ? g.beat.repeat(beatsIn(g.sig)) : undefined, line: 'Your own pattern. The page keeps it in this browser.' };
+  }
+  // A slot after a tap with a stroke picked: the stroke goes in, or comes out when it is there already.
+  const STROKE_SLOT = { strum: 'x', accent: 'X', chuck: 'm', bass: 'b', miss: '.' };
+  const paint = (slot, stroke) => STROKE_SLOT[stroke] === slot ? '.' : STROKE_SLOT[stroke];
   // The strokes of a pattern, slot by slot: what the hand does, which way it goes, and where it is in ticks.
   function strokes(p) {
     const step = beatTicks(p.sig) / p.sub;
@@ -106,6 +126,54 @@
       tick: i * step,
       label: count(i * step, p.sig)
     }));
+  }
+
+  // A pattern as one bar of rhythm notation: "q e e~ e e e e" for D – D U – U D U. A strum rings until the next one
+  // that sounds, and a ghost stroke before the first one is a rest. A note that crosses a beat is tied over it.
+  // A short pattern (offbeats) stops each chord at once: the rest of its slot time is a rest.
+  // at: for each slot that sounds, the index of its note in the bar, to light it as it plays.
+  function patternBar(p) {
+    const n = p.slots.length, perBeat = p.sub, comp = compound(p.sig);
+    const sounds = [...p.slots].map((c, i) => c !== '.' ? i : -1).filter(i => i >= 0);
+    const parts = [];
+    if (!sounds.length) parts.push({ from: 0, len: n, rest: true });
+    else if (sounds[0] > 0) parts.push({ from: 0, len: sounds[0], rest: true });
+    sounds.forEach((i, k) => {
+      const end = k + 1 < sounds.length ? sounds[k + 1] : n;
+      if (p.short) { parts.push({ from: i, len: 1, slot: i }); if (end > i + 1) parts.push({ from: i + 1, len: end - i - 1, rest: true }); }
+      else parts.push({ from: i, len: end - i, slot: i });
+    });
+    // The value of a piece inside one beat, by its length in slots.
+    const value = len => perBeat === 4 ? ['s', 'e', 'e.', 'q'][len - 1] : perBeat === 2 ? ['e', 'q'][len - 1]
+      : comp ? ['e', 'q', 'q.'][len - 1] : null;
+    const toks = [], at = {};
+    for (const part of parts) {
+      const pieces = [];
+      for (let a = part.from; a < part.from + part.len;) {
+        const b = Math.min(part.from + part.len, (Math.floor(a / perBeat) + 1) * perBeat);
+        const v = value(b - a);
+        // Triplets in a simple meter: a whole beat is a quarter, else each triplet eighth is its own note, tied.
+        if (v) pieces.push(v);
+        else if (b - a === perBeat) pieces.push('q');
+        else for (let k = a; k < b; k++) pieces.push('t');
+        a = b;
+      }
+      if (part.slot !== undefined) at[part.slot] = toks.length;
+      pieces.forEach((v, k) => toks.push(v + (part.rest ? 'r' : k < pieces.length - 1 ? '~' : '')));
+    }
+    return { bar: toks.join(' '), at };
+  }
+
+  // A simple drum beat for a bar: the kick on the strong beats, the snare on the others, a hi-hat on every eighth
+  // (on the first and last eighth of each beat for triplets, for a shuffle). In 3/4 the kick takes beat 1 only.
+  function drumBeat(sig, sub) {
+    const beats = beatsIn(sig), beat = beatTicks(sig), out = [];
+    for (let b = 0; b < beats; b++) {
+      out.push({ tick: b * beat, kind: beats === 3 ? (b ? 'snare' : 'kick') : b % 2 ? 'snare' : 'kick' });
+      const hats = compound(sig) ? [0, 6, 12] : sub === 3 ? [0, 8] : [0, 6];
+      for (const t of hats) out.push({ tick: b * beat + t, kind: 'hat' });
+    }
+    return out;
   }
 
   // ---------- metronome ----------
@@ -294,14 +362,18 @@
 
   // A strumming pattern as a grid: the count above, the stroke below. Down and up arrows for strums, a cross for
   // a chuck, B for the bass note, a faint arrow for a ghost stroke, and > over an accent.
-  function grid(p, h) {
+  // With onTap, each cell is a button that calls onTap(slot index).
+  const STROKE_WORD = { hit: 'strum', chuck: 'chuck', bass: 'bass note', ghost: 'miss' };
+  function grid(p, h, onTap) {
     const st = strokes(p);
     const arrow = dir => dir === 'U' ? '↑' : '↓';
-    const cells = st.map((s, i) => h('div', { class: `strum-cell is-${s.kind}${s.accent ? ' is-accent' : ''}${i % p.sub === 0 ? ' is-beat' : ''}`, dataset: { i } },
+    const cells = st.map((s, i) => h(onTap ? 'button' : 'div', { class: `strum-cell is-${s.kind}${s.accent ? ' is-accent' : ''}${i % p.sub === 0 ? ' is-beat' : ''}`, dataset: { i },
+      type: onTap ? 'button' : null, onclick: onTap ? () => onTap(i) : null,
+      'aria-label': onTap ? `${s.label || 'between'}: ${s.accent ? 'accented ' : ''}${s.kind === 'hit' ? (s.dir === 'U' ? 'up ' : 'down ') : ''}${STROKE_WORD[s.kind]}` : null },
       h('span', { class: 'strum-acc', 'aria-hidden': 'true' }, s.accent ? '>' : ''),
       h('b', { class: 'strum-stroke' }, s.kind === 'bass' ? 'B' : s.kind === 'chuck' ? '×' : arrow(s.dir)),
       h('span', { class: 'strum-count' }, s.label)));
-    const box = h('div', { class: 'strum-grid', style: `--n:${st.length}`, role: 'img', 'aria-label': `${p.name}: ${st.map(s => s.kind === 'ghost' ? 'miss' : s.kind === 'bass' ? 'bass' : s.kind === 'chuck' ? 'chuck' : s.dir === 'U' ? 'up' : 'down').join(', ')}` }, cells);
+    const box = h('div', { class: 'strum-grid', style: `--n:${st.length}`, role: onTap ? 'group' : 'img', 'aria-label': `${p.name}: ${st.map(s => s.kind === 'ghost' ? 'miss' : s.kind === 'bass' ? 'bass' : s.kind === 'chuck' ? 'chuck' : s.dir === 'U' ? 'up' : 'down').join(', ')}` }, cells);
     box.light = i => cells.forEach((c, k) => c.classList.toggle('is-on', k === i));
     return box;
   }
@@ -309,7 +381,7 @@
   const rhythm = {
     VALUES, VALUE_NAMES, PATTERNS, STAGES, ALL_BARS, LESSONS,
     parse, barTicks, compound, beatTicks, beatsIn, length, onsets, seconds, barSeconds, toneEvents, count,
-    patternById, strokes, clickPlan, rampBpm, scoreTaps, calibrate, pulse, notation, grid
+    patternById, GRIDS, gridOf, customPattern, paint, patternBar, drumBeat, strokes, clickPlan, rampBpm, scoreTaps, calibrate, pulse, notation, grid
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = rhythm;
   else { root.GT = root.GT || {}; root.GT.rhythm = rhythm; }

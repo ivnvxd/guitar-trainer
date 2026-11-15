@@ -48,6 +48,8 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 42. Rhythm in the Library: strumming patterns that loop with chords, and counting lessons with notation.
 43. Rhythm drills: name the rhythm, and tap in time (read, tap back, keep the pulse) with a delay calibration. Metronome gaps and a rising tempo.
 44. The daily goal counts real practice time. On the circle a tap turns and a hold plays.
+45. Strumming: write your own pattern on the grid, two to four chords with common progressions, drums, and the pattern in notes. Counting bars loop. A count-in switch.
+46. Scale and arpeggio boxes take a one-fret stretch, so no box misses a note.
 
 ## Next
 

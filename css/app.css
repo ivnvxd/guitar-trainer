@@ -150,7 +150,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
 body {
   margin: 0;
   min-width: 320px;
@@ -259,7 +259,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 /* Types: the common ones as chips, the rest in a list that fills the row. */
 .types { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
 .types .chip { min-height: 38px; padding: 5px 14px; }
-.types .more { flex: 1 1 170px; max-width: 320px; min-height: 38px; border-radius: 999px; font-size: 14px; padding: 5px 34px 5px 14px; color: var(--muted); border-color: var(--line); }
+.types .more { flex: 1 1 170px; min-width: 0; max-width: 320px; min-height: 38px; border-radius: 999px; font-size: 14px; padding: 5px 34px 5px 14px; color: var(--muted); border-color: var(--line); }
 .types .more.is-on { border-color: var(--accent); background-color: var(--accent-soft-2); color: var(--text); }
 /* A grid of short chips: 13 intervals or 12 notes in even rows. */
 .grid-chips { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 52px)); gap: 5px; flex: 1; min-width: 0; }
@@ -999,6 +999,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 @media (prefers-reduced-motion: reduce) { .iv-shape.is-new { animation: none; } }
 
 .iv-readout { display: grid; gap: 2px; justify-items: center; text-align: center; margin: 8px 0 0; min-height: 3.2em; }
+.iv-actions { justify-content: center; gap: 10px; margin-top: 8px; }
 .iv-readout b { font-size: 19px; font-weight: 750; letter-spacing: -.01em; }
 .iv-readout span { color: var(--muted); font-size: 14px; }
 .circle.is-intervals .is-key path { fill: var(--accent); }
@@ -1068,11 +1069,24 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .strum-stage { padding: 14px 10px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
 .strum-grid { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
 .strum-cell { display: grid; justify-items: center; gap: 2px; padding: 4px 0 6px; border-radius: 8px; transition: background-color .08s; }
+button.strum-cell { font: inherit; color: inherit; background: none; border: 0; margin: 0; cursor: pointer; touch-action: manipulation; }
+button.strum-cell:hover { background: var(--surface-2); }
+.stroke-tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+.stroke-tool { display: grid; justify-items: center; gap: 0; padding: 5px 2px 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font: 600 12.5px/1.2 var(--font); cursor: pointer; touch-action: manipulation; }
+.stroke-tool b { font-size: 18px; line-height: 1.1; color: var(--text); }
+.stroke-tool.is-chuck b { color: var(--seventh); } .stroke-tool.is-bass b { color: var(--root); } .stroke-tool.is-accent b { color: var(--accent); } .stroke-tool.is-miss b { color: var(--line-hover); }
+.stroke-tool[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft-2); color: var(--text); }
 .strum-cell.is-beat { box-shadow: inset 1px 0 0 var(--line); }
 .strum-cell:first-child { box-shadow: none; }
 .strum-acc { min-height: 1.1em; font-size: 14px; font-weight: 800; color: var(--accent-text); line-height: 1; }
 .strum-stroke { font-size: 28px; line-height: 1; font-weight: 800; color: var(--text); }
 .strum-grid[style*="--n:16"] .strum-stroke { font-size: 20px; }
+/* Sixteenths on a phone: two rows of two beats, so each cell stays big enough to tap. */
+@media (max-width: 560px) {
+  .strum-grid[style*="--n:16"] { grid-template-columns: repeat(8, minmax(0, 1fr)); row-gap: 8px; }
+  .strum-grid[style*="--n:16"] .strum-cell:nth-child(9) { box-shadow: none; }
+  .strum-grid[style*="--n:16"] .strum-stroke { font-size: 24px; }
+}
 .strum-cell.is-ghost .strum-stroke { color: var(--line-hover); font-weight: 400; }
 .strum-cell.is-chuck .strum-stroke { color: var(--seventh); }
 .strum-cell.is-bass .strum-stroke { color: var(--root); font-size: 22px; }
@@ -1080,11 +1094,20 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .strum-count { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .strum-cell.is-beat .strum-count { color: var(--text); }
 .strum-cell.is-on { background: var(--accent-soft-2); }
-.strum-chords { display: flex; justify-content: center; gap: 14px; margin-top: 8px; color: var(--muted); font-size: 14px; }
-.strum-chord.is-now b { color: var(--accent-text); }
+.strum-notes { margin: 6px auto 0; max-width: 520px; }
+.strum-chords { display: flex; justify-content: center; align-items: baseline; gap: 16px; margin-top: 8px; color: var(--muted); font-size: 14px; }
+.strum-chords b { font-size: 16px; color: var(--muted); transition: color .08s; }
+.strum-chords b.is-now { color: var(--accent-text); }
 .strum-chords-pick { gap: 8px; flex-wrap: nowrap; }
 .strum-select { min-width: 0; width: auto; }
-.strum-shapes { display: grid; grid-template-columns: repeat(2, minmax(0, 150px)); gap: 10px; }
+.strum-chords-edit { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; max-width: 420px; min-width: 0; }
+.strum-chord-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.strum-chord-grid > select.more { width: 100%; min-width: 0; max-width: none; flex: none; padding-left: 9px; padding-right: 20px; background-position: right 4px center; background-size: 14px; }
+.strum-prog { display: flex; gap: 8px; align-items: center; }
+.strum-prog > select.more { flex: 1 1 0; width: auto; min-width: 0; max-width: none; }
+.strum-prog > :not(select) { flex: none; flex-wrap: nowrap; white-space: nowrap; }
+.strum-shapes { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 150px)); gap: 10px; }
+@media (max-width: 560px) { .strum-shapes[style*="--n:4"] { grid-template-columns: repeat(2, minmax(0, 150px)); } }
 .strum-shapes .card { display: grid; gap: 6px; padding: 10px; }
 .thumb-strum { width: 100%; height: auto; }
 .thumb-strum line, .thumb-strum path { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }

@@ -14,20 +14,21 @@
   const stageNames = ids => ids.map(id => R.STAGES.find(s => s.id === id).name.toLowerCase()).join(', ');
   const stagePick = (c, set) => D.pickset('Rhythms', R.STAGES.map(s => ({ value: s.id, main: s.name })), c.set, v => set({ set: v }));
   const tempoPick = (c, set) => D.field('Tempo', GT.segmented('Tempo', [[60, '60'], [72, '72'], [90, '90']], c.tempo, v => set({ tempo: v })));
-  // One bar of held tones after one bar of clicks. The clicks go on under the bar.
+  // One bar of held tones after one bar of clicks (the count-in of Settings). The clicks go on under the bar.
+  const countIn = () => settings.countIn === false ? 0 : 4;
   function playBar(bar, bpm, onEnd) {
     const events = R.toneEvents(R.parse(bar), bpm, SIG);
-    return A.startRhythm({ beats: 4, barSeconds: R.barSeconds(bpm, SIG), bars: 1, countIn: 4, clicks: true, events: () => events, onEnd });
+    return A.startRhythm({ beats: 4, barSeconds: R.barSeconds(bpm, SIG), bars: 1, countIn: countIn(), clicks: true, events: () => events, onEnd });
   }
 
   // ---------- name the rhythm ----------
   D.add({
     id: 'rhythm-name', track: 'rhythm',
     title: 'Name the rhythm',
-    blurb: 'Hear one bar after a count-in. Pick the rhythm you heard.',
+    blurb: 'Hear one bar of rhythm. Pick the rhythm you heard.',
     hint: 'Count along with the clicks. Listen for where each note starts and how long it rings.',
     help: [
-      'Four clicks count you in. Then one bar plays: each note is a held tone, and the clicks go on under it. Pick the bar you heard. The notes are spaced by their length, so a long note takes more room.',
+      'Four clicks count you in, unless the count-in is off in Settings. Then one bar plays: each note is a held tone, and the clicks go on under it. Pick the bar you heard. The notes are spaced by their length, so a long note takes more room.',
       'Start with whole, half and quarter notes. With automatic mode on, rests, eighths, dotted notes, sixteenths and triplets join when about 85 percent of your answers are right.',
       'After a miss, Compare plays your answer and then the right one.'
     ],
@@ -57,7 +58,7 @@
       A.silence();
       playBar(q.bar, bpm);
       // The answer clock starts after the count-in and the bar.
-      return 8 * 60 / bpm;
+      return (4 + countIn()) * 60 / bpm;
     },
     check: (q, v) => v === q.bar,
     feedback(q, v, correct, ui) {
@@ -174,7 +175,7 @@
       if (!A.rhythmRunning) { tap.running = false; tap.taps = null; }
       ui.noChoices();
       if (q.mode !== 'pulse' && settings.tapOffset === undefined) { calibrate(ui, () => this.render(q, ui)); return; }
-      const say = h('p', { class: 'tap-say', 'aria-live': 'polite' }, 'Press Start, or Space. One bar of clicks counts you in.');
+      const say = h('p', { class: 'tap-say', 'aria-live': 'polite' }, 'Press Start, or Space. Clicks give you the tempo first.');
       q.say = t => { say.textContent = t; };
       ui.title(q.mode === 'read' ? 'Tap this rhythm' : q.mode === 'echo' ? 'Listen, then tap it back' : `Keep the pulse at ${q.bpm}`);
       ui.sub(q.mode === 'read' ? 'Tap each note while the clicks go on.' : q.mode === 'echo' ? 'The bar plays once. Tap it in the bar after it, with the clicks.' : 'Tap every beat. The click stops after two bars: keep going for two more.');
@@ -214,10 +215,10 @@
       } else {
         q.say('Listen…');
         const tones = R.toneEvents(R.parse(q.bar), bpm, SIG);
-        runRound({ beats: 4, barSeconds: barSec, bars: 2, countIn: 4, clicks: true, events: n => n === 0 ? tones : [] },
+        runRound({ beats: 4, barSeconds: barSec, bars: 2, countIn: countIn(), clicks: true, events: n => n === 0 ? tones : [] },
           start => ons.map(t => start + barSec + t),
           (expected, taps, barStart) => finish(R.scoreTaps(expected, taps.filter(t => t >= barStart + barSec - 0.15), 0.12)));
-        setTimeout(() => q.mode === 'echo' && tap.running && q.say('Now tap it back.'), (8 * beat + 0.12) * 1000);
+        setTimeout(() => q.mode === 'echo' && tap.running && q.say('Now tap it back.'), ((4 + countIn()) * beat + 0.12) * 1000);
       }
       return 0;
     },

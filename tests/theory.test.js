@@ -168,6 +168,34 @@ for (const root of T.ROOTS) for (const scale of T.SCALES.filter(s => s.toneList.
     }
   }
 }
+// Every box is one run of the scale (or chord) from its lowest note to its highest: no note missing, none twice.
+// C minor box 5 needs the ♭6 one fret above the box on the B string (frets 5-9), as in the A-shape major box.
+for (const maxFret of [24, 15, 12]) for (const root of T.ROOTS) {
+  const lists = T.SCALES.filter(s => s.toneList.length === 7 || ['blues', 'major-blues'].includes(s.id)).map(s => [s.id, s.toneList, T.boxes(root, s, T.STANDARD, maxFret)])
+    .concat(T.CHORDS.map(c => ['arpeggio ' + c.id, c.toneList, T.arpeggioBoxes(root, c.id, T.STANDARD, maxFret)]));
+  for (const [what, tones, list] of lists) {
+    const pcs = new Set(tones.map(t => T.mod(T.pcOf(root) + t.semi)));
+    for (const b of list) {
+      const m = b.notes.map(n => n.midi).sort((x, y) => x - y);
+      ok(m.every((x, i) => !i || x !== m[i - 1]), `${root} ${what} box ${b.index} has a note twice`);
+      ok(b.high - b.low <= 4, `${root} ${what} box ${b.index} spans ${b.low}-${b.high}`);
+      if (b.partial) continue;
+      for (let x = m[0]; x <= m[m.length - 1]; x++) ok(!pcs.has(T.mod(x)) || m.includes(x), `${root} ${what} box ${b.index} misses ${x} with ${maxFret} frets`);
+    }
+  }
+}
+{
+  const c5 = T.boxes('C', T.scaleById('minor')).find(b => b.index === 5);
+  eq(`${c5.low}-${c5.high}`, '5-9');
+  ok(c5.notes.some(n => n.string === 4 && n.fret === 9 && n.label === '♭6'), 'C minor box 5 has the ♭6 on the B string');
+}
+// Other tunings: the boxes still come out, each with notes, and every note in the scale.
+for (const t of T.TUNINGS) for (const root of ['C', 'E', 'F♯', 'B♭']) for (const id of ['major', 'minor', 'blues', 'harmonic-minor']) {
+  const scale = T.scaleById(id), pcs = new Set(T.tonesOn(root, scale).map(x => x.pc));
+  const list = T.boxes(root, scale, t.midi, 15);
+  ok(list.length > 0 && list.every(b => b.notes.length && b.notes.every(n => pcs.has(T.mod(n.midi)) && n.fret >= 0 && n.fret <= 15)), `${root} ${id} boxes in ${t.id}`);
+  ok(T.arpeggioBoxes(root, 'maj7', t.midi, 15).every(b => b.notes.length), `${root} maj7 arpeggios in ${t.id}`);
+}
 // G major box 1 is the usual shape around the E-shape G chord: frets 2 to 5.
 const g1 = T.boxes('G', T.scaleById('major')).find(b => b.index === 1);
 eq(`${g1.low}-${g1.high}`, '2-5');
