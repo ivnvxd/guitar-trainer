@@ -1,10 +1,10 @@
 /* Offline cache. Change VERSION when you publish new files, so browsers fetch them again. */
-const VERSION = 'guitar-trainer-10';
+const VERSION = 'guitar-trainer-11';
 const FILES = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest',
   'fonts/geist.woff2',
-  'js/theory.js', 'js/audio.js', 'js/fretboard.js', 'js/core.js', 'js/progress.js', 'js/library.js',
-  'js/train.js', 'js/drills-ear.js', 'js/drills-neck.js', 'js/drills-keys.js', 'js/tools.js', 'js/pages.js', 'js/app.js'
+  'js/theory.js', 'js/rhythm.js', 'js/audio.js', 'js/fretboard.js', 'js/core.js', 'js/progress.js', 'js/library.js',
+  'js/train.js', 'js/drills-ear.js', 'js/drills-neck.js', 'js/drills-keys.js', 'js/drills-rhythm.js', 'js/tools.js', 'js/pages.js', 'js/app.js'
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(VERSION).then(cache => cache.addAll(FILES)).then(() => self.skipWaiting()));

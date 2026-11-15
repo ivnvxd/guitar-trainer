@@ -5,18 +5,40 @@
   const T = GT.theory, A = GT.audio;
   const { h, store } = GT;
 
+  // The metronome. Besides the tempo and the beats it has practice modes for your time: clicks between the beats,
+  // a click on 2 and 4 only, bars without a click, random silent beats and a tempo that rises by itself.
   function metronome(main) {
-    const saved = Object.assign({ bpm: 80, beats: 4 }, store.get('metronome', {}));
+    const saved = Object.assign({ bpm: 80, beats: 4, sub: 1, backbeat: false, gap: 'off', mute: 0, ramp: 0, accent: true }, store.get('metronome', {}));
+    const R = GT.rhythm, D = GT.drills;
+    const GAPS = { off: null, '3-1': [3, 1], '2-2': [2, 2], '1-3': [1, 3] };
+    const opts = () => ({
+      sub: saved.sub,
+      plan: bar => R.clickPlan(bar, { beats: saved.beats, sub: saved.sub, accent: saved.accent, backbeat: saved.backbeat, gap: GAPS[saved.gap], mute: saved.mute }),
+      ramp: saved.ramp ? { step: saved.ramp, every: 4, max: 220 } : null,
+      onBar: (bar, bpm) => { bpmOut.textContent = bpm; }
+    });
     const dots = h('div', { class: 'beats', 'aria-hidden': 'true' });
     const bpmOut = h('output', { class: 'bpm' }, saved.bpm);
     const slider = h('input', { type: 'range', min: 40, max: 220, value: saved.bpm, 'aria-label': 'Tempo in beats per minute' });
     const toggle = h('button', { type: 'button', class: 'btn btn-primary btn-big' }, 'Start', h('span', { class: 'kbd' }, 'Space'));
-    const drawDots = active => dots.replaceChildren(...Array.from({ length: saved.beats }, (_, i) => h('i', { class: i === active ? (i === 0 ? 'on first' : 'on') : '' })));
+    // A silent beat still moves the dots, as a hollow dot, so you can follow the time through a gap.
+    const drawDots = (active, silent) => dots.replaceChildren(...Array.from({ length: saved.beats }, (_, i) => h('i', { class: i === active ? (silent ? 'on is-silent' : i === 0 ? 'on first' : 'on') : '' })));
     const save = () => store.set('metronome', saved);
     const setBpm = v => { saved.bpm = Math.max(40, Math.min(220, Math.round(v))); slider.value = saved.bpm; bpmOut.textContent = saved.bpm; A.setTempo(saved.bpm); save(); };
     slider.addEventListener('input', () => setBpm(Number(slider.value)));
-    const start = () => { A.startMetronome(saved.bpm, saved.beats, drawDots); toggle.firstChild.textContent = 'Stop'; };
-    const stop = () => { A.stopMetronome(); toggle.firstChild.textContent = 'Start'; drawDots(-1); };
+    const start = () => { A.startMetronome(saved.bpm, saved.beats, drawDots, opts()); toggle.firstChild.textContent = 'Stop'; };
+    const stop = () => { A.stopMetronome(); toggle.firstChild.textContent = 'Start'; drawDots(-1); bpmOut.textContent = saved.bpm; };
+    // A new mode applies at once: a running metronome starts again with it.
+    const setMode = patch => { Object.assign(saved, patch); save(); if (A.metronomeRunning) start(); };
+    const seg = (label, options, key) => D.field(label, GT.segmented(label, options, saved[key], v => setMode({ [key]: v })));
+    const modes = h('div', { class: 'opts metro-modes' },
+      seg('Clicks', [[1, 'Beats'], [2, '8ths'], [3, 'Triplets'], [4, '16ths']], 'sub'),
+      seg('Accent', [[true, 'Beat 1'], [false, 'None']], 'accent'),
+      seg('Click on', [[false, 'Every beat'], [true, '2 and 4']], 'backbeat'),
+      seg('Silent bars', [['off', 'Off'], ['3-1', '3 + 1'], ['2-2', '2 + 2'], ['1-3', '1 + 3']], 'gap'),
+      seg('Random gaps', [[0, 'Off'], [0.2, '1 in 5'], [0.4, '2 in 5']], 'mute'),
+      seg('Speed up', [[0, 'Off'], [2, '+2'], [5, '+5']], 'ramp'),
+      h('p', { class: 'small muted' }, 'Silent bars: 3 + 1 is three bars with the click, then one without. Random gaps leave out single beats. Keep playing through the silence, and check that you land with the click when it comes back. Speed up adds beats per minute every four bars.'));
     toggle.addEventListener('click', () => A.metronomeRunning ? stop() : start());
     let taps = [];
     const tap = () => {
@@ -47,6 +69,7 @@
           GT.segmented('Beats per bar', [[2, '2'], [3, '3'], [4, '4'], [6, '6']], saved.beats, v => { saved.beats = v; save(); const was = A.metronomeRunning; stop(); GT.render(); if (was) setTimeout(() => document.querySelector('.btn-primary').click(), 0); }),
           h('button', { type: 'button', class: 'btn', onclick: tap }, 'Tap tempo', h('span', { class: 'kbd' }, 'T'))),
         toggle),
+      h('section', { class: 'lib-section' }, h('h2', null, 'Practice your time'), modes),
       h('p', { class: 'small muted drill-keys', style: 'margin-top:14px' }, 'Keys: ', h('span', { class: 'kbd' }, 'Space'), ' start or stop, ', h('span', { class: 'kbd' }, '↑'), h('span', { class: 'kbd' }, '↓'), ' tempo, ', h('span', { class: 'kbd' }, 'T'), ' tap the tempo.')));
     return () => { document.removeEventListener('keydown', onKey); A.stopMetronome(); };
   }
@@ -79,7 +102,8 @@
     const redrawBest = () => bestList.replaceChildren(...Object.entries(saved.best).sort((x, y) => x[1] - y[1]).map(([pair, n]) => h('span', { class: 'chip', style: 'cursor:default' }, pair.replace('-', ' ↔ '), h('small', null, n))),
       Object.keys(saved.best).length ? '' : h('p', { class: 'muted small' }, 'No counts yet. Save your first count above.'));
     const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => {
-      if (timer) { clearInterval(timer); timer = null; startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
+      // The played part of the minute counts as practice time.
+      if (timer) { clearInterval(timer); timer = null; GT.progress.logTime(Math.min(60000, 64000 - (endAt - performance.now()) - 4000)); startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
       // A count-in of four clicks, then 60 seconds.
       A.startMetronome(60, 4, beat => { if (beat === 3) { A.stopMetronome(); } });
       status.textContent = 'Get ready: four clicks, then go.';
@@ -92,6 +116,7 @@
         clock.textContent = Math.max(0, left);
         if (left <= 0) {
           clearInterval(timer); timer = null; startBtn.textContent = 'Start one minute';
+          GT.progress.logTime(60000);
           A.notes([64, 64], 'up', 0.2, 0.2);
           status.textContent = 'Time. How many changes did you make? Each switch counts as one.';
           countInput.focus();

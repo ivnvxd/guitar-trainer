@@ -172,6 +172,7 @@
   }
   // Stop every note that plays or waits to play, and every delayed sound. The metronome and a backing go on.
   function silence() {
+    stopRhythm();
     for (const id of pending) clearTimeout(id);
     pending.clear();
     for (const node of active) { try { node.stop(); } catch { /* already stopped */ } }
@@ -292,32 +293,44 @@
   }
 
   // Metronome with a look-ahead scheduler, so the clicks stay in time while the page works.
-  const metronome = { running: false, bpm: 80, beats: 4, beat: 0, nextTime: 0, timer: null, onBeat: null };
-  function click(at, accent) {
+  // Options: sub (clicks in a beat), plan(bar) (which clicks of a bar sound, from GT.rhythm.clickPlan),
+  // ramp ({ step, every, max }: a tempo that rises) and onBar(bar, bpm).
+  const metronome = { running: false, bpm: 80, base: 80, beats: 4, sub: 1, bar: 0, idx: 0, plan: null, opts: {}, nextTime: 0, timer: null, onBeat: null };
+  // A click: high on beat 1, middle on the other beats, low and soft between the beats.
+  function click(at, accent, soft, bag) {
     const o = ctx.createOscillator(), g = ctx.createGain();
-    o.frequency.value = accent ? 1760 : 1175;
+    o.frequency.value = accent ? 1760 : soft ? 880 : 1175;
     g.gain.setValueAtTime(0.0001, at);
-    g.gain.exponentialRampToValueAtTime(accent ? 0.5 : 0.3, at + 0.002);
+    g.gain.exponentialRampToValueAtTime(accent ? 0.5 : soft ? 0.14 : 0.3, at + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0001, at + 0.05);
     o.connect(g); g.connect(master); o.start(at); o.stop(at + 0.06);
+    if (bag) track(o, bag);
   }
   function schedule() {
-    while (metronome.nextTime < ctx.currentTime + 0.12) {
-      const beat = metronome.beat, at = metronome.nextTime;
-      click(at, beat === 0);
-      if (metronome.onBeat) {
-        const delay = Math.max(0, (at - ctx.currentTime) * 1000);
-        setTimeout(() => metronome.running && metronome.onBeat(beat), delay);
+    const m = metronome;
+    while (m.nextTime < ctx.currentTime + 0.12) {
+      if (m.idx === 0) {
+        if (m.opts.ramp) m.bpm = GT.rhythm.rampBpm(m.base, m.bar, m.opts.ramp);
+        m.plan = m.opts.plan ? m.opts.plan(m.bar) : null;
+        if (m.opts.onBar) { const bar = m.bar, bpm = m.bpm, delay = Math.max(0, (m.nextTime - ctx.currentTime) * 1000); setTimeout(() => m.running && m.opts.onBar(bar, bpm), delay); }
       }
-      metronome.beat = (beat + 1) % metronome.beats;
-      metronome.nextTime += 60 / metronome.bpm;
+      const at = m.nextTime, beat = Math.floor(m.idx / m.sub), sub = m.idx % m.sub;
+      const c = m.plan ? m.plan[m.idx] : { beat, sub, accent: beat === 0 && sub === 0, sound: true };
+      if (c.sound) click(at, c.accent, sub > 0);
+      if (sub === 0 && m.onBeat) {
+        const delay = Math.max(0, (at - ctx.currentTime) * 1000), silent = !c.sound;
+        setTimeout(() => m.running && m.onBeat(beat, silent), delay);
+      }
+      m.idx = (m.idx + 1) % (m.beats * m.sub);
+      if (m.idx === 0) m.bar++;
+      m.nextTime += 60 / m.bpm / m.sub;
     }
   }
-  function startMetronome(bpm, beats, onBeat) {
+  function startMetronome(bpm, beats, onBeat, opts = {}) {
     if (!context()) return false;
     askedWhileMuted();
     stopMetronome();
-    Object.assign(metronome, { running: true, bpm, beats, beat: 0, nextTime: ctx.currentTime + 0.08, onBeat });
+    Object.assign(metronome, { running: true, bpm, base: bpm, beats, sub: opts.sub || 1, bar: 0, idx: 0, plan: null, opts, nextTime: ctx.currentTime + 0.08, onBeat });
     schedule();
     metronome.timer = setInterval(schedule, 25);
     return true;
@@ -327,7 +340,97 @@
     clearInterval(metronome.timer);
     metronome.timer = null;
   }
-  function setTempo(bpm) { metronome.bpm = bpm; }
+  function setTempo(bpm) { metronome.bpm = bpm; metronome.base = bpm; }
+
+  // ---------- rhythm player ----------
+  // Plays bars of rhythm: strums, chucks, bass notes or held tones, with a count-in and clicks if asked.
+  // o: { bpm, beats (in a bar), barSeconds, bars (how many; 0 loops), countIn (clicks before), clicks (a click on
+  //      each beat), events(bar) → [{ t (seconds into the bar), sound, dir, accent, dur, midis, step }],
+  //      onStep(step, bar), onEnd() }
+  // sound is 'strum', 'chuck', 'bass', 'tone' or 'none' (a ghost stroke: only onStep runs).
+  // It returns the audio time at which bar 0 starts, so a drill can compare taps with it.
+  const rhythm = { o: null, bar: 0, next: 0, timer: null, nodes: new Set(), waits: new Set() };
+  function noiseHit(at, gainValue, freqValue, len, bag) {
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuffer();
+    f.type = 'bandpass'; f.frequency.value = freqValue; f.Q.value = 0.9;
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(gainValue, at + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(at); src.stop(at + len + 0.02); track(src, bag);
+  }
+  // A strum goes low to high on a down stroke and high to low on an up stroke, which takes the top four strings.
+  // A chuck is a muted strum: a short burst of noise and dead strings.
+  function strumAt(ev, at, bag) {
+    const play = voice === 'soft' ? playSoft : playPluck;
+    if (ev.sound === 'bass') { play(ev.midis[0], at, ev.dur, ev.accent ? 0.42 : 0.32, bag); return; }
+    if (ev.sound === 'tone') { playSoft(ev.midis[0], at, ev.dur, ev.accent ? 0.5 : 0.38, bag); return; }
+    const list = ev.dir === 'U' ? ev.midis.slice(-4).reverse() : ev.midis;
+    if (ev.sound === 'chuck') {
+      noiseHit(at, ev.accent ? 0.35 : 0.22, 2400, 0.05, bag);
+      list.forEach((m, i) => playPluck(m, at + i * 0.004, 0.03, 0.1, bag));
+      return;
+    }
+    const gain = (ev.dir === 'U' ? 0.12 : 0.16) * (ev.accent ? 1.45 : 1);
+    list.forEach((m, i) => play(m, at + i * (ev.dir === 'U' ? 0.007 : 0.01), ev.dur, gain, bag));
+  }
+  function rhythmWait(fn, at) {
+    const id = setTimeout(() => { rhythm.waits.delete(id); fn(); }, Math.max(0, (at - ctx.currentTime) * 1000));
+    rhythm.waits.add(id);
+  }
+  function scheduleRhythm() {
+    const o = rhythm.o;
+    if (!o) return;
+    if (rhythm.next < ctx.currentTime - 0.05) rhythm.next = ctx.currentTime + 0.05;
+    while (rhythm.o && rhythm.next < ctx.currentTime + 0.2) {
+      if (o.bars && rhythm.bar >= o.bars) {
+        const end = rhythm.next;
+        clearInterval(rhythm.timer); rhythm.timer = null;
+        rhythmWait(() => { if (rhythm.o === o) { rhythm.o = null; if (o.onEnd) o.onEnd(); } }, end);
+        return;
+      }
+      const at = rhythm.next, n = rhythm.bar;
+      for (const ev of o.events(n)) {
+        if (ev.sound !== 'none') strumAt(ev, at + ev.t, rhythm.nodes);
+        if (o.onStep && ev.step !== undefined) rhythmWait(() => rhythm.o === o && o.onStep(ev.step, n), at + ev.t);
+      }
+      // clicks: true, false, or a function of the bar, for bars with and without the click.
+      if (typeof o.clicks === 'function' ? o.clicks(n) : o.clicks) for (let b = 0; b < o.beats; b++) click(at + b * o.barSeconds / o.beats, b === 0, true, rhythm.nodes);
+      rhythm.bar++;
+      rhythm.next += o.barSeconds;
+    }
+  }
+  function startRhythm(o) {
+    if (!context()) return null;
+    askedWhileMuted();
+    stopRhythm();
+    const beat = o.barSeconds / o.beats, start = ctx.currentTime + 0.12, count = o.countIn || 0;
+    for (let k = 0; k < count; k++) click(start + k * beat, k % o.beats === 0, false, rhythm.nodes);
+    Object.assign(rhythm, { o, bar: 0, next: start + count * beat });
+    scheduleRhythm();
+    rhythm.timer = setInterval(scheduleRhythm, 25);
+    return start + count * beat;
+  }
+  function stopRhythm() {
+    clearInterval(rhythm.timer);
+    rhythm.timer = null;
+    rhythm.o = null;
+    for (const id of rhythm.waits) clearTimeout(id);
+    rhythm.waits.clear();
+    for (const node of rhythm.nodes) { try { node.stop(); } catch { /* already stopped */ } }
+    rhythm.nodes.clear();
+  }
+  // The time on the page clock (performance.now) at which an audio time is heard. The output timestamp includes
+  // the delay of the output where the browser knows it; the calibration of a drill covers the rest.
+  function heardAt(audioTime) {
+    if (!ctx) return performance.now();
+    if (ctx.getOutputTimestamp) {
+      const ts = ctx.getOutputTimestamp();
+      if (ts && ts.performanceTime) return ts.performanceTime + (audioTime - ts.contextTime) * 1000;
+    }
+    return performance.now() + (audioTime - ctx.currentTime) * 1000;
+  }
 
   // The microphone, for the tuner and the drill that listens. It runs through the context of the site, which a tap
   // has started: an iPhone keeps a context made later paused, and an analyser on it reads only silence.
@@ -380,7 +483,8 @@
   }
 
   GT.audio = {
-    listen, stopListening, levelOf,
+    listen, stopListening, levelOf, startRhythm, stopRhythm, heardAt,
+    get rhythmRunning() { return !!rhythm.o; },
     get listening() { return !!mic; },
     note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
     startLoop, stopLoop, startDrone, stopDrone,

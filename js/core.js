@@ -197,5 +197,7 @@
   }
 
   GT.siteName = 'Guitar Trainer';
+  // The version of the files in use. It must match VERSION in sw.js, which a new upload changes.
+  GT.version = 11;
   Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented });
 })(window);

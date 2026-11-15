@@ -24,23 +24,30 @@
         backup());
       return;
     }
-    const rows = D.list.map(d => {
+    // Drills you have used get a row. The others share one line, so the page stays short.
+    const used = [], unused = [];
+    for (const d of D.list) {
       const config = D.loadConfig(d);
       const s = P.summary(D.statsId(d, config), d.pool(config));
-      // On a phone a row is the drill name over its four numbers, each with its label.
-      const cell = (label, value) => h('td', { dataset: { label } }, value);
-      return h('tr', null, h('td', null, h('a', { href: '#/train/' + d.id }, d.title)), cell('Answers', s.n), cell('Right', pct(s.ok, s.n)), cell('Typical time', secs(s.median)), cell('Solid', `${s.mastered} of ${s.total}`));
-    });
+      (s.n ? used : unused).push({ d, s });
+    }
+    // On a phone a row is the drill name over its four numbers, each with its label.
+    const cell = (label, value) => h('td', { dataset: { label } }, value);
+    const rows = used.map(({ d, s }) => h('tr', null, h('td', null, h('a', { href: '#/train/' + d.id }, d.title)), cell('Answers', s.n), cell('Right', pct(s.ok, s.n)), cell('Typical time', secs(s.median)), cell('Solid', `${s.mastered} of ${s.total}`)));
+    const goal = settings.goal || 10;
     main.append(
       head,
       h('section', { class: 'lib-section', style: 'margin-top:0' }, h('h2', null, 'Last 14 days'),
-        h('div', { class: 'today', style: 'align-items:flex-end;gap:6px' }, last14.map(d => h('div', { style: 'flex:1;display:grid;justify-items:center;gap:6px', title: `${d.key}: ${Math.round(d.min)} min` },
-          h('div', { style: `width:100%;max-width:28px;height:${Math.max(3, d.min / maxMin * 90)}px;border-radius:4px;background:${d.min >= (settings.goal || 10) ? 'var(--ok)' : d.min ? 'var(--muted)' : 'var(--surface-3)'}` }),
+        // A bar per day with its minutes on top. A day with practice is never thinner than 8 px.
+        h('div', { class: 'day-bars' }, last14.map(d => h('div', { class: 'day-bar' + (d.min >= goal ? ' is-goal' : d.min ? ' is-some' : ''), title: `${d.key}: ${Math.round(d.min)} min` },
+          h('span', { class: 'day-min' }, d.min ? String(Math.max(1, Math.round(d.min))) : ''),
+          h('i', { style: `height:${d.min ? Math.max(8, d.min / maxMin * 90) : 3}px` }),
           h('span', { class: 'small muted' }, d.label)))),
-        h('p', { class: 'small muted', style: 'margin-top:8px' }, `Green: daily goal of ${settings.goal || 10} minutes reached. ${P.streak()} ${P.streak() === 1 ? 'day' : 'days'} in a row.`)),
+        h('p', { class: 'small muted', style: 'margin-top:8px' }, `Minutes of practice per day. A bar turns green on a day you reach your goal of ${goal} minutes. ${P.streak()} ${P.streak() === 1 ? 'day' : 'days'} in a row.`)),
       h('section', { class: 'lib-section' }, h('h2', null, 'Drills'),
-        h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table table-stack' }, h('thead', null, h('tr', null, ['Drill', 'Answers', 'Right', 'Typical time', 'Solid'].map(t => h('th', null, t)))), h('tbody', null, rows))),
-        h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Solid: answered right and fast at least three times in a row. Counts are for the current options of each drill.')),
+        rows.length ? h('div', { style: 'overflow-x:auto' }, h('table', { class: 'table table-stack' }, h('thead', null, h('tr', null, ['Drill', 'Answers', 'Right', 'Typical time', 'Solid'].map(t => h('th', null, t)))), h('tbody', null, rows))) : null,
+        rows.length ? h('p', { class: 'small muted', style: 'margin-top:8px' }, 'Solid: answered right and fast at least three times in a row. Counts are for the current options of each drill.') : null,
+        unused.length ? h('p', { class: 'small', style: 'margin-top:10px' }, h('span', { class: 'muted' }, 'Not started: '), unused.map(({ d }, i) => [i ? ', ' : '', h('a', { href: '#/train/' + d.id }, d.title)])) : null),
       ...[intervalTable(), noteMap(), backup()].filter(Boolean));
   }
   function intervalTable() {
@@ -154,7 +161,8 @@
         D.field('After a right answer', GT.segmented('After a right answer', [[true, 'Go on by itself'], [false, 'Wait for me']], settings.autoAdvance !== false, v => set({ autoAdvance: v })))),
       block('About',
         h('p', { class: 'muted' }, 'Everything runs in your browser. Nothing is sent anywhere. The sound is made by the browser, so the site works offline after the first visit.'),
-        h('p', { class: 'muted' }, 'The drills follow published ear-training and practice research. The sources are listed in docs/research.md in the project.'))));
+        h('p', { class: 'muted' }, 'The code is on ', h('a', { href: 'https://github.com/ivnvxd/guitar-trainer', target: '_blank', rel: 'noopener' }, 'GitHub'), '.'),
+        h('p', { class: 'small faint site-version' }, `Version ${GT.version}`))));
   }
 
   GT.route('progress', { render: progressPage });

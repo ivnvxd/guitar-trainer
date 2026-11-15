@@ -21,17 +21,29 @@
     s.last = Date.now();
     data[item] = s;
     saveStats(drillId, data);
-    logPractice(ms);
+    logAnswer();
     store.set('lastDrill', drillId.split(':')[0]);
     return s;
   }
-  function logPractice(ms) {
+  // The day log: practice time and the number of answers. The time is real practice time: a drill counts the time
+  // its page is in use, and a metronome, a chord-changes minute or a play-along loop counts while it runs.
+  function logDay(ms, answers) {
     const days = store.get('days', {});
     const d = days[today()] || { ms: 0, q: 0 };
-    d.ms += Math.min(ms, 30000); d.q++;
+    d.ms += ms; d.q += answers;
     days[today()] = d;
     store.set('days', days);
   }
+  const logAnswer = () => logDay(0, 1);
+  const logTime = ms => { if (ms > 0) logDay(Math.round(ms), 0); };
+  // A metronome, a drone or a loop that runs while the page shows counts as practice, every 15 seconds.
+  // A drill page counts its own time, so the count skips it.
+  const TICK = 15000;
+  setInterval(() => {
+    const A = GT.audio;
+    if (document.visibilityState !== 'visible' || !A || location.hash.startsWith('#/train/')) return;
+    if (A.metronomeRunning || A.loopRunning || A.droneRoot !== null || A.rhythmRunning) logTime(TICK);
+  }, TICK);
   // Weighted random choice. "avoid" lowers the chance of asking the same item twice in a row.
   function choose(drillId, pool, avoid) {
     if (!pool.length) return null;
@@ -85,5 +97,5 @@
     return count;
   }
 
-  GT.progress = { stats, record, choose, summary, ready, median, day, streak, today };
+  GT.progress = { stats, record, choose, summary, ready, median, day, streak, today, logTime };
 })(window);

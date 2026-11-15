@@ -24,11 +24,11 @@ Do not upload `docs/`, `tests/`, `README.md` or `.git/`. The site does not need 
 
 `fonts/` holds the typeface of the site, Geist, and its license. The site serves it itself.
 
-When you publish a new version, change `VERSION` in `sw.js`. Browsers then replace the files they keep for offline use.
+When you publish a new version, change `VERSION` in `sw.js` and `GT.version` in `js/core.js` to the same number. Browsers then replace the files they keep for offline use, and Settings shows the new number.
 
 ## What is in it
 
-Library opens first. Its start page has a search box and six topics in the order you learn them: notes, intervals, scales, chords with the CAGED shapes, triads, and keys with the circle of fifths. On each topic page, the root, the type and the position are one tap away, above the neck. A keyboard folds out under the neck to show the same notes on a piano. A row of links leads from each topic to the drills that train it.
+Library opens first. Its start page has a search box and seven topics: notes, intervals, scales, chords with the CAGED shapes, triads, keys with the circle of fifths, and rhythm. On each topic page, the root, the type and the position are one tap away, above the neck. A keyboard folds out under the neck to show the same notes on a piano. A row of links leads from each topic to the drills that train it.
 
 A scale page and a key page play along with you. A scale has a drone on its root and one to three chord loops that fit it. A key loops its common progressions. You set the tempo, and the backing goes on while you change the position. A Drums chip adds a beat. While a loop plays on a scale page, the notes of the chord that sounds stay bright on the neck.
 
@@ -63,6 +63,13 @@ Faint layers show what is around the topic of a page. Chips under the neck switc
 
 On the Triads page a line also joins the three notes of each shape.
 
+The Rhythm topic has two parts:
+
+- Strumming: 15 patterns on a grid that counts "1 & 2 &". Arrows show down and up strokes, faint arrows the ghost strokes, × the muted strums and > the accents. A pattern loops with two open chords of your choice, one bar each, after one bar of clicks. You set the tempo, swing and a click.
+- Counting: lessons on beats and bars, eighths, rests, dots and ties, sixteenths, triplets, time signatures and swing. Each bar is drawn with its count under it and plays after a count-in.
+
+On the circle of fifths a tap turns the circle to a key. Touch and hold a cell, or right-click it, to hear its chord.
+
 A speaker button in the top bar turns all sound off and on. On a Library page a share button beside it shares the link of the page, saves the neck as a picture, or prints the page.
 
 After a choice, a page draws itself again. The control you tapped stays at the same place on the screen.
@@ -71,14 +78,17 @@ The neck is a flat diagram: the nut on the left and the high e on top. On a phon
 
 Settings has six tunings and a custom tuning, and a capo. With a capo, the Library counts the frets from the capo and shows the shapes you play there; a chord keeps the name of its sound. CAGED shapes show in standard tuning and in tunings that move every string the same way: a capo, half step down and drop D. The drills ignore the capo.
 
-Train has three tracks and two tools:
+Train has four tracks and two tools:
 
 - Ear: intervals, scale degrees in a key, chord quality and chord progressions.
 - Neck: name the note, find every note, read the staff, play the note, degrees from a root, triad shapes and CAGED shapes. Play the note listens through the microphone. It checks the pitch only, so it asks for a note in any octave, every octave of a note, or the exact note on the staff.
 - Keys and progressions: key facts, chords in a key, and numbers to chords.
-- Tools: a metronome and one-minute chord changes.
+- Rhythm: name the rhythm you hear, and tap in time. Tap in time has three modes: read a bar and tap it, hear a bar and tap it back, and keep the pulse when the click stops. It measures the delay of your device once, with twelve taps on clicks.
+- Tools: a metronome and one-minute chord changes. The metronome can click between the beats, click on 2 and 4 only, leave out whole bars or single beats, and raise the tempo every four bars.
 
-Each drill asks again what you miss or answer slowly. In the ear drills you choose the set you start with. When you answer about 85 percent right, the drill adds the next group to your set. `docs/research.md` lists the research behind these choices.
+The daily goal counts real practice time: the time a drill page is in use, and the time a metronome, a play-along loop or a strumming pattern runs. Settings shows the version of the site in use.
+
+Each drill asks again what you miss or answer slowly. In the ear drills you choose the set you start with. When you answer about 85 percent right, the drill adds the next group to your set.
 
 Library has one link for each view, for example `#/library/scales/blues/a`, `#/library/chords/maj7/c/caged-E` or `#/library/name/1.3-2.2-3.0`. You can bookmark a view or send its link.
 
@@ -89,20 +99,23 @@ Progress and settings stay in the browser's local storage, on one device. The Pr
 | File | Job |
 | --- | --- |
 | `js/theory.js` | Note spelling, scales, chords, keys, chord shapes, triads, scale positions, and the names of a set of notes |
-| `js/audio.js` | The plucked-string sound, chords, sequences, the metronome, chord loops and the drone |
+| `js/rhythm.js` | Note values, strumming patterns, counting lessons, metronome plans, tap scoring, and the drawing of rhythm |
+| `js/audio.js` | The plucked-string sound, chords, sequences, the metronome, chord loops, the drone, the rhythm player and the microphone |
 | `js/fretboard.js` | The neck drawing: flat or upright, and the small chord charts |
 | `js/core.js` | DOM helper, saved data, settings and the page router |
 | `js/progress.js` | Results per item, the choice of the next question, the daily log |
 | `js/library.js` | The Library pages |
 | `js/train.js` | The Train page and the runner that all drills share |
-| `js/drills-ear.js`, `js/drills-neck.js`, `js/drills-keys.js` | The drills |
+| `js/drills-ear.js`, `js/drills-neck.js`, `js/drills-keys.js`, `js/drills-rhythm.js` | The drills |
 | `js/tools.js` | Metronome and chord changes |
 | `js/pages.js` | Progress and Settings |
 
 ## Tests
 
-The theory tests need Node.js. They make sure that every chord shape, triad, scale position and key signature matches the theory, and that a set of notes gets the right chord names.
+The tests need Node.js. The theory tests make sure that every chord shape, triad, scale position and key signature matches the theory, and that a set of notes gets the right chord names. The rhythm tests check that every bar fills its time signature, that no two drill bars sound the same, and the timing of swing, metronome gaps and tap scoring. The site tests check that the version in `js/core.js` matches `sw.js`, and that every script is in the offline cache.
 
 ```
 node tests/theory.test.js
+node tests/rhythm.test.js
+node tests/site.test.js
 ```

@@ -23,7 +23,8 @@
     { id: 'scales', name: 'Scales', title: 'Scales', line: 'Major, minor, pentatonic and modes, in positions over the whole neck.', find: 'modes positions boxes pentatonic play along backing drone' },
     { id: 'chords', name: 'Chords', title: 'Chords and CAGED', line: 'The notes of a chord, its shapes, and how the five CAGED shapes join.', find: 'shapes open barre' },
     { id: 'triads', name: 'Triads', title: 'Triads', line: 'Three-note chords on each set of strings, with their inversions.', find: 'inversions three strings' },
-    { id: 'keys', name: 'Keys', title: 'Keys and the circle of fifths', line: 'The seven chords of a key, its signature and common progressions.', find: 'key signature progressions roman numerals play along backing loop' }
+    { id: 'keys', name: 'Keys', title: 'Keys and the circle of fifths', line: 'The seven chords of a key, its signature and common progressions.', find: 'key signature progressions roman numerals play along backing loop' },
+    { id: 'rhythm', name: 'Rhythm', title: 'Rhythm and strumming', line: 'Strumming patterns to play along with, and how to count notes, rests and time signatures.', find: 'rhythm strumming strum pattern counting note values rests time signature meter swing triplets sixteenths eighths' }
   ];
   // A tool beside the topics: from notes on the neck to their name.
   const TUNE = { id: 'tune', name: 'Tuner', title: 'Tuner', line: 'Tune your guitar with the microphone of your phone or computer.', find: 'tuner tune tuning microphone pitch strings' };
@@ -37,7 +38,8 @@
     scales: ['ear-degrees', 'neck-degrees'],
     chords: ['neck-caged', 'ear-chords'],
     triads: ['neck-triads', 'ear-chords'],
-    keys: ['keys-chords', 'keys-facts', 'keys-numbers', 'ear-progressions']
+    keys: ['keys-chords', 'keys-facts', 'keys-numbers', 'ear-progressions'],
+    rhythm: ['rhythm-name', 'rhythm-tap']
   };
   const PROPER = /^(Dorian|Phrygian|Lydian|Mixolydian|Locrian|Hungarian|Ionian|Aeolian)/;
   const lowerName = name => PROPER.test(name) ? name : name[0].toLowerCase() + name.slice(1);
@@ -1043,8 +1045,6 @@
       const triads = T.diatonic(key, mode), sevenths = T.diatonic(key, mode, true);
       const cells = T.keyCells(key, mode);
       const circle = circleOfFifths(state, cells);
-      // The diminished chord sits on the circle but is no key: a tap on it works as its chord button does.
-      circle.onChord = cell => { const c = triads.find(t => t.roman === cell.roman); stopBacking(); choose(c); playChord(c); };
       const idx = T.CIRCLE.findIndex(k => k === entry || k.alt === entry);
       const relName = mode === 'major' ? entry.minor : entry.major;
       const next = T.CIRCLE[(idx + 1) % 12], prev = T.CIRCLE[(idx + 11) % 12];
@@ -1133,8 +1133,8 @@
               GT.segmented('Circle shows', [['chords', 'Chords'], ['intervals', 'Intervals']], lib.circleMode === 'intervals' ? 'intervals' : 'chords', v => { saveLib({ circleMode: v }); rerender(); })),
             circle, circle.readout || null,
             h('p', { class: 'circle-note' }, lib.circleMode === 'intervals'
-              ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap an interval to hear its note with ${key}. Three or more make the shape of a chord. Tap a note name to make it the 1.`
-              : 'Tap a key to turn the circle to it. The frame at the top holds the seven chords of the key.')),
+              ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap an interval to hear its note with ${key}. Three or more make the shape of a chord. Tap a note name to make it the 1, or hold it to hear it.`
+              : 'Tap a key to turn the circle to it. Touch and hold a key, or right-click it, to hear its chord. The frame at the top holds the seven chords of the key.')),
           h('div', { class: 'keys-main' },
             h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel),
             h('div', { class: 'lib-section' }, h('h2', null, 'Outside the key'),
@@ -1167,6 +1167,23 @@
   // Three rings: major keys, their relative minors, and the vii° of the major key at each position.
   // The wheel turns, so the chosen key is always at the top. A frame there holds the seven chords of the key,
   // each with its Roman numeral: IV, I and V outside, ii, vi and iii inside, vii° below.
+  // A tap runs onTap. Touch and hold for about half a second, or a right-click, runs onHold, and the tap after a hold
+  // does nothing. Moving the finger cancels the hold, so scrolling the page does not play.
+  function holdOrTap(el, onTap, onHold) {
+    let timer = null, held = false, x0 = 0, y0 = 0;
+    const cancel = () => clearTimeout(timer);
+    el.addEventListener('pointerdown', e => {
+      if (e.button) return;
+      held = false; x0 = e.clientX; y0 = e.clientY;
+      cancel();
+      timer = setTimeout(() => { held = true; onHold(); }, 450);
+    });
+    el.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 10) cancel(); });
+    for (const type of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(type, cancel);
+    el.addEventListener('click', e => { if (held) { held = false; e.preventDefault(); e.stopPropagation(); return; } onTap(); });
+    // A phone may send its own menu event on a long press: the hold has played already.
+    el.addEventListener('contextmenu', e => { e.preventDefault(); if (held) return; cancel(); held = true; onHold(); });
+  }
   function circleOfFifths(state, cells) {
     const NS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
@@ -1210,29 +1227,27 @@
         text('t-name', nameY, spelled || (c ? c.name : ring === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : `${k.minor}m`));
         // Keys such as G♯ major (8♯) exist only in theory, so their cell shows no signature.
         if (ring === 'major' && !(c && Math.abs(sigCount(c.root)) > 7)) text('t-sig', sigY, c ? sigText(sigCount(c.root), true) : k.alt ? `${sigText(k.count, true)}/${sigText(k.alt.count, true)}` : sigText(k.count, true));
-        // The diminished chord of the key is not a key: a tap plays it and shows it, as the chord buttons do.
-        if (c && c.chord.id === 'dim' && lib.circleMode !== 'intervals') {
-          g.classList.add('is-dim');
-          g.setAttribute('role', 'button');
-          g.setAttribute('tabindex', '0');
-          g.setAttribute('aria-label', `${c.name}, ${c.roman} in ${state.key} ${state.mode}. Play it.`);
-          const pick = () => svg.onChord && svg.onChord(c);
-          g.addEventListener('click', pick);
-          g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
-          continue;
-        }
-        // Major and minor cells turn the circle to their key.
+        // Every cell turns the circle to its key, the cell of the diminished chord too: it turns to the minor key on its root.
         const pick = e => ring === 'major' ? e.major : e.minor;
         const entry = c && k.alt && pick(k.alt) === c.root ? k.alt : k;
         const target = pick(entry);
         g.setAttribute('role', 'link');
         g.setAttribute('tabindex', '0');
-        g.setAttribute('aria-label', lib.circleMode === 'intervals' ? `${target}: make it the 1, ${target} ${state.mode}` : `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}`);
+        g.setAttribute('aria-label', lib.circleMode === 'intervals' ? `${target}: make it the 1, ${target} ${state.mode}. Space plays it.` : `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}. Space plays ${c ? c.name : `${target}${ring === 'minor' ? 'm' : ''}`}.`);
         // A key cell turns the circle to its key. In the intervals view the note becomes the 1 of the key, in the same mode.
         // The link uses the name the key page gives that note in the mode, so a minor key gets its own spelling.
         const open = () => lib.circleMode === 'intervals' ? GT.go(keysView.link(keysView.parse([rootSlug(target), state.mode])), true) : GT.go(keysView.link({ key: target, mode: ring }), true);
-        g.addEventListener('click', open);
-        g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+        // Touch and hold (or right-click) plays the chord of the cell and does not turn the circle. In the intervals view
+        // it plays the note.
+        const sound = () => {
+          A.silence();
+          if (lib.circleMode === 'intervals') { A.note(60 + T.mod(T.pcOf(target) - 60), 0, 1.2); return; }
+          const chord = c ? c.chord : T.chordById(ring === 'minor' ? 'minor' : 'major'), root = c ? c.pc : T.pcOf(target);
+          A.notes([A.bass(root)].concat(T.voiceLead(chord.toneList.map(t => T.mod(root + t.semi)), null)), 'strum');
+          svg.flash(`${ring}:${i}`);
+        };
+        holdOrTap(g, open, sound);
+        g.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); open(); } else if (e.key === ' ') { e.preventDefault(); sound(); } });
       }
     });
     // Intervals: the inner rings give way to the interval of each note from the key, which keep their places because
@@ -1299,6 +1314,14 @@
       if (!c) { hot.setAttribute('visibility', 'hidden'); return; }
       hot.setAttribute('d', paths.get(`${c.ring}:${c.pos}`));
       hot.setAttribute('visibility', 'visible');
+    };
+    // A held cell lights up while its chord sounds.
+    let flashTimer = null;
+    svg.flash = key => {
+      clearTimeout(flashTimer);
+      hot.setAttribute('d', paths.get(key));
+      hot.setAttribute('visibility', 'visible');
+      flashTimer = setTimeout(() => hot.setAttribute('visibility', 'hidden'), 1200);
     };
     el('circle', { r: HUB - 2, class: 'hub' });
     const hubName = el('text', { y: 0, class: 't-hub' }), hubSub = el('text', { y: 21, class: 't-hub-sub' }), hubSig = el('text', { y: 40, class: 't-hub-sig' });
@@ -1458,7 +1481,129 @@
     }
   };
 
-  const VIEWS = { notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView, name: nameView, fit: fitView, tune: tuneView };
+  // ---------- rhythm ----------
+  // library/rhythm/strum/<pattern> and library/rhythm/count/<lesson>. A strumming pattern loops with two open chords,
+  // one bar each, and the grid marks the stroke that sounds. A counting lesson shows bars of rhythm with their count,
+  // and each bar plays with a count-in.
+  const R = GT.rhythm;
+  const STRUM_CHORDS = T.OPEN_CHORDS.map(o => ({ name: T.chordName(o.root, T.chordById(o.chord)), o }));
+  const strumChord = name => STRUM_CHORDS.find(c => c.name === name) || STRUM_CHORDS[0];
+  const strumPair = () => (lib.strumChords || ['G', 'C']).map(n => strumChord(n).name);
+  // Open chords sound as they are played: the frets of the shape on the strings of standard tuning.
+  const openMidis = o => o.frets.map((f, s) => f === null ? null : T.STANDARD[s] + f).filter(m => m !== null);
+  const LESSON_SHORT = { beats: 'Beats', eighths: 'Eighths', rests: 'Rests', dots: 'Dots, ties', sixteenths: 'Sixteenths', triplets: 'Triplets', signatures: 'Meters', swing: 'Swing' };
+  const STRUM_QUICK = [['quarters', 'Quarters'], ['eighths', 'Eighths'], ['d-du-udu', 'D – DU – UDU'], ['chucks', 'Chucks']];
+  const STRUM_GROUPS = [
+    { name: 'Eighths in 4/4', items: R.PATTERNS.filter(p => p.sub === 2 && p.sig[0] === 4).map(p => [p.id, p.name]) },
+    { name: 'Sixteenths', items: R.PATTERNS.filter(p => p.sub === 4).map(p => [p.id, p.name]) },
+    { name: 'Triplets', items: R.PATTERNS.filter(p => p.sub === 3 && p.sig[0] === 4).map(p => [p.id, p.name]) },
+    { name: '3/4 and 6/8', items: R.PATTERNS.filter(p => p.sig[0] !== 4).map(p => [p.id, p.name]) }
+  ];
+  // The strum that plays. resume: a new pattern was picked while it played, so the new page starts it again.
+  const strum = { on: false, resume: false };
+  const swingOf = p => (p.swing || lib.strumSwing) && p.sub === 2 && !R.compound(p.sig) ? 2 / 3 : 0.5;
+  // The loop reads the tempo, the chords and the click each bar, so a change is heard from the next bar on.
+  function strumLoop(p, countIn) {
+    const st = R.strokes(p);
+    return {
+      beats: R.beatsIn(p.sig), bars: 0, countIn: countIn ? R.beatsIn(p.sig) : 0,
+      get clicks() { return lib.strumClick !== false; },
+      get barSeconds() { return R.barSeconds(tempo(), p.sig); },
+      events: n => {
+        const bpm = tempo(), midis = openMidis(strumChord(strumPair()[n % 2]).o), slot = R.barSeconds(bpm, p.sig) / st.length;
+        return st.map((s, i) => {
+          // A strum rings until the next stroke that sounds.
+          const next = st.findIndex((x, k) => k > i && x.kind !== 'ghost'), ring = (next < 0 ? st.length : next) - i;
+          return { t: R.seconds(s.tick, bpm, p.sig, swingOf(p)), step: i, bar: n, dir: s.dir, accent: s.accent, midis,
+            sound: s.kind === 'ghost' ? 'none' : s.kind === 'hit' ? 'strum' : s.kind,
+            dur: p.short ? 0.12 : s.kind === 'bass' ? slot * 2 : Math.max(0.15, slot * ring * 0.95) };
+        });
+      },
+      onStep: (i, n) => {
+        const g = document.querySelector('.strum-grid');
+        if (g && g.light) g.light(i);
+        document.querySelectorAll('.strum-chord').forEach((c, k) => c.classList.toggle('is-now', k === n % 2));
+      }
+    };
+  }
+  // One bar of a lesson: held tones for the notes, silence for the rests, the notes lit as they sound.
+  function playBar(svg, sig, events, swing) {
+    const bpm = tempo(), evs = R.toneEvents(events, bpm, sig, swing);
+    A.silence();
+    A.startRhythm({ beats: R.beatsIn(sig), barSeconds: R.barSeconds(bpm, sig), bars: 1, countIn: R.beatsIn(sig), clicks: true, events: () => evs, onStep: i => svg.light(i), onEnd: () => svg.light(-1) });
+  }
+  const rhythmView = {
+    parse(p) {
+      if (p[0] === 'count') return { part: 'count', lesson: R.LESSONS.find(l => l.id === p[1]) || R.LESSONS[0] };
+      return { part: 'strum', pattern: R.patternById(p[1]) || R.PATTERNS[2] };
+    },
+    link: s => s.part === 'count' ? `library/rhythm/count/${s.lesson.id}` : `library/rhythm/strum/${s.pattern.id}`,
+    title: s => s.part === 'count' ? s.lesson.name : s.pattern.name,
+    render(state) {
+      const partCtl = ctl('Show', GT.segmented('Rhythm page', [['strum', 'Strumming'], ['count', 'Counting']], state.part, v => GT.go(rhythmView.link(rhythmView.parse([v])), true)), 'ctl-plain');
+      // A tempo for both parts. It is the tempo of the play-along loops too.
+      const out = h('output', null, `${tempo()} bpm`);
+      const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); out.textContent = `${v} bpm`; };
+      const tempoRow = extra => h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo' },
+        h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+        h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+'), extra);
+      if (state.part === 'count') {
+        const lesson = state.lesson;
+        return [
+          head(lesson.name, 'Counting rhythm'),
+          controls(partCtl,
+            ctl('Lesson', h('div', { class: 'lesson-chips', role: 'group', 'aria-label': 'Lesson' }, R.LESSONS.map(l => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(l === lesson), onclick: () => GT.go(rhythmView.link({ part: 'count', lesson: l }), true) }, LESSON_SHORT[l.id]))), 'ctl-wide ctl-plain'),
+            ctl('Tempo', tempoRow(), 'ctl-plain')),
+          // The text and the bars stay together: a phone held sideways shows them first, as it shows a neck.
+          h('div', { class: 'lesson-body' },
+            h('div', { class: 'lesson-text' }, lesson.text.map(t => h('p', null, t))),
+            // Three bars side by side, otherwise two, so no bar is alone on a row.
+            h('div', { class: 'rhythm-examples', style: `--cols:${lesson.examples.length === 3 ? 3 : 2}` }, lesson.examples.map(([label, sig, bar, swing]) => {
+              const events = R.parse(bar);
+              const svg = R.notation(events, sig, { sig: true, count: true, label: `${label}: ${bar}` });
+              return h('div', { class: 'card rhythm-card' }, h('div', { class: 'rhythm-card-head' }, h('b', null, label), playButton('Play', () => playBar(svg, sig, events, swing))), svg);
+            }))),
+          h('p', { class: 'small muted lib-note' }, 'Each bar starts after one bar of clicks. Count out loud with the clicks, then tap or clap the notes.'),
+          practice('rhythm')
+        ];
+      }
+      const p = state.pattern;
+      if (strum.resume) { strum.resume = false; if (A.startRhythm(strumLoop(p, false)) !== null) strum.on = true; }
+      const playing = () => strum.on && A.rhythmRunning;
+      const toggle = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
+        if (playing()) { A.stopRhythm(); strum.on = false; }
+        else { A.silence(); stopBacking(); strum.on = A.startRhythm(strumLoop(p, true)) !== null; }
+        toggle.textContent = playing() ? '■ Stop' : '▶ Play';
+        if (!playing()) { const g = document.querySelector('.strum-grid'); if (g) g.light(-1); }
+      } }, playing() ? '■ Stop' : '▶ Play');
+      const pick = id => { strum.resume = playing(); GT.go(rhythmView.link({ part: 'strum', pattern: R.patternById(id) }), true); };
+      const pair = strumPair();
+      const chordSelect = k => h('select', { class: 'more is-on strum-select', 'aria-label': k ? 'Second chord' : 'First chord', onchange: e => { const next = pair.slice(); next[k] = e.target.value; saveLib({ strumChords: next }); rerender(); } },
+        STRUM_CHORDS.map(c => h('option', { value: c.name, selected: c.name === pair[k] }, c.name)));
+      const canSwing = p.sub === 2 && !R.compound(p.sig) && !p.swing;
+      const grid = R.grid(p, h);
+      return [
+        head(p.name, `Strumming in ${p.sig.join('/')}, ${p.sub === 4 ? 'sixteenths' : p.sub === 3 && R.compound(p.sig) ? 'eighths in two groups of three' : p.sub === 3 ? 'triplets' : 'eighths'}`, toggle),
+        controls(partCtl,
+          ctl('Pattern', typePick('Pattern', STRUM_QUICK, STRUM_GROUPS, p.id, pick), 'ctl-wide ctl-plain'),
+          ctl('Chords', h('div', { class: 'row strum-chords-pick' }, chordSelect(0), chordSelect(1)), 'ctl-plain'),
+          ctl('Tempo', tempoRow([
+            canSwing ? h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib.strumSwing), title: 'Play the eighths long-short', onclick: () => { saveLib({ strumSwing: !lib.strumSwing }); rerender(); } }, 'Swing') : null,
+            h('button', { type: 'button', class: 'chip', 'aria-pressed': String(lib.strumClick !== false), title: 'A click on each beat', onclick: () => { saveLib({ strumClick: lib.strumClick === false }); rerender(); } }, 'Click')]), 'ctl-plain')),
+        h('div', { class: 'strum-stage' }, grid,
+          h('div', { class: 'strum-chords' }, pair.map((name, k) => h('span', { class: 'strum-chord' }, k ? 'then ' : '', h('b', null, name))))),
+        h('p', { class: 'lib-note' }, p.line),
+        h('p', { class: 'small muted lib-note' }, `Keep the hand moving down and up in ${p.sub === 4 ? 'sixteenths' : p.sub === 3 && !R.compound(p.sig) ? 'triplets' : 'eighths'} the whole time. A faint arrow is a ghost stroke: the hand moves but misses the strings. × is a muted strum, B the bass note, > an accent. One bar of clicks counts you in.`),
+        section('The chords', 'One bar each, then again.', h('div', { class: 'strum-shapes' }, pair.map(name => {
+          const o = strumChord(name).o, dots = o.frets.map((f, s) => f === null ? null : { string: s, fret: f, kind: 'other' }).filter(Boolean);
+          return h('div', { class: 'card' }, h('b', null, name), miniNeck(dots, 1, 4, name, o.frets.map((f, s) => f === null ? s : null).filter(s => s !== null), { tuning: T.STANDARD, capo: 0 }));
+        }))),
+        practice('rhythm')
+      ];
+    }
+  };
+
+  const VIEWS = { rhythm: rhythmView, notes: notesView, intervals: intervalsView, scales: scalesView, chords: chordsView, triads: triadsView, keys: keysView, name: nameView, fit: fitView, tune: tuneView };
   let rerender = () => {};
 
   // ---------- start page ----------
@@ -1491,6 +1636,8 @@
       add(`${name} ${m}`, 'Key', keysView.link({ key: name, mode: m }), 'key:' + m, 'key circle of fifths' + (m === 'minor' ? ` ${plain(name)}m` : ''));
     }
     // "Perfect 5th" is also found as "perfect fifth".
+    R.PATTERNS.forEach((p, i) => add(p.name, 'Strumming', rhythmView.link({ part: 'strum', pattern: p }), 'strum:' + p.id, `strumming pattern strum ${p.sig.join('/')} ${p.line}`, i));
+    R.LESSONS.forEach((l, i) => add(l.name, 'Rhythm', rhythmView.link({ part: 'count', lesson: l }), 'rhythm:' + l.id, 'rhythm counting count', i));
     const WORDS = { '2nd': 'second', '3rd': 'third', '4th': 'fourth', '5th': 'fifth', '6th': 'sixth', '7th': 'seventh' };
     for (const i of T.INTERVALS) add(i.name, 'Interval', intervalsView.link({ interval: i, root: 'C' }), 'interval:' + i.id, `${i.short} interval ${i.name.replace(/\d(st|nd|rd|th)/, n => WORDS[n] || n)}`);
     return index;
@@ -1516,6 +1663,8 @@
       const free = entry.words.slice();
       let score = 0;
       for (const t of tokens) {
+        // A letter or two is a root: rhythm entries, full of D and U strokes and small words, do not answer it.
+        if (t.length < 3 && /^\D+$/.test(t) && /^(strum|rhythm):/.test(entry.type)) { score = 0; break; }
         let at = free.indexOf(t), points = 2;
         if (at < 0) {
           at = free.findIndex(w => w.startsWith(t));
@@ -1555,6 +1704,17 @@
       box.append(svg);
       return box;
     }
+    // Rhythm: the strokes of D – D U – U D U, down strokes bright, ghost strokes faint.
+    if (id === 'rhythm') {
+      const el = FB.el, svg = el('svg', { viewBox: '0 0 120 64', class: 'thumb-strum' });
+      [...'D-DU-UDU'].forEach((s, i) => {
+        const x = 9 + i * 14.6, down = i % 2 === 0, faint = s === '-';
+        el('line', { x1: x, x2: x, y1: down ? 14 : 50, y2: down ? 44 : 20, class: faint ? 'is-ghost' : down ? 'is-down' : 'is-up' }, svg);
+        el('path', { d: down ? `M ${x - 5} 38 L ${x} 46 L ${x + 5} 38` : `M ${x - 5} 26 L ${x} 18 L ${x + 5} 26`, class: faint ? 'is-ghost' : down ? 'is-down' : 'is-up' }, svg);
+      });
+      box.append(svg);
+      return box;
+    }
     const dot = (string, fret, kind) => ({ string, fret, kind });
     const pictures = {
       notes: { from: 0, to: 5, markers: [dot(1, 3, 'root'), dot(4, 1, 'root'), dot(0, 3, 'other'), dot(2, 2, 'other'), dot(3, 2, 'other'), dot(5, 5, 'other'), dot(2, 5, 'other')] },
@@ -1590,7 +1750,8 @@
         h('a', { class: 'topic', href: '#/' + (last[t.id] ? last[t.id].href : 'library/' + t.id) },
           thumb(t.id),
           h('div', { class: 'topic-text' },
-            h('h2', null, h('span', { class: 'topic-no' }, i + 1), t.title, i === 0 ? h('span', { class: 'topic-start' }, 'Start here') : null),
+            h('h2', null, h('span', { class: 'topic-no' }, i + 1), h('span', { class: 'topic-name' }, t.title)),
+            i === 0 ? h('span', { class: 'topic-start' }, 'Start here') : null,
             h('p', null, t.line),
             last[t.id] ? h('p', { class: 'topic-last' }, `You looked at: ${last[t.id].title}`) : null))))),
       h('a', { class: 'topic topic-tool', href: '#/' + (tool ? tool.href : 'library/name') },

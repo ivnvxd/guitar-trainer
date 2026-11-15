@@ -506,8 +506,10 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .thumb-circle .is-tonic { fill: var(--accent); }
 .topic-text { min-width: 0; }
 .topic-text h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; font-size: 18.5px; }
-.topic-no { display: inline-grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; background: var(--surface-3); color: var(--muted); font-size: 12.5px; font-weight: 700; letter-spacing: 0; }
-.topic-start { padding: 2px 9px; border-radius: 999px; background: var(--accent-soft-2); color: var(--accent-text); font-size: 12px; font-weight: 650; letter-spacing: 0; }
+/* A long name wraps beside its number, not under it. */
+.topic-name { flex: 1 1 5rem; min-width: 0; }
+.topic-no { flex: none; display: inline-grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; background: var(--surface-3); color: var(--muted); font-size: 12.5px; font-weight: 700; letter-spacing: 0; }
+.topic-start { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft-2); color: var(--accent-text); font-size: 12px; font-weight: 650; letter-spacing: 0; }
 .topic-text p { margin-top: 5px; color: var(--muted); font-size: 14.5px; }
 .topic-text .topic-last { color: var(--accent-text); font-size: 13.5px; }
 /* The lookup tool: one wide card under the six topics. */
@@ -536,8 +538,8 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .circle .in-key .t-name { fill: var(--text); }
 .circle .t-num { fill: var(--accent-text); font-size: 13.5px; font-weight: 750; }
 .circle .t-sig { fill: var(--faint); font-size: 13px; }
-.circle .is-dim { cursor: pointer; outline: none; }
-.circle .is-dim:focus-visible path { stroke: var(--accent); stroke-width: 3; }
+/* A held cell plays its chord: no menu, no text selection, no zoom on a double tap. */
+.circle { touch-action: manipulation; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .circle .in-key .t-sig { fill: var(--muted); }
 .circle .is-tonic .t-name, .circle .is-tonic .t-num, .circle .is-tonic .t-sig { fill: var(--accent-ink); }
 .circle .hub { fill: var(--surface); stroke: var(--line); }
@@ -1025,3 +1027,86 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
   .circle-switches { gap: 6px; margin-bottom: 8px; }
   .circle-switches .seg button { padding: 4px 9px; font-size: 13.5px; min-height: 32px; }
 }
+/* Settings: the version of the files in use, small and dim. */
+.site-version { color: var(--faint); font-size: 12.5px; }
+/* Progress: a bar for each of the last 14 days, with its minutes on top. */
+.day-bars { display: flex; align-items: flex-end; gap: 6px; padding: 14px 12px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.day-bar { flex: 1; display: grid; justify-items: center; gap: 4px; min-width: 0; }
+.day-bar i { display: block; width: 100%; max-width: 28px; border-radius: 4px; background: var(--surface-3); }
+.day-bar.is-some i { background: var(--muted); }
+.day-bar.is-goal i { background: var(--ok); }
+.day-min { font-size: 11px; font-weight: 700; color: var(--muted); min-height: 1.3em; font-variant-numeric: tabular-nums; }
+.day-bar.is-goal .day-min { color: var(--ok); }
+
+/* Rhythm: one bar on a single line, as rhythm parts are written. */
+.rhythm { display: block; width: 100%; height: auto; }
+.rh-line { stroke: var(--line-strong); stroke-width: 1.5; }
+.rh-bar { stroke: var(--muted); stroke-width: 1.5; }
+.rh-sig { fill: var(--text); font-size: 19px; font-weight: 800; text-anchor: middle; }
+.rh-head { fill: var(--text); stroke: var(--text); stroke-width: 1.4; }
+.rh-head.is-hollow { fill: var(--surface); }
+.rh-stem { stroke: var(--text); stroke-width: 1.6; }
+.rh-ink { fill: var(--text); }
+.rh-rest-stem { fill: none; stroke: var(--text); stroke-width: 1.8; stroke-linecap: round; }
+.rh-tie { fill: none; stroke: var(--text); stroke-width: 1.5; }
+.rh-tuplet { fill: var(--muted); font-size: 12px; font-weight: 700; text-anchor: middle; }
+.rh-count { fill: var(--muted); font-size: 12.5px; font-weight: 650; text-anchor: middle; }
+.rh-ev.is-on .rh-head, .rh-ev.is-on .rh-stem { fill: var(--accent); stroke: var(--accent); }
+.rh-ev.is-on .rh-ink, .rh-ev.is-on .rh-count { fill: var(--accent); }
+.rh-ev.is-on .rh-rest-stem { stroke: var(--accent); }
+.lesson-text { max-width: 64ch; margin-top: 14px; }
+.lesson-text p { margin: 0 0 8px; }
+.rhythm-examples { display: grid; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+@media (max-width: 760px) { .rhythm-examples { grid-template-columns: minmax(0, 1fr); } }
+.lesson-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 560px) { .lesson-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); } .lesson-chips .chip { justify-content: center; } }
+/* The Library start page: an odd last topic takes the whole row, as the tools under it do. */
+.topics > li:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.rhythm-card { display: grid; gap: 4px; padding: 12px 12px 6px; }
+.rhythm-card-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+/* Strumming: the count over the strokes, one column for each slot of the bar. */
+.strum-stage { padding: 14px 10px 10px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.strum-grid { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+.strum-cell { display: grid; justify-items: center; gap: 2px; padding: 4px 0 6px; border-radius: 8px; transition: background-color .08s; }
+.strum-cell.is-beat { box-shadow: inset 1px 0 0 var(--line); }
+.strum-cell:first-child { box-shadow: none; }
+.strum-acc { min-height: 1.1em; font-size: 14px; font-weight: 800; color: var(--accent-text); line-height: 1; }
+.strum-stroke { font-size: 28px; line-height: 1; font-weight: 800; color: var(--text); }
+.strum-grid[style*="--n:16"] .strum-stroke { font-size: 20px; }
+.strum-cell.is-ghost .strum-stroke { color: var(--line-hover); font-weight: 400; }
+.strum-cell.is-chuck .strum-stroke { color: var(--seventh); }
+.strum-cell.is-bass .strum-stroke { color: var(--root); font-size: 22px; }
+.strum-cell.is-accent .strum-stroke { color: var(--accent); }
+.strum-count { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.strum-cell.is-beat .strum-count { color: var(--text); }
+.strum-cell.is-on { background: var(--accent-soft-2); }
+.strum-chords { display: flex; justify-content: center; gap: 14px; margin-top: 8px; color: var(--muted); font-size: 14px; }
+.strum-chord.is-now b { color: var(--accent-text); }
+.strum-chords-pick { gap: 8px; flex-wrap: nowrap; }
+.strum-select { min-width: 0; width: auto; }
+.strum-shapes { display: grid; grid-template-columns: repeat(2, minmax(0, 150px)); gap: 10px; }
+.strum-shapes .card { display: grid; gap: 6px; padding: 10px; }
+.thumb-strum { width: 100%; height: auto; }
+.thumb-strum line, .thumb-strum path { fill: none; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.thumb-strum .is-down { stroke: var(--accent); }
+.thumb-strum .is-up { stroke: var(--third); }
+.thumb-strum .is-ghost { stroke: var(--line-strong); }
+/* Metronome: a silent beat shows as a hollow dot, so the beat stays visible through a gap. */
+.beats i.on.is-silent { background: transparent; box-shadow: inset 0 0 0 2px var(--muted); }
+.metro-modes { margin-top: 10px; }
+
+/* Rhythm drills: notation as answers, and the tap pad. */
+.answers-rhythm { display: grid !important; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 700px) { .answers-rhythm { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.answers-rhythm .answer { padding: 4px 8px; min-height: 0; }
+.answers-rhythm .answer b { display: block; width: 100%; }
+.answers-rhythm .rhythm { width: 100%; }
+.tap-box { display: grid; gap: 12px; justify-items: center; margin-top: 8px; }
+.tap-box .rhythm { max-width: 420px; }
+.tap-say { margin: 0; text-align: center; color: var(--muted); min-height: 1.5em; }
+.tap-pad { width: min(100%, 360px); height: 132px; border-radius: 22px; border: 2px solid var(--line-strong); background: var(--surface-2); color: var(--muted); font-size: 22px; font-weight: 800; touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer; }
+.tap-pad.is-hit { animation: tap-hit .16s ease-out; }
+@keyframes tap-hit { from { background: var(--accent-soft-2); border-color: var(--accent); } to { background: var(--surface-2); border-color: var(--line-strong); } }
+.rh-mark.is-good { fill: var(--ok); }
+.rh-mark.is-loose { fill: var(--slow); }
+.rh-mark.is-miss { fill: var(--bad); }

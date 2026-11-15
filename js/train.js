@@ -9,7 +9,8 @@
   const TRACKS = [
     { id: 'ear', name: 'Ear', intro: 'Hear it, name it, find it on the guitar.' },
     { id: 'neck', name: 'Neck', intro: 'Find notes, triads and shapes without counting frets.' },
-    { id: 'keys', name: 'Keys and progressions', intro: 'Recall keys and chord numbers without working them out.' }
+    { id: 'keys', name: 'Keys and progressions', intro: 'Recall keys and chord numbers without working them out.' },
+    { id: 'rhythm', name: 'Rhythm', intro: 'Hear a rhythm and name it, tap it in time, and keep the beat without the click.' }
   ];
   const list = [];
   const byId = {};
@@ -64,10 +65,10 @@
         h('div', { class: 'stat' }, h('b', null, day.q), h('span', null, 'answers today')),
         h('div', { class: 'stat' }, h('b', null, streak), h('span', null, streak === 1 ? 'day in a row' : 'days in a row')),
         h('a', { class: 'btn btn-primary btn-big', href: '#/train/' + last.id }, day.q ? `Continue: ${last.title}` : `Start: ${last.title}`)),
-      // Three columns on a wide screen. Tools share the last one, so the columns end level.
-      h('div', { class: 'tracks' }, TRACKS.map((t, i) => h('div', { class: 'track-col' },
-        track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow)),
-        i === TRACKS.length - 1 ? tools : null))));
+      // Three columns on a wide screen: Ear, Neck, and Keys with Rhythm and the tools, so the columns end level.
+      h('div', { class: 'tracks' }, [['ear'], ['neck'], ['keys', 'rhythm']].map((ids, i, cols) => h('div', { class: 'track-col' },
+        ids.map(id => TRACKS.find(t => t.id === id)).map(t => track(t.name, t.intro, list.filter(d => d.track === t.id).map(drillRow))),
+        i === cols.length - 1 ? tools : null))));
   }
   // Today's goal as a short neck: one fret for each minute of the goal, one dot for each minute done.
   function goalNeck(minutes, goal) {
@@ -119,6 +120,10 @@
     // only: the items of a review round, after "Practice the missed ones". length: its number of questions.
     const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false, only: null, length: 0 };
     let advanceTimer = null;
+    // Practice time: the time since the last mark counts at each question, answer and exit. A gap counts at most a
+    // minute, so a page left open does not fill the daily goal.
+    let mark = performance.now();
+    const spent = () => { const now = performance.now(); P.logTime(Math.min(now - mark, 60000)); mark = now; };
 
     const statLine = h('div', { class: 'drill-stats', 'aria-live': 'off' });
     // The options open on request and start closed on every drill, so the question and its answers fit one screen.
@@ -199,6 +204,7 @@
       return P.choose(statsId(d, config), pool(), session.last);
     }
     function next() {
+      spent();
       clearTimeout(advanceTimer);
       A.silence();
       if (sessionLength() && session.count >= sessionLength()) return finish();
@@ -235,6 +241,7 @@
     function submit(value) {
       if (session.answered || !session.q) return;
       session.answered = true;
+      spent();
       const q = session.q;
       const correct = d.check(q, value);
       const fast = typeof d.fastMs === 'function' ? d.fastMs(config) : d.fastMs || 4000;
@@ -260,7 +267,7 @@
       for (const item of fb.requeue || []) if (item !== q.item && pool().includes(item)) session.requeue.push({ item, at: session.count + 2 + Math.floor(Math.random() * 3) });
       let unlocked = null;
       // New items join after a right answer, not after a miss.
-      if (d.stages && config.auto && correct) unlocked = maybeUnlock(d, config);
+      if (d.stages && config.auto && correct && (!d.canUnlock || d.canUnlock(config))) unlocked = maybeUnlock(d, config);
       // Go on by itself after a right answer, once the feedback sound has finished. A picture gets more time.
       const wait = Math.max(d.advanceMs || 1100, (fb.hold || 0) * 1000 + 400, fb.visual ? 2600 : 0);
       const auto = correct && settings.autoAdvance !== false && d.autoAdvance !== false && !unlocked;
@@ -395,7 +402,7 @@
     // The phone was turned: an open question is drawn again with the neck that fits the new shape of the screen.
     redraw = () => { if (session.q && !session.answered && !session.done) { d.render(session.q, ui); onResize(); } };
     // A drill that listens stops the microphone when you leave it.
-    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); redraw = null; if (d.stop) d.stop(); };
+    return () => { spent(); document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); redraw = null; if (d.stop) d.stop(); };
   }
 
   let cleanup = null, redraw = null;

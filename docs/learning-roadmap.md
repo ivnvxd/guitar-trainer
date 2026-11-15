@@ -1,6 +1,6 @@
 # Learning roadmap
 
-Every listening task connects back to the guitar. A drill asks for an answer first. Then it shows where the notes are on the neck and plays them again. `research.md` lists the sources.
+Every listening task connects back to the guitar. A drill asks for an answer first. Then it shows where the notes are on the neck and plays them again.
 
 ## Done
 
@@ -45,15 +45,18 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 39. Tuner, drums under the backing, and a share menu (link, picture, print).
 40. Play the note: the microphone hears the note you play on the guitar. Any octave, every octave of a note, or the exact note on the staff.
 41. Circle of fifths with two rings, the diminished chord in the minor ring, and a key change in the Intervals view. Intervals: compare two.
+42. Rhythm in the Library: strumming patterns that loop with chords, and counting lessons with notation.
+43. Rhythm drills: name the rhythm, and tap in time (read, tap back, keep the pulse) with a delay calibration. Metronome gaps and a rising tempo.
+44. The daily goal counts real practice time. On the circle a tap turns and a hold plays.
 
 ## Next
 
-1. Intervals in a key. A cadence, then two notes of the key. Name the interval and both degrees [E9, E12].
+1. Intervals in a key. A cadence, then two notes of the key. Name the interval and both degrees.
 2. Short melodic dictation. Two to four notes after a cadence. Play them back on the neck.
-3. Listening breaks. About every 25 questions, play 30 seconds of labeled intervals with no answers [E2].
-4. Closest triad inversion. Show a triad, name the next chord as a number, and tap its nearest inversion [F6, F9].
-5. Next pentatonic box. Show box N and ask for the notes of box N+1 [F17].
-6. Rhythm. Call-and-response rhythms with the metronome.
+3. Listening breaks. About every 25 questions, play 30 seconds of labeled intervals with no answers.
+4. Closest triad inversion. Show a triad, name the next chord as a number, and tap its nearest inversion.
+5. Next pentatonic box. Show box N and ask for the notes of box N+1.
+6. Rhythm. Strums scored by the microphone, once onset detection is proven on phones.
 
 ## Rules for new drills
 
