@@ -133,7 +133,10 @@
     { id: 'altered', name: 'Altered', items: [
       { id: 'b5', name: 'Major flat 5', symbol: '(♭5)', tones: '1 3 ♭5' },
       { id: '7b5', name: 'Dominant 7th flat 5', symbol: '7♭5', tones: '1 3 ♭5 ♭7' },
-      { id: 'augmaj7', name: 'Augmented major 7th', symbol: '+maj7', tones: '1 3 ♯5 7' }
+      { id: 'augmaj7', name: 'Augmented major 7th', symbol: '+maj7', tones: '1 3 ♯5 7' },
+      { id: '7sharp5', name: 'Dominant 7th sharp 5', symbol: '7♯5', tones: '1 3 ♯5 ♭7' },
+      { id: '7b9', name: 'Dominant 7th flat 9', symbol: '7♭9', tones: '1 3 5 ♭7 ♭9' },
+      { id: '7sharp9', name: 'Dominant 7th sharp 9', symbol: '7♯9', tones: '1 3 5 ♭7 ♯9' }
     ] },
     { id: 'sixths-ext', name: 'Sixths and extensions', items: [
       { id: '6', name: 'Major 6th', symbol: '6', tones: '1 3 5 6' },
@@ -141,7 +144,11 @@
       { id: 'add9', name: 'Add 9', symbol: 'add9', tones: '1 3 5 9' },
       { id: '9', name: 'Dominant 9th', symbol: '9', tones: '1 3 5 ♭7 9' },
       { id: 'maj9', name: 'Major 9th', symbol: 'maj9', tones: '1 3 5 7 9' },
-      { id: 'm9', name: 'Minor 9th', symbol: 'm9', tones: '1 ♭3 5 ♭7 9' }
+      { id: 'm9', name: 'Minor 9th', symbol: 'm9', tones: '1 ♭3 5 ♭7 9' },
+      { id: '69', name: 'Six nine', symbol: '6/9', tones: '1 3 5 6 9' },
+      { id: '11', name: 'Dominant 11th', symbol: '11', tones: '1 3 5 ♭7 9 11' },
+      { id: 'm11', name: 'Minor 11th', symbol: 'm11', tones: '1 ♭3 5 ♭7 9 11' },
+      { id: '13', name: 'Dominant 13th', symbol: '13', tones: '1 3 5 ♭7 9 13' }
     ] }
   ];
 
@@ -208,6 +215,36 @@
   // Where the chords of a key sit on the circle of fifths. Ring 'major' holds the major keys,
   // 'minor' their relative minors and 'dim' the vii° of the major key at that position.
   // Position 0 is C at the top; each step clockwise is a fifth up.
+  // Chords from outside the key that songs use often, each with its numeral and group:
+  // secondary dominants (the V7 of another chord of the key) and chords borrowed from a near scale.
+  // A minor key takes V and V7 from harmonic minor: the major V that most minor-key songs use.
+  function outsideChords(keyName, mode = 'major') {
+    const out = [];
+    const add = (group, roman, label, chordId) => {
+      const root = spell(keyName, label), chord = chordById(chordId);
+      out.push({ group, roman, root, chord, name: chordName(root, chord), pc: mod(pcOf(keyName) + parseDegree(label).semi) });
+    };
+    // The V7 of a chord: a dominant seventh chord a fifth above its root.
+    const dominantOf = (label, roman) => {
+      const target = spell(keyName, label), root = spell(target, '5'), chord = chordById('7');
+      out.push({ group: mode === 'major' ? 'Secondary dominants' : 'Borrowed and secondary dominants', roman: `V7/${roman}`, root, chord, name: chordName(root, chord), pc: mod(pcOf(target) + 7) });
+    };
+    if (mode === 'major') {
+      [['2', 'ii'], ['3', 'iii'], ['4', 'IV'], ['5', 'V'], ['6', 'vi']].forEach(([l, r]) => dominantOf(l, r));
+      add('Borrowed from the minor key', 'iv', '4', 'minor');
+      add('Borrowed from the minor key', '♭III', '♭3', 'major');
+      add('Borrowed from the minor key', '♭VI', '♭6', 'major');
+      add('Borrowed from the minor key', '♭VII', '♭7', 'major');
+    } else {
+      add('From harmonic minor', 'V', '5', 'major');
+      add('From harmonic minor', 'V7', '5', '7');
+      add('From harmonic minor', 'vii°7', '7', 'dim7');
+      add('Borrowed and secondary dominants', 'IV', '4', 'major');
+      dominantOf('4', 'iv');
+      dominantOf('5', 'V');
+    }
+    return out;
+  }
   function keyCells(keyName, mode = 'major') {
     const shift = { major: 0, minor: 3, dim: 1 };
     return diatonic(keyName, mode).map(c => {
@@ -278,11 +315,30 @@
     return shapes.sort((a, b) => a.low - b.low);
   }
 
+  // How far a tuning sits from standard: the same number of semitones on every string, as with a capo or
+  // half step down. The low string may sit two semitones lower still, as in drop D. null for other tunings.
+  function standardShift(tuning) {
+    if (!tuning || tuning.length !== 6) return null;
+    const d = tuning.map((m, s) => m - STANDARD[s]);
+    return d.slice(2).every(x => x === d[1]) && (d[0] === d[1] || d[0] === d[1] - 2) ? d[1] : null;
+  }
+  // Shapes written for standard tuning, for a tuning of the standard family: the shapes of the root moved
+  // back by the shift, on the same frets, and two frets higher on the low string in a drop tuning.
+  // null for other tunings.
+  function familyShapes(rootName, tuning, make) {
+    const k = standardShift(tuning);
+    if (k === null) return null;
+    const drop = tuning[0] - k !== STANDARD[0];
+    return make(PC_SHARP[mod(pcOf(rootName) - k)]).map(s => drop ? Object.assign(s, { frets: s.frets.map((f, i) => i === 0 && f !== null ? f + 2 : f) }) : s);
+  }
+
   // Every CAGED shape that fits between the nut and maxFret, also the copies 12 frets up or down,
   // in order up the neck. Neighbours share notes: that is how the five shapes join.
-  function cagedMap(rootName, quality = 'major', maxFret = 15) {
+  // Tunings outside the standard family have no CAGED shapes.
+  function cagedMap(rootName, quality = 'major', maxFret = 15, tuning = STANDARD) {
     const out = [];
-    for (const s of cagedShapes(rootName, quality)) for (const k of [-12, 0, 12]) {
+    const shapes = familyShapes(rootName, tuning, name => cagedShapes(name, quality)) || [];
+    for (const s of shapes) for (const k of [-12, 0, 12]) {
       const frets = s.frets.map(f => f === null ? null : f + k);
       const used = frets.filter(f => f !== null);
       const low = Math.min(...used), high = Math.max(...used);
@@ -314,7 +370,15 @@
     'add9': [{ rootString: 1, offsets: [null, 0, -1, -3, 0, null] }, { rootString: 0, offsets: [0, null, 2, 1, 0, 2] }],
     '9': [{ rootString: 1, offsets: [null, 0, -1, 0, 0, 0] }, { rootString: 0, offsets: [0, null, 0, 1, 0, 2] }],
     'maj9': [{ rootString: 1, offsets: [null, 0, -1, 1, 0, null] }],
-    'm9': [{ rootString: 1, offsets: [null, 0, -2, 0, 0, null] }, { rootString: 0, offsets: [0, null, 0, 0, 0, 2] }]
+    'm9': [{ rootString: 1, offsets: [null, 0, -2, 0, 0, null] }, { rootString: 0, offsets: [0, null, 0, 0, 0, 2] }],
+    '7sharp5': [{ rootString: 0, offsets: [0, null, 0, 1, 1, null] }, { rootString: 1, offsets: [null, 0, null, 0, 2, 1] }],
+    '7b9': [{ rootString: 0, offsets: [0, null, 0, 1, 0, 1] }, { rootString: 1, offsets: [null, 0, -1, 0, -1, null] }],
+    '7sharp9': [{ rootString: 1, offsets: [null, 0, -1, 0, 1, null] }],
+    '69': [{ rootString: 0, offsets: [0, -1, -1, -1, 0, 0] }, { rootString: 1, offsets: [null, 0, -1, -1, 0, 0] }],
+    // The usual 11 chord leaves out the 3rd and the 5th: a 9sus4 sound.
+    '11': [{ rootString: 0, offsets: [0, null, 0, -1, -2, null] }, { rootString: 1, offsets: [null, 0, 0, 0, 0, null] }],
+    'm11': [{ rootString: 0, offsets: [0, null, 0, 0, -2, null] }, { rootString: 1, offsets: [null, 0, -2, 0, 0, -2] }],
+    '13': [{ rootString: 0, offsets: [0, null, 0, 1, 2, null] }, { rootString: 1, offsets: [null, 0, -1, 0, 2, 2] }]
   };
   // A movable shape placed on a root: the lowest place where every fret is 0 or higher.
   function placeShape(rootName, shape, tuning = STANDARD) {
@@ -325,7 +389,16 @@
   }
   // All shapes for a chord on a root: CAGED for major and minor, movable forms for the rest,
   // plus the open shape when one exists for this root.
+  // The shapes of a chord. Tunings of the standard family (a capo, half step down, drop D) use the standard
+  // shapes moved to them. Other tunings get none.
   function chordShapes(rootName, chordId, tuning = STANDARD) {
+    return (familyShapes(rootName, tuning, name => standardChordShapes(name, chordId)) || []).map(s => {
+      const fretted = s.frets.filter(f => f !== null);
+      return Object.assign(s, { low: Math.min(...fretted), high: Math.max(...fretted) });
+    });
+  }
+  function standardChordShapes(rootName, chordId) {
+    const tuning = STANDARD;
     const list = [];
     const open = OPEN_CHORDS.find(c => c.chord === chordId && pcOf(c.root) === pcOf(rootName));
     const same = (a, b) => a.length === b.length && a.every((f, i) => f === b[i]);
@@ -336,13 +409,10 @@
     if (caged.length) {
       for (const s of caged) list.push({ id: 'caged-' + s.shape, name: s.shape + ' shape', frets: s.frets });
     } else if (MOVABLE[chordId] && tuning === STANDARD) {
-      const names = ['6th-string root', '5th-string root', '4th-string root'];
+      const names = ['Root on the 6th string', 'Root on the 5th string', 'Root on the 4th string'];
       for (const s of MOVABLE[chordId]) list.push({ id: 'root-' + (6 - s.rootString), name: names[s.rootString], frets: placeShape(rootName, s, tuning) });
     }
-    return list.map(s => {
-      const fretted = s.frets.filter(f => f !== null);
-      return Object.assign(s, { low: Math.min(...fretted), high: Math.max(...fretted) });
-    });
+    return list;
   }
 
   const intervalLabelOf = semi => ['1', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♯5', '6', '♭7', '7'][mod(semi)];
@@ -350,6 +420,15 @@
   function identifyChord(semis) {
     const key = semis.map(x => mod(x)).join(',');
     return CHORDS.find(c => c.toneList.map(t => mod(t.semi)).join(',') === key) || null;
+  }
+  // A Roman numeral for a chord on a scale degree: "♭VII", "ii", "vii°", "V7", "iiø7", "Imaj7".
+  // Minor and diminished chords are small letters.
+  function romanOf(label, chord) {
+    const d = parseDegree(label), n = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'][d.step];
+    if (!chord) return label.replace(/\d+/, '') + n;
+    const labels = chord.toneList.map(t => t.label), small = labels.includes('♭3') && !labels.includes('3');
+    const tail = { dim: '°', aug: '+', m7b5: 'ø7', dim7: '°7', maj7: 'maj7', 7: '7', m7: '7', mmaj7: '(maj7)', augmaj7: '+maj7' }[chord.id] || '';
+    return label.replace(/\d+/, '') + (small ? n.toLowerCase() : n) + tail;
   }
   function scaleChords(rootName, scale, sevenths = false) {
     const tones = scale.toneList;
@@ -360,7 +439,7 @@
       const chordRoot = spell(rootName, t.label);
       // A stack with no common chord name shows its formula, for example "D♭ (1 2 ♭5)".
       const formula = picks.map(x => intervalLabelOf(x - picks[0])).join(' ');
-      return { degree: i + 1, label: t.label, root: chordRoot, chord, name: chord ? chordRoot + chord.symbol : `${chordRoot} (${formula})` };
+      return { degree: i + 1, label: t.label, roman: romanOf(t.label, chord), root: chordRoot, chord, name: chord ? chordRoot + chord.symbol : `${chordRoot} (${formula})` };
     });
   }
   // Reverse lookup: the chords that a set of notes spells. pcs are pitch classes in any order,
@@ -420,7 +499,8 @@
   const CHORD_SCALE = {
     major: 'major', minor: 'minor', dim: 'locrian', aug: 'whole-tone', sus2: 'major', sus4: 'mixolydian', power: 'minor-pentatonic',
     maj7: 'major', 7: 'mixolydian', m7: 'dorian', m7b5: 'locrian', dim7: 'diminished-wh', mmaj7: 'melodic-minor', '7sus4': 'mixolydian',
-    b5: 'whole-tone', '7b5': 'whole-tone', 6: 'major', m6: 'dorian', add9: 'major', 9: 'mixolydian', maj9: 'major', m9: 'dorian'
+    b5: 'whole-tone', '7b5': 'whole-tone', 6: 'major', m6: 'dorian', add9: 'major', 9: 'mixolydian', maj9: 'major', m9: 'dorian',
+    '7sharp5': 'whole-tone', '7b9': 'diminished-hw', '7sharp9': 'diminished-hw', 69: 'major-pentatonic', 11: 'mixolydian', m11: 'dorian', 13: 'mixolydian'
   };
   // Close triad voicings on three adjacent strings. Sets are named by their lowest string index.
   const TRIAD_SETS = [
@@ -454,37 +534,36 @@
   }
 
   // Scale positions. Pentatonic: two notes per string. Seven-note scales: three notes per string.
-  // Position k starts on the k-th scale tone found on the low string.
+  // Position k starts on the k-th scale tone found on the low string. Each position takes the lowest place where it
+  // fits between the nut and maxFret. A position that fits nowhere is cut at the nut or the last fret (partial: true),
+  // so the numbers never skip.
   function positions(rootName, scale, tuning = STANDARD, maxFret = 24) {
     const perString = scale.toneList.length === 5 ? 2 : scale.toneList.length === 7 ? 3 : 0;
     if (!perString) return [];
     const rootPc = pcOf(rootName);
     const pcs = new Set(scale.toneList.map(t => mod(rootPc + t.semi)));
     const scaleMidis = [];
-    for (let m = tuning[0]; m <= tuning[5] + maxFret; m++) if (pcs.has(mod(m))) scaleMidis.push(m);
-    const result = [];
+    for (let m = tuning[0] - 12; m <= tuning[5] + maxFret + 12; m++) if (pcs.has(mod(m))) scaleMidis.push(m);
     const size = scale.toneList.length;
-    const found = new Set();
-    // Each position starts on one scale tone of the low string. Take the lowest place where the
-    // whole position fits above the nut; near the nut some positions only fit an octave higher.
-    for (let startIndex = 0; found.size < size && startIndex < scaleMidis.length; startIndex++) {
-      if (found.has(startIndex % size)) continue;
+    const best = new Map();
+    for (let startIndex = 0; startIndex + 6 * perString <= scaleMidis.length; startIndex++) {
       const notes = [];
-      let ok = true;
-      for (let s = 0; s < 6; s++) {
-        for (let n = 0; n < perString; n++) {
-          const midi = scaleMidis[startIndex + s * perString + n];
-          const fret = midi - tuning[s];
-          if (midi === undefined || fret < 0 || fret > maxFret) { ok = false; break; }
-          notes.push({ string: s, fret, midi });
-        }
+      for (let s = 0; s < 6; s++) for (let n = 0; n < perString; n++) {
+        const midi = scaleMidis[startIndex + s * perString + n];
+        notes.push({ string: s, fret: midi - tuning[s], midi });
       }
-      if (!ok) continue;
-      found.add(startIndex % size);
-      const frets = notes.map(n => n.fret);
-      // Name the position by the scale degree it starts on: position 1 starts on the root.
+      const inside = notes.filter(n => n.fret >= 0 && n.fret <= maxFret);
       const degreeIndex = scale.toneList.findIndex(t => mod(t.semi) === mod(notes[0].midi - rootPc));
-      result.push({ index: degreeIndex + 1, startLabel: scale.toneList[degreeIndex].label, notes, low: Math.min(...frets), high: Math.max(...frets) });
+      const had = best.get(degreeIndex);
+      const full = inside.length === notes.length;
+      if (had && (had.full || (!full && had.notes.length >= inside.length))) continue;
+      if (inside.length < 4) continue;
+      best.set(degreeIndex, { full, notes: inside });
+    }
+    const result = [];
+    for (const [degreeIndex, { full, notes }] of best) {
+      const frets = notes.map(n => n.fret);
+      result.push({ index: degreeIndex + 1, startLabel: scale.toneList[degreeIndex].label, notes, low: Math.min(...frets), high: Math.max(...frets), partial: !full });
     }
     return result.sort((a, b) => a.low - b.low);
   }
@@ -507,6 +586,130 @@
     });
   }
 
+  // Slash chords: the shapes of a chord with another note in the bass, for example C/E or C/B♭.
+  // The bass note goes on a string under the shape, within reach of the hand (C/G: 3 3 2 0 1 0). When no string
+  // under it fits, a string of the shape that plays the bass note becomes the lowest one (C/E: x x 2 0 1 0).
+  function slashShapes(rootName, chordId, bassName, tuning = STANDARD) {
+    const bass = pcOf(bassName), rootPc = pcOf(rootName);
+    const out = [], seen = new Set();
+    for (const sh of chordShapes(rootName, chordId, tuning)) {
+      const used = sh.frets.map((f, s) => f === null ? null : s).filter(s => s !== null);
+      const low = used[0];
+      const fretted = sh.frets.filter(f => f !== null && f > 0);
+      const lo = fretted.length ? Math.min(...fretted) : 0, hi = fretted.length ? Math.max(...fretted) : 0;
+      let frets = null;
+      for (let s = low - 1; s >= 0 && !frets; s--) for (let f = Math.max(0, lo - 2); f <= hi + 1 && !frets; f++) {
+        if (mod(tuning[s] + f) === bass) frets = sh.frets.map((x, k) => k === s ? f : k < low ? null : x);
+      }
+      const onBass = used.find(s => mod(tuning[s] + sh.frets[s]) === bass);
+      if (!frets && onBass !== undefined) frets = sh.frets.map((f, s) => s < onBass ? null : f);
+      if (!frets) continue;
+      const sounding = frets.map((f, s) => f === null ? null : mod(tuning[s] + f)).filter(x => x !== null);
+      const span = frets.filter(f => f !== null && f > 0);
+      if (sounding.length < 3 || !sounding.includes(rootPc) || (span.length && Math.max(...span) - Math.min(...span) > 4)) continue;
+      const key = frets.join();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const used2 = frets.filter(f => f !== null);
+      out.push({ id: sh.id, name: sh.name, frets, low: Math.min(...used2), high: Math.max(...used2) });
+    }
+    return out;
+  }
+
+  // Drop 2 and drop 3 voicings of four-note chords on a set of strings, as on the Triads page.
+  // A close voicing (the four notes inside one octave) drops its second note from the top (drop 2)
+  // or its third (drop 3) by an octave. Drop 3 skips a string. The result groups the shapes by the tone in the bass.
+  const DROP_SETS = {
+    drop2: [{ id: '6543', strings: [0, 1, 2, 3] }, { id: '5432', strings: [1, 2, 3, 4] }, { id: '4321', strings: [2, 3, 4, 5] }],
+    drop3: [{ id: '6432', strings: [0, 2, 3, 4] }, { id: '5321', strings: [1, 3, 4, 5] }]
+  };
+  function dropVoicings(rootName, chordId, kind, setId, tuning = STANDARD, maxFret = 15) {
+    const chord = chordById(chordId), set = (DROP_SETS[kind].find(s => s.id === setId) || {}).strings;
+    // Only chords inside one octave have a close voicing to drop from: add9 has its 9 above the octave.
+    if (!chord || chord.toneList.length !== 4 || chord.toneList.some(t => t.semi >= 12) || !set) return [];
+    const semis = chord.toneList.map(t => t.semi), rootPc = pcOf(rootName);
+    const result = [[], [], [], []];
+    for (let inv = 0; inv < 4; inv++) {
+      const idx = [0, 1, 2, 3].map(k => (inv + k) % 4);
+      const close = idx.map((i, k) => semis[i] + (inv + k >= 4 ? 12 : 0));
+      const pick = kind === 'drop2' ? [2, 0, 1, 3] : [1, 0, 2, 3];
+      const voiced = pick.map((k, j) => close[k] - (j === 0 ? 12 : 0)), order = pick.map(k => idx[k]);
+      for (let bassFret = 0; bassFret <= maxFret; bassFret++) {
+        const bassMidi = tuning[set[0]] + bassFret;
+        if (mod(bassMidi - rootPc) !== mod(voiced[0])) continue;
+        const frets = voiced.map((v, j) => bassMidi + v - voiced[0] - tuning[set[j]]);
+        if (frets.some(f => f < 0 || f > maxFret) || Math.max(...frets) - Math.min(...frets) > 4) continue;
+        result[order[0]].push({ kind, strings: set, frets, tones: order.map(i => chord.toneList[i].label) });
+      }
+    }
+    return result;
+  }
+
+  // Fingers for a shape: 1 is the index finger. A shape with more than four fretted notes takes a barre with finger 1
+  // on its lowest fret. The other notes get the finger of their distance from the lowest fret, or the next free one.
+  // Where this rule is not sure (two notes side by side on the lowest fret without a barre, or a fifth finger),
+  // every finger is null: no number is better than a wrong one.
+  function fingers(frets) {
+    const none = frets.map(() => null);
+    const fretted = frets.map((f, s) => ({ f, s })).filter(x => x.f !== null && x.f > 0);
+    if (!fretted.length) return none;
+    const min = Math.min(...fretted.map(x => x.f)), atMin = fretted.filter(x => x.f === min);
+    const out = frets.map(() => null);
+    const taken = new Set();
+    let rest = fretted;
+    if (fretted.length > 4) {
+      if (atMin.length < 2) return none;
+      atMin.forEach(x => { out[x.s] = 1; });
+      taken.add(1);
+      rest = fretted.filter(x => x.f !== min);
+    } else if (atMin.some((x, i) => i > 0 && x.s === atMin[i - 1].s + 1)) return none;
+    for (const x of rest.slice().sort((a, b) => a.f - b.f || a.s - b.s)) {
+      let finger = Math.min(4, 1 + x.f - min);
+      while (taken.has(finger)) finger++;
+      if (finger > 4) return none;
+      out[x.s] = finger;
+      taken.add(finger);
+    }
+    return out;
+  }
+
+  // Arpeggio positions: the notes of a chord inside each of the five boxes of the pentatonic scale on its root
+  // (major with a 3, else minor). A box covers 4 or 5 frets.
+  function arpeggioBoxes(rootName, chordId, tuning = STANDARD, maxFret = 24) {
+    const chord = chordById(chordId), rootPc = pcOf(rootName);
+    const pent = scaleById(chord.toneList.some(t => t.label === '3') ? 'major-pentatonic' : 'minor-pentatonic');
+    return positions(rootName, pent, tuning, maxFret).map(p => {
+      const notes = [];
+      for (let s = 0; s < tuning.length; s++) for (let f = p.low; f <= p.high; f++) {
+        const t = chord.toneList.find(x => mod(rootPc + x.semi) === mod(tuning[s] + f));
+        if (t) notes.push({ string: s, fret: f, midi: tuning[s] + f, label: t.label });
+      }
+      return { index: p.index, notes, low: p.low, high: p.high };
+    }).filter(p => p.notes.length);
+  }
+
+  // The frequency of a buffer, or null when it is too quiet or has no clear pitch. Periods from 60 Hz to 1000 Hz.
+  function pitchOf(buf, rate) {
+    let rms = 0;
+    for (const v of buf) rms += v * v;
+    if (Math.sqrt(rms / buf.length) < 0.008) return null;
+    const minLag = Math.floor(rate / 1000), maxLag = Math.min(Math.floor(rate / 60), buf.length >> 1);
+    const c = new Float32Array(maxLag + 2);
+    // Each sum is divided by its number of terms: longer lags have fewer, and would read too short otherwise.
+    for (let lag = minLag; lag <= maxLag + 1; lag++) { let sum = 0; for (let i = 0; i + lag < buf.length; i++) sum += buf[i] * buf[i + lag]; c[lag] = sum / (buf.length - lag); }
+    // Start after the first dip, so the peak at lag 0 does not count. Then take the first peak that is nearly as high
+    // as the highest one: later peaks are whole multiples of the period and would read an octave or more too low.
+    let start = minLag;
+    while (start < maxLag && c[start] > c[start + 1]) start++;
+    let top = -Infinity;
+    for (let lag = start; lag <= maxLag; lag++) top = Math.max(top, c[lag]);
+    if (!(top > 0)) return null;
+    let at = -1;
+    for (let lag = Math.max(start, minLag + 1); lag <= maxLag; lag++) if (c[lag] >= 0.9 * top && c[lag] >= c[lag - 1] && c[lag] >= c[lag + 1]) { at = lag; break; }
+    if (at < 0) return null;
+    const a = c[at - 1], b = c[at], d = c[at + 1], shift = (a - d) / (2 * (a - 2 * b + d) || 1);
+    return rate / (at + (Number.isFinite(shift) ? shift : 0));
+  }
   // Close voicing of chord tones near the previous chord, for smooth progressions (MIDI numbers).
   function voiceLead(pcs, prev, low = 52, high = 72) {
     const options = [];
@@ -528,8 +731,8 @@
     LETTERS, ROOTS, PC_SHARP, PC_FLAT, PC_PLAIN, INTERVALS, SCALE_GROUPS, CHORD_GROUPS, SCALES, CHORDS,
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
-    tonesOn, chordName, signature, diatonic, keyCells, cagedShapes, cagedMap, sharedPlaces, triadVoicings, positions, boxes,
-    placeShape, chordShapes, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,
+    tonesOn, chordName, signature, diatonic, outsideChords, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, scaleChords, parentMajor, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

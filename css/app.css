@@ -114,8 +114,8 @@
   --third: #1971c2;
   --fifth: #6741d9;
   --seventh: #c2255c;
-  --other: #e6eaf0;
-  --other-edge: #818c9c;
+  --other: #d3dae4;
+  --other-edge: #5f6b7c;
   --other-ink: #111723;
   --slow: #9a5b00;
   --board: #ffffff;
@@ -128,9 +128,11 @@
   --target: #111723;
   --flash: #111723;
   --shade: #f4f6f9;
-  --ghost-edge: #818c9c;
-  --ghost-ink: #4d5869;
+  --ghost-edge: #bcc4cf;
+  --ghost-ink: #7a8597;
   --link-shape: #111723;
+  --faint-stroke: .6;
+  --faint-label: .85;
   --pkey-white: #ffffff;
   --pkey-black: #2b3340;
   --pkey-edge: #aab3c0;
@@ -166,7 +168,7 @@ button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 a { color: var(--text); text-decoration-color: var(--line-hover); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-a:hover { text-decoration-color: var(--accent); }
+@media (hover: hover) { a:hover { text-decoration-color: var(--accent); } }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 h1, h2, h3 { margin: 0; line-height: 1.15; letter-spacing: -.02em; }
 h1 { font-size: 36px; font-weight: 750; letter-spacing: -.035em; }
@@ -187,12 +189,12 @@ p { margin: 0; }
 .brand-mark { width: 28px; height: 28px; flex: none; }
 .topbar nav { display: flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
 .topbar nav a { display: flex; align-items: center; gap: 7px; color: var(--muted); text-decoration: none; padding: 6px 14px; border-radius: 999px; font-size: 14.5px; font-weight: 600; transition: color .15s, background-color .15s; }
-.topbar nav a:hover { color: var(--text); }
+@media (hover: hover) { .topbar nav a:hover { color: var(--text); } }
 .topbar nav a[aria-current="true"] { color: var(--text); background: var(--surface-3); }
 /* The sound switch: a speaker with waves, or with a cross when the sound is off. */
 .topbar-side { display: flex; align-items: center; gap: 10px; }
 .sound-btn { flex: none; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted); transition: color .15s, border-color .15s, background-color .15s; }
-.sound-btn:hover { color: var(--text); border-color: var(--line-hover); }
+@media (hover: hover) { .sound-btn:hover { color: var(--text); border-color: var(--line-hover); } }
 .sound-btn .icon { width: 19px; height: 19px; stroke-width: 1.9; }
 .sound-btn .snd-off { display: none; }
 .sound-btn[aria-pressed="true"] { color: var(--bad); border-color: var(--bad-edge); background: var(--bad-soft); }
@@ -211,10 +213,11 @@ main:focus, main:focus-visible { outline: none; }
 
 /* Buttons and choices */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 15px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); font-weight: 600; font-size: 15px; text-decoration: none; color: var(--text); transition: background-color .15s, border-color .15s, transform .1s; }
-.btn:hover:not(:disabled), .btn[aria-expanded="true"] { background: var(--surface-3); border-color: var(--line-hover); }
+.btn[aria-expanded="true"] { background: var(--surface-3); border-color: var(--line-hover); }
+@media (hover: hover) { .btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-hover); } }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn-primary { background: var(--accent-grad); border-color: transparent; color: var(--accent-ink); box-shadow: var(--accent-glow); }
-.btn-primary:hover:not(:disabled) { background: var(--accent-grad); border-color: transparent; filter: brightness(1.06); }
+@media (hover: hover) { .btn-primary:hover:not(:disabled) { background: var(--accent-grad); border-color: transparent; filter: brightness(1.06); } }
 .btn-big { min-height: 48px; padding: 10px 22px; font-size: 16px; border-radius: 13px; }
 .btn-icon { width: 40px; padding: 0; }
 .kbd { display: inline-block; min-width: 20px; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 6px; font-size: 12px; line-height: 18px; text-align: center; color: var(--muted); font-weight: 600; background: color-mix(in srgb, var(--surface) 60%, transparent); }
@@ -223,14 +226,14 @@ main:focus, main:focus-visible { outline: none; }
 
 /* A segmented control: the chosen part rises out of the track. */
 .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
-.seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--muted); min-height: 34px; transition: color .15s, background-color .15s; }
-.seg button:hover { color: var(--text); }
+.seg button { min-width: 36px; border: 0; background: transparent; padding: 6px 12px; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--muted); min-height: 34px; transition: color .15s, background-color .15s; }
+@media (hover: hover) { .seg button:hover { color: var(--text); } }
 .seg button[aria-checked="true"] { background: var(--raised); color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, .25), 0 0 0 1px var(--line-strong); }
 .seg button:disabled { opacity: .3; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--line); background: var(--surface-2); color: var(--text); border-radius: 999px; padding: 5px 12px; font-size: 14px; min-height: 34px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 550; transition: background-color .15s, border-color .15s; }
-a.chip:hover, button.chip:hover { border-color: var(--line-hover); background: var(--surface-3); }
+@media (hover: hover) { a.chip:not([aria-current="true"]):hover, button.chip:not([aria-pressed="true"]):not([aria-checked="true"]):hover { border-color: var(--line-hover); background: var(--surface-3); } }
 .chip small { color: var(--muted); font-size: 12px; }
 .chip[aria-current="true"], .chip[aria-pressed="true"], .chip[aria-checked="true"], .chip[aria-current="true"] small { border-color: transparent; background: var(--accent-grad); color: var(--accent-ink); font-weight: 700; }
 
@@ -241,7 +244,7 @@ a.chip:hover, button.chip:hover { border-color: var(--line-hover); background: v
 .row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin: 16px 0; }
 select { min-height: 40px; background: var(--surface-2) var(--chevron) no-repeat right 10px center / 16px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 6px 36px 6px 12px; font-weight: 600; -webkit-appearance: none; appearance: none; max-width: 100%; }
-select:hover { border-color: var(--line-hover); }
+@media (hover: hover) { select:hover { border-color: var(--line-hover); } }
 input[type="range"] { accent-color: var(--accent); }
 input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px; }
 
@@ -280,20 +283,23 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .neck svg.fb-vertical { max-width: min(100%, 400px); }
 /* The row under the neck: chips that switch faint layers on and off, then the switch between flat and upright. */
 .neck-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.neck-tools:first-child { margin: 0 0 8px; }
 .neck-tools .chip { min-height: 32px; padding: 5px 11px; font-size: 13px; }
 .neck-turn { display: flex; align-items: center; gap: 6px; margin: 0 0 0 auto; padding: 5px 11px; min-height: 32px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 600; }
 .neck-turn .icon { width: 15px; height: 15px; }
 .turn-short { display: none; }
 @media (max-width: 340px) { .turn-long { display: none; } .turn-short { display: inline; } }
 /* String names pinned to the side of a neck that scrolls. */
-.neck-names { position: absolute; left: 0; width: 20px; pointer-events: none; opacity: 0; transition: opacity .15s; }
-.neck.is-left .neck-names { left: auto; right: 0; }
+/* The pinned names sit in the page margin beside the neck, so they cover no note. */
+.neck-names { position: absolute; left: -16px; width: 15px; pointer-events: none; opacity: 0; transition: opacity .15s; }
+.neck.is-left .neck-names { left: auto; right: -16px; }
 .neck.is-scrolling:not(.at-start):not(.is-left) .neck-names, .neck.is-scrolling.is-left:not(.at-end) .neck-names { opacity: 1; }
-.neck-names span { position: absolute; left: 0; width: 20px; transform: translateY(-50%); text-align: center; font-size: 12px; line-height: 19px; font-weight: 750; color: var(--text); background: var(--surface-3); border-radius: 6px; }
+.neck-names span { position: absolute; left: 0; width: 15px; transform: translateY(-50%); text-align: center; font-size: 11px; line-height: 17px; font-weight: 750; color: var(--text); background: var(--surface-3); border-radius: 6px; }
 .fb-board { fill: var(--board); stroke: var(--board-edge); stroke-width: 1; }
 .fb-shade { fill: var(--shade); opacity: .62; }
 .fb-fret { stroke: var(--fret); stroke-width: 1.6; }
 .fb-nut { stroke: var(--nut); stroke-width: 6; stroke-linecap: round; }
+.fb-capo { stroke: var(--accent); stroke-width: 9; }
 .fb-inlay { fill: var(--inlay); }
 .fb-string { stroke: var(--string); stroke-linecap: round; }
 .fb-num { fill: var(--faint); font-size: 12px; font-weight: 550; }
@@ -302,7 +308,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-hit { fill: transparent; }
 .fb-pos, .pkey { --c: var(--other); --ink: var(--other-ink); --edge: var(--other-edge); }
 .fb-pos[role="button"] { cursor: pointer; outline: none; }
-.fb-pos[role="button"]:hover .fb-hit { fill: color-mix(in srgb, var(--accent) 14%, transparent); }
+@media (hover: hover) { .fb-pos[role="button"]:hover .fb-hit { fill: color-mix(in srgb, var(--accent) 14%, transparent); } }
 .fb-pos[role="button"]:focus-visible .fb-hit { stroke: var(--accent-line); stroke-width: 2; }
 .fb-root { --c: var(--root); --ink: var(--root-ink); --edge: var(--board); }
 .fb-third { --c: var(--third); --ink: var(--dot-ink); --edge: var(--board); }
@@ -341,8 +347,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-region-label text { fill: var(--dot-ink); font-size: 12px; font-weight: 800; text-anchor: middle; }
 .fb-region-label.is-near { opacity: .65; }
 /* A faint layer behind the main picture: the CAGED shapes around a triad or a scale. */
-.fb-region.is-faint { fill-opacity: .05; stroke-opacity: .4; stroke-width: 1.4; }
-.fb-region-label.is-faint { opacity: .5; }
+.fb-region.is-faint { fill-opacity: .05; stroke-opacity: var(--faint-stroke, .4); stroke-width: 1.4; }
+.fb-region-label.is-faint { opacity: var(--faint-label, .5); }
 .shape-C { --rc: var(--shape-c); }
 .shape-A { --rc: var(--shape-a); }
 .shape-G { --rc: var(--shape-g); }
@@ -359,15 +365,18 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .lib-tabs { display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 4px; margin: -4px; }
 .lib-tabs::-webkit-scrollbar { display: none; }
 .lib-tabs a { flex: none; color: var(--muted); text-decoration: none; padding: 8px 15px; border-radius: 999px; font-weight: 650; font-size: 15px; border: 1px solid transparent; transition: color .15s, background-color .15s; }
-.lib-tabs a:hover { color: var(--text); background: var(--surface-2); }
+@media (hover: hover) { .lib-tabs a:hover { color: var(--text); background: var(--surface-2); } }
 .lib-tabs a[aria-current="true"] { color: var(--text); background: var(--surface); border-color: var(--line-strong); box-shadow: var(--shadow); }
 /* The search button stands before the topics, so it stays in view while they scroll. */
 .lib-nav { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .lib-nav .lib-tabs { flex: 1; min-width: 0; }
 .lib-home-link { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line-strong); color: var(--text); background: var(--surface); transition: background-color .15s, border-color .15s; }
-.lib-home-link:hover { background: var(--surface-2); border-color: var(--line-hover); }
+@media (hover: hover) { .lib-home-link:hover { background: var(--surface-2); border-color: var(--line-hover); } }
 /* A tool, not a topic: a thin line sets it apart. */
 .lib-tabs .lib-tool-link { margin-left: 8px; position: relative; }
+/* The tools follow the topics after one line, not a line between each tool. */
+.lib-tabs .lib-tool-link + .lib-tool-link { margin-left: 0; }
+.lib-tabs .lib-tool-link + .lib-tool-link::before { display: none; }
 .lib-tabs .lib-tool-link::before { content: ""; position: absolute; left: -5px; top: 9px; bottom: 9px; width: 1px; background: var(--line-strong); }
 .lib-stage { min-width: 0; }
 /* Links from a topic to its drills. */
@@ -375,7 +384,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .practice-label { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; font-size: 13px; font-weight: 650; color: var(--muted); }
 .practice-label .icon { width: 16px; height: 16px; }
 .practice .chip { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); }
-.practice .chip:hover { border-color: var(--accent); background: var(--accent-soft-2); }
+@media (hover: hover) { .practice .chip:hover { border-color: var(--accent); background: var(--accent-soft-2); } }
 .lib-main { min-width: 0; }
 .lib-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
 .lib-title h1 { font-size: 42px; }
@@ -385,9 +394,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 /* The tones of a scale or chord, as equal tiles. The row is the color key of the neck. */
 .formula { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 62px)); gap: 6px; margin-top: 12px; }
 .tone { display: grid; justify-items: center; min-width: 0; padding: 7px 3px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; transition: border-color .15s, background-color .15s; }
-.tone:hover { border-color: var(--line-hover); }
+@media (hover: hover) { .tone:hover { border-color: var(--line-hover); } }
 .tone.is-still { cursor: default; }
-.tone.is-still:hover { border-color: var(--line); }
+@media (hover: hover) { .tone.is-still:hover { border-color: var(--line); } }
 .tone b { font-size: 15px; }
 .tone span { font-size: 12.5px; color: var(--muted); }
 .tone[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -401,8 +410,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .card h3 { font-size: 15.5px; margin-bottom: 2px; }
 .card p { color: var(--muted); font-size: 13.5px; }
 button.card { text-align: left; width: 100%; }
-button.card:hover, a.card:hover { border-color: var(--line-hover); transform: translateY(-2px); }
-a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+@media (hover: hover) { button.card:hover, a.card:hover { border-color: var(--line-hover); transform: translateY(-2px); } }
+a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+.fb-link.is-off { opacity: .22; }
 .card.is-correct { border-color: var(--ok); }
 .card.is-wrong { border-color: var(--bad); }
 .card .neck { padding: 6px 0 0; }
@@ -411,7 +421,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 /* The seven chords of a key or scale in one row, like the seven degrees. */
 .chord-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .chord-btn { display: grid; gap: 2px; min-width: 0; padding: 9px 11px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); text-align: left; text-decoration: none; color: inherit; transition: border-color .15s, background-color .15s; }
-.chord-btn:hover { background: var(--surface-2); border-color: var(--line-hover); }
+@media (hover: hover) { .chord-btn:hover { background: var(--surface-2); border-color: var(--line-hover); } }
 .chord-btn small { color: var(--accent-text); font-size: 12.5px; font-weight: 650; }
 .chord-btn b { font-size: 16px; overflow-wrap: anywhere; }
 .chord-strip .chord-btn { justify-items: center; text-align: center; padding: 9px 2px; }
@@ -426,7 +436,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .chord-panel .neck { flex: 0 0 170px; padding: 0; }
 .prog-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; }
 .prog { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: center; text-align: left; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); transition: border-color .15s, background-color .15s; }
-.prog:hover { background: var(--surface-2); border-color: var(--line-hover); }
+@media (hover: hover) { .prog:hover { background: var(--surface-2); border-color: var(--line-hover); } }
 .prog[aria-pressed="true"] { border-color: var(--live); background: color-mix(in srgb, var(--live) 9%, var(--surface)); }
 /* A triangle to start, a square to stop. */
 .prog-play { grid-row: span 2; width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent var(--accent-text); }
@@ -489,7 +499,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .found > span:last-child:not(.found-text) { color: var(--muted); font-size: 13px; text-align: right; }
 .topics { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .topic { display: flex; align-items: center; gap: 18px; height: 100%; padding: 16px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: inherit; text-decoration: none; transition: border-color .15s, transform .15s; }
-.topic:hover { border-color: var(--line-hover); transform: translateY(-1px); }
+@media (hover: hover) { .topic:hover { border-color: var(--line-hover); transform: translateY(-1px); } }
 .topic-thumb { flex: 0 0 150px; pointer-events: none; }
 .topic-thumb svg { display: block; width: 100%; height: auto; }
 .thumb-circle { max-width: 104px; margin: 0 auto; }
@@ -557,7 +567,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .track-intro { color: var(--muted); font-size: 14px; margin-top: 4px; }
 .drill-list { margin-top: 12px; display: grid; gap: 6px; }
 .drill-row { display: grid; gap: 4px; padding: 13px 14px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--text); text-decoration: none; transition: border-color .15s, transform .15s, background-color .15s; }
-.drill-row:hover { border-color: var(--line-hover); transform: translateY(-1px); }
+@media (hover: hover) { .drill-row:hover { border-color: var(--line-hover); transform: translateY(-1px); } }
 .drill-row h3 { font-size: 16px; }
 .drill-row p { color: var(--muted); font-size: 14px; }
 .drill-row .meter { margin-top: 4px; }
@@ -587,7 +597,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 /* A last row that is not full sits in the middle. */
 .answers[data-rows="many"] { justify-content: center; }
 .answer { display: grid; gap: 1px; justify-items: start; align-content: center; padding: 11px 13px; min-height: 66px; border-radius: 14px; border: 1px solid var(--line-strong); background: var(--surface-2); text-align: left; position: relative; transition: background-color .15s, border-color .15s, transform .1s, opacity .2s; }
-.answer:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-hover); transform: translateY(-1px); }
+@media (hover: hover) { .answer:hover:not(:disabled) { background: var(--surface-3); border-color: var(--line-hover); transform: translateY(-1px); } }
 .answer:active:not(:disabled) { transform: translateY(1px); }
 .answer b { font-size: 18px; letter-spacing: -.01em; }
 .answer span { font-size: 12.5px; color: var(--muted); }
@@ -648,7 +658,7 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 .pickset[data-wide="true"] { --min: 200px; --cols: 4; max-width: calc(var(--cols) * 240px); }
 .pickset label { white-space: nowrap; overflow: hidden; }
 .pickset label { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px 5px 9px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; cursor: pointer; background: var(--surface-2); transition: border-color .15s, background-color .15s; }
-.pickset label:hover { border-color: var(--line-hover); }
+@media (hover: hover) { .pickset label:hover { border-color: var(--line-hover); } }
 .pickset label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .pickset input[type="checkbox"] { width: 15px; height: 15px; margin: 0; }
 .pickset b { font-weight: 650; }
@@ -772,6 +782,8 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
   /* Two links in a row, so two or four of them fill their rows. */
   .practice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .practice-label { grid-column: 1 / -1; }
+  /* Three links take three columns, so none is left alone on a row. */
+  .practice[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .practice .chip { justify-content: center; text-align: center; border-radius: 12px; padding: 6px 8px; line-height: 1.25; }
   .named .formula { max-width: none; }
   .done-actions .btn { flex: 1 1 100%; }
@@ -859,3 +871,124 @@ a.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px
 }
 /* Key hints help only with a keyboard. */
 @media (hover: none) and (pointer: coarse) { .drill-keys, .kbd { display: none; } }
+
+/* Settings: one note picker for each string of a custom tuning, low string first. */
+.tuning-edit { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.tuning-edit label { display: grid; gap: 2px; justify-items: center; }
+.tuning-edit select { width: 100%; min-width: 0; padding-left: 4px; padding-right: 4px; }
+/* The smallest phones: the choices and the start of the neck share the first screen. The subtitle goes and the
+   panel is tighter. Buttons keep their size. */
+@media (max-width: 360px) {
+  .lib-title { flex-wrap: nowrap; align-items: center; }
+  .lib-sub { display: none; }
+  .lib-title h1 { font-size: 26px; }
+  .controls { padding: 8px; gap: 8px 8px; margin: 8px 0 8px; }
+  .lib-nav { margin-bottom: 4px; }
+}
+
+/* Keys: chords from outside the key, in small groups under the chords of the key. */
+.outside { display: grid; gap: 10px; margin-top: 10px; }
+.outside-group p { margin: 0 0 6px; }
+/* Chords: the pickers of the drop voicings sit side by side above their cards. */
+.drop-pick { gap: 8px; margin: 4px 0 12px; }
+
+/* Scales for chords: the add row and the list of chords, each with a remove button. */
+.fit-add { gap: 8px; }
+.fit-add select { flex: 1 1 120px; min-width: 0; }
+.fit-chords { margin: 4px 0 12px; }
+.fit-chord { padding-right: 4px; }
+.fit-remove { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; min-width: 28px; min-height: 28px; border-radius: 999px; }
+.fit-remove:focus-visible { outline: 2px solid var(--accent); }
+
+/* Share: a small menu under the share button of a page. */
+.share { position: relative; }
+.share > summary { list-style: none; cursor: pointer; }
+.share > summary::-webkit-details-marker { display: none; }
+.share-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: grid; gap: 6px; padding: 8px; min-width: 230px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+.share-menu .btn { justify-content: flex-start; }
+/* Print: the title, the neck and the facts of a page, without the menus and the choices. */
+@media print {
+  .topbar, .bottom-nav, nav, .lib-nav, .controls, .neck-tools, .neck-turn, .neck-names, .practice, .lib-play, .piano-box, .backing-row, .prog-list, .drone, .share, .search-box { display: none !important; }
+  body { background: #fff; }
+  .neck-scroll { overflow: visible !important; -webkit-mask-image: none !important; mask-image: none !important; }
+  .neck svg.fb { min-width: 0 !important; width: 100% !important; max-height: none !important; }
+  .lib-section, .card, .neck { break-inside: avoid; }
+  /* Hints to tap and loops to play do nothing on paper. */
+  .lib-main p[aria-live], .lib-section:has(.prog-list), .lib-section:has(.backing-row) { display: none !important; }
+}
+
+/* Drums beside the tempo. */
+.tempo .chip { margin-left: 6px; }
+/* Compare: the notes of the second scale are dashed rings. */
+.fb-compare .fb-dot { fill: var(--board); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 3.5 2.5; }
+.fb-compare .fb-label { fill: var(--accent-text); font-weight: 700; }
+/* A scale position as tab. */
+.tab { margin: 0; padding: 12px 14px; overflow-x: auto; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); font: 600 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--text); }
+
+/* Read the staff: a treble staff above the neck. */
+.staff { display: block; width: 100%; max-width: 260px; height: auto; margin: 0 auto 6px; }
+.staff-line { stroke: var(--text); stroke-width: 1.2; opacity: .75; }
+.staff-clef { fill: var(--text); font-size: 64px; font-family: "Noto Music", "Bravura", "Apple Symbols", "Segoe UI Symbol", serif; }
+.staff-acc { fill: var(--text); font-size: 17px; font-weight: 700; }
+.staff-note { fill: var(--text); }
+
+/* Tuner: a gauge from 50 cents low to 50 cents high, the note, and the strings of the tuning. */
+.tuner { display: grid; justify-items: center; gap: 6px; margin: 12px 0; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
+.tuner-gauge { width: min(320px, 100%); height: auto; }
+.tuner-arc { fill: none; stroke: var(--line-strong); stroke-width: 8; stroke-linecap: round; }
+.tuner-zone { fill: none; stroke: var(--ok); stroke-width: 8; stroke-linecap: round; }
+.tuner-tick { stroke: var(--muted); stroke-width: 2; }
+.tuner-needle { stroke: var(--muted); stroke-width: 4; stroke-linecap: round; transition: transform .12s ease-out; }
+.tuner.is-on .tuner-needle { stroke: var(--accent); }
+.tuner.is-in .tuner-needle { stroke: var(--ok); }
+.tuner-hub { fill: var(--text); }
+.tuner-name { font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -.02em; }
+.tuner.is-in .tuner-name { color: var(--ok); }
+.tuner-detail { text-align: center; min-height: 3em; margin: 0; }
+.tuner-strings { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; }
+.tuner-strings .chip { justify-content: center; padding: 5px 4px; }
+@media (max-width: 560px) { .tuner-strings { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Keys: the chords from outside the key fill even rows. */
+.outside .chord-row { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 6px; }
+/* Scales for chords: the examples fill two columns on a phone. */
+@media (max-width: 560px) { .fit-examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .fit-examples .chip { justify-content: center; } }
+/* On a phone the share button sits at the right of the title, so the play buttons keep their own row. */
+@media (max-width: 760px) {
+  .lib-title { position: relative; }
+  .lib-title .share { position: absolute; top: 2px; right: 0; }
+  .lib-title h1 { padding-right: 48px; }
+}
+
+/* Circle of fifths, intervals view: the inner rings give way to the interval of each note from the key. */
+.circle-col > .seg { display: flex; width: max-content; margin: 0 auto 10px; }
+.circle.is-intervals .ring-minor, .circle.is-intervals .ring-dim, .circle.is-intervals .key-frame, .circle.is-intervals .hot { opacity: 0; pointer-events: none; }
+.circle.is-intervals .t-num, .circle.is-intervals .t-sig, .circle.is-intervals .t-hub, .circle.is-intervals .t-hub-sub, .circle.is-intervals .t-hub-sig { opacity: 0; }
+.circle.is-intervals .in-key path { fill: var(--ring-major); }
+.circle.is-intervals .is-tonic path { fill: var(--accent); }
+.iv-cell { cursor: pointer; outline: none; }
+.iv-cell path { fill: var(--ring-minor); stroke: var(--ring-gap); stroke-width: 2; transition: fill .2s; }
+.iv-cell .t-iv { font-size: 15px; font-weight: 800; fill: var(--muted); pointer-events: none; text-anchor: middle; transition: fill .2s; }
+.iv-cell.kind-root .t-iv { fill: var(--root); } .iv-cell.kind-third .t-iv { fill: var(--third); } .iv-cell.kind-fifth .t-iv { fill: var(--fifth); } .iv-cell.kind-seventh .t-iv { fill: var(--seventh); }
+.iv-cell[aria-pressed="true"] path { fill: color-mix(in srgb, var(--accent) 16%, var(--ring-minor)); }
+.iv-cell.kind-third[aria-pressed="true"] path { fill: color-mix(in srgb, var(--third) 22%, var(--ring-minor)); }
+.iv-cell.kind-fifth[aria-pressed="true"] path { fill: color-mix(in srgb, var(--fifth) 22%, var(--ring-minor)); }
+.iv-cell.kind-seventh[aria-pressed="true"] path { fill: color-mix(in srgb, var(--seventh) 22%, var(--ring-minor)); }
+.iv-cell.kind-other[aria-pressed="true"] path { fill: color-mix(in srgb, var(--muted) 22%, var(--ring-minor)); }
+.iv-cell:focus-visible path { stroke: var(--accent); stroke-width: 3; }
+@media (hover: hover) { .iv-cell:hover path { fill: var(--surface-3); } }
+.iv-shape { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; transform-origin: 0 0; }
+.iv-shape.is-open { fill: none; }
+.iv-shape.is-new { animation: iv-in .35s cubic-bezier(.3, .7, .2, 1); }
+@keyframes iv-in { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: scale(1); } }
+.iv-dot { stroke: var(--surface); stroke-width: 2; pointer-events: none; }
+.iv-dot.kind-root { fill: var(--root); } .iv-dot.kind-third { fill: var(--third); } .iv-dot.kind-fifth { fill: var(--fifth); } .iv-dot.kind-seventh { fill: var(--seventh); } .iv-dot.kind-other { fill: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .iv-shape.is-new { animation: none; } }
+
+.iv-readout { display: grid; gap: 2px; justify-items: center; text-align: center; margin: 8px 0 0; min-height: 3.2em; }
+.iv-readout b { font-size: 19px; font-weight: 750; letter-spacing: -.01em; }
+.iv-readout span { color: var(--muted); font-size: 14px; }
+.circle.is-intervals .is-key path { fill: var(--accent); }
+.circle.is-intervals .is-key .t-name { fill: var(--accent-ink); }
+.circle.is-intervals .is-tonic:not(.is-key) path { fill: var(--ring-major); }
+.circle.is-intervals .is-tonic:not(.is-key) .t-name { fill: var(--text); }

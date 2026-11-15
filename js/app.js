@@ -7,7 +7,8 @@
   GT.applySound();
   GT.applyTheme();
   const sound = document.querySelector('.sound-btn');
-  if (sound) sound.addEventListener('click', () => GT.setMuted(!GT.settings.muted));
+  // Settings shows the same switch, so it is drawn again there.
+  if (sound) sound.addEventListener('click', () => { GT.setMuted(!GT.settings.muted); if (location.hash.startsWith('#/settings')) { const y = root.scrollY; GT.render(); root.scrollTo(0, y); } });
   root.addEventListener('hashchange', GT.render);
   GT.render();
   if ('serviceWorker' in navigator && root.isSecureContext && root.location.protocol !== 'file:') {

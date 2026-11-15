@@ -53,7 +53,7 @@
 
   D.add({
     id: 'ear-intervals', track: 'ear',
-    title: 'Intervals',
+    title: 'Intervals by ear',
     blurb: 'Hear two notes and name the distance. Start with four intervals, the site adds the next ones when you are ready.',
     hint: 'Listen, then choose. The starting note changes every time.',
     help: [
@@ -210,7 +210,7 @@
   }
   D.add({
     id: 'ear-degrees', track: 'ear',
-    title: 'Scale degrees',
+    title: 'Scale degrees by ear',
     blurb: 'A short cadence sets the key, then one note. Name its degree in the key.',
     hint: 'Hear the note against the key, not against the last note.',
     help: [
@@ -270,7 +270,7 @@
   const CHORD_STAGES = [['major', 'minor'], ['dim', 'aug'], ['7', 'maj7', 'm7'], ['m7b5', 'dim7']];
   D.add({
     id: 'ear-chords', track: 'ear',
-    title: 'Chord quality',
+    title: 'Chord quality by ear',
     blurb: 'Major or minor first, then diminished and augmented, then seventh chords.',
     hint: 'Listen for the third first, then the fifth and the seventh.',
     help: [
@@ -342,7 +342,7 @@
   }
   D.add({
     id: 'ear-progressions', track: 'ear',
-    title: 'Progressions',
+    title: 'Progressions by ear',
     blurb: 'Four chords in a key. The first is I. Name the other three.',
     hint: 'Follow the bass note, and feel whether each chord moves away from home or back.',
     help: [

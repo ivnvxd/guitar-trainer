@@ -36,6 +36,13 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 30. Faint layers: chips under the neck add the CAGED shapes to triads and scales, and the usual scale to a chord. The scale notes around triads are on at first.
 31. Scale positions: a seven-note scale has vertical boxes as well as shapes with three notes on each string.
 32. Play along: on a scale page the neck lights the notes of the chord that sounds.
+33. Tunings and capo: the shapes move to half step down, drop D and a capo; a custom tuning; a capo in Settings for the Library.
+34. Chords: 30 types, slash chords, finger numbers, drop 2 and drop 3 voicings, arpeggio positions.
+35. Keys: secondary dominants, borrowed chords, and the major V in minor keys.
+36. Scales for chords: the scales that fit the chords of a song, with a loop to play over them.
+37. Scales: compare two scales on one neck; a position as tab; no position number is skipped.
+38. Read the staff: a neck drill from the treble staff to the neck.
+39. Tuner, drums under the backing, and a share menu (link, picture, print).
 
 ## Next
 

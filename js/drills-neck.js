@@ -33,7 +33,7 @@
       for (const s of c.strings) for (let f = lo; f <= hi; f++) if (!c.naturals || NATURAL_PCS.includes(T.mod(t[s] + f))) out.push(`${s}:${f}`);
       return out;
     },
-    itemName: item => { const [s, f] = item.split(':').map(Number); return `${ord(s)} str. fret ${f}`; },
+    itemName: item => { const [s, f] = item.split(':').map(Number); return `${T.PC_PLAIN[T.mod(GT.tuning()[s] + f)]}: ${ord(s)} string, ${f ? 'fret ' + f : 'open'}`; },
     // The places you missed, on one neck, each with its note name.
     missedVisual(items, ui) {
       const [lo, hi] = range(ui.config.frets), t = GT.tuning();
@@ -70,7 +70,7 @@
       return h('div', { class: 'opts' },
         D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })),
         D.field('Frets', GT.segmented('Frets', RANGES, c.frets, v => set({ frets: v }))),
-        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All 12']], c.naturals, v => set({ naturals: v }))));
+        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   });
 
@@ -125,7 +125,80 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         D.field('Frets', GT.segmented('Frets', [[5, '0–5'], [12, '0–12'], [15, '0–15']], c.frets, v => set({ frets: v }))),
-        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All 12']], c.naturals, v => set({ naturals: v }))));
+        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
+    }
+  });
+
+  // ---------- read the staff ----------
+  // A note on the treble staff, written as guitar music is: an octave above the sound. Tap one place that plays it.
+  const LETTERS = 'CDEFGAB';
+  const octaveName = midi => `${T.PC_PLAIN[T.mod(midi)]}${Math.floor(midi / 12) - 1}`;
+  function staff(midi) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    const el = (name, attrs, parent = svg) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); parent.appendChild(n); return n; };
+    svg.setAttribute('viewBox', '0 0 200 150');
+    svg.setAttribute('class', 'staff');
+    const written = midi + 12, name = T.PC_PLAIN[T.mod(written)];
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', `The note ${name} on the treble staff`);
+    // Step 0 is E4, the bottom line. Each step is a line or a space.
+    const step = LETTERS.indexOf(name[0]) + 7 * (Math.floor(written / 12) - 1) - (2 + 7 * 4);
+    const y = s => 98 - s * 5, x = 128;
+    for (let s = 0; s <= 8; s += 2) el('line', { x1: 8, x2: 192, y1: y(s), y2: y(s), class: 'staff-line' });
+    // Ledger lines above and below the staff.
+    for (let s = -2; s >= step; s -= 2) el('line', { x1: x - 13, x2: x + 13, y1: y(s), y2: y(s), class: 'staff-line' });
+    for (let s = 10; s <= step; s += 2) el('line', { x1: x - 13, x2: x + 13, y1: y(s), y2: y(s), class: 'staff-line' });
+    el('text', { x: 12, y: 108, class: 'staff-clef' }).textContent = '𝄞';
+    if (name.length > 1) el('text', { x: x - 21, y: y(step) + 5, class: 'staff-acc', 'text-anchor': 'middle' }).textContent = name.slice(1);
+    el('ellipse', { cx: x, cy: y(step), rx: 6.6, ry: 4.9, transform: `rotate(-20 ${x} ${y(step)})`, class: 'staff-note' });
+    return svg;
+  }
+  D.add({
+    id: 'neck-staff', track: 'neck',
+    title: 'Read the staff',
+    blurb: 'A note on the staff. Tap where you play it on the neck.',
+    hint: 'Guitar music sounds an octave lower than written: the bottom line, E, is the open D string up two frets.',
+    help: [
+      'A note appears on the treble staff. Tap one place on the neck that plays it, in the same octave. Guitar music is written an octave higher than it sounds, so the open low E string sits three ledger lines below the staff.',
+      'Start in the first position, frets 0 to 4, with natural notes. Most beginner music stays there.',
+      'Landmarks: the bottom line E is the D string at fret 2, the top line F is the high e string at fret 1, and the middle line B is the open B string.'
+    ],
+    defaults: { frets: 4, naturals: true },
+    fastMs: 4000,
+    autoPlay: false,
+    pool(c) {
+      const t = GT.tuning(), out = new Set();
+      for (let s = 0; s < 6; s++) for (let f = 0; f <= c.frets; f++) if (!c.naturals || NATURAL_PCS.includes(T.mod(t[s] + f))) out.add(String(t[s] + f));
+      return [...out];
+    },
+    itemName: item => octaveName(Number(item)),
+    make(item) { return { midi: Number(item) }; },
+    render(q, ui) {
+      ui.title('Where do you play this note?');
+      ui.sub('Tap one place on the neck. Any string works, in the same octave.');
+      ui.noChoices();
+      ui.board.replaceChildren(staff(q.midi), ui.neck([], { from: 0, to: ui.config.frets, label: 'Tap where the note is', onPress: (s, f, midi) => {
+        if (q.over) return;
+        q.over = true;
+        A.note(midi, 0, 0.7);
+        q.tap = { string: s, fret: f, midi };
+        ui.submit(midi === q.midi ? 'right' : 'wrong');
+      } }));
+    },
+    check: (q, v) => v === 'right',
+    feedback(q, v, correct, ui) {
+      const t = GT.tuning(), places = [];
+      for (let s = 0; s < 6; s++) for (let f = 0; f <= Math.max(ui.config.frets, 12); f++) if (t[s] + f === q.midi) places.push({ string: s, fret: f, kind: 'correct', label: T.PC_PLAIN[T.mod(q.midi)] });
+      const markers = places.concat(q.tap && !correct ? [{ string: q.tap.string, fret: q.tap.fret, kind: 'wrong', label: T.PC_PLAIN[T.mod(q.tap.midi)] }] : []);
+      ui.board.replaceChildren(staff(q.midi), ui.neck(markers, { from: 0, to: Math.max(ui.config.frets, ...places.map(p => p.fret)), label: `Every place of ${octaveName(q.midi)}` }));
+      return { text: correct ? `Right: ${octaveName(q.midi)}. The green dots are the other places of the same note.`
+        : q.tap ? `That is ${octaveName(q.tap.midi)}. The note is ${octaveName(q.midi)}, at the green dots.` : `The note is ${octaveName(q.midi)}, at the green dots.` };
+    },
+    options(c, set) {
+      return h('div', { class: 'opts' },
+        D.field('Frets', GT.segmented('Frets', [[4, '0–4'], [7, '0–7'], [12, '0–12']], c.frets, v => set({ frets: v }))),
+        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   });
 

@@ -114,8 +114,18 @@
     const set = patch => { const y = root.scrollY; GT.saveSettings(patch); redraw(); root.scrollTo(0, y); };
     const volume = h('input', { type: 'range', min: 0, max: 1, step: 0.05, value: settings.volume, 'aria-label': 'Volume' });
     volume.addEventListener('change', () => { GT.saveSettings({ volume: Number(volume.value) }); A.note(57, 0, 0.8); });
-    const tuning = h('select', { 'aria-label': 'Tuning' }, T.TUNINGS.map(t => h('option', { value: t.id, selected: t.id === settings.tuning }, t.name)));
-    tuning.addEventListener('change', () => set({ tuning: tuning.value }));
+    const tuning = h('select', { 'aria-label': 'Tuning' }, T.TUNINGS.map(t => h('option', { value: t.id, selected: t.id === settings.tuning }, t.name)),
+      h('option', { value: 'custom', selected: settings.tuning === 'custom' }, 'Custom'));
+    // A custom tuning starts from the tuning you had. Each string goes up to five semitones down or four up.
+    tuning.addEventListener('change', () => set(tuning.value === 'custom' ? { tuning: 'custom', customTuning: settings.customTuning || GT.tuning().slice() } : { tuning: tuning.value }));
+    const midiName = m => `${T.PC_SHARP[m % 12]}${Math.floor(m / 12) - 1}`;
+    const custom = settings.tuning === 'custom' ? h('div', { class: 'tuning-edit', role: 'group', 'aria-label': 'Custom tuning, low string first' }, GT.tuning().map((m, s) => {
+      const pick = h('select', { 'aria-label': `${6 - s}${['th', 'th', 'th', 'rd', 'nd', 'st'][s]} string` }, Array.from({ length: 10 }, (_, k) => T.STANDARD[s] - 5 + k).map(v => h('option', { value: v, selected: v === m }, midiName(v))));
+      pick.addEventListener('change', () => { const next = GT.tuning().slice(); next[s] = Number(pick.value); set({ customTuning: next }); });
+      return h('label', null, h('span', { class: 'small muted' }, `${6 - s}`), pick);
+    })) : null;
+    const capo = h('select', { 'aria-label': 'Capo' }, Array.from({ length: 10 }, (_, k) => h('option', { value: k, selected: k === (settings.capo || 0) }, k ? `Fret ${k}` : 'No capo')));
+    capo.addEventListener('change', () => set({ capo: Number(capo.value) }));
     const preview = h('div', { class: 'neck' });
     GT.fretboard.render(preview, { from: 0, to: 7, tuning: GT.tuning(), leftHanded: settings.leftHanded, orientation: settings.orientation, markers: [{ string: 1, fret: 3, kind: 'root', label: 'C' }, { string: 2, fret: 2, kind: 'third', label: 'E' }, { string: 4, fret: 1, kind: 'root', label: 'C' }], label: 'Preview' });
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
@@ -126,10 +136,13 @@
         h('p', { class: 'small muted' }, 'Automatic follows the light or dark setting of your device.')),
       block('Neck',
         D.field('Hand', GT.segmented('Hand', [[false, 'Right-handed'], [true, 'Left-handed']], settings.leftHanded, v => set({ leftHanded: v }))),
-        D.field('Direction', GT.segmented('Direction', [['horizontal', 'Flat'], ['vertical', 'Upright']], GT.fretboard.isUpright(settings.orientation) ? 'vertical' : 'horizontal', v => set({ orientation: v }))),
-        h('p', { class: 'small muted' }, 'Flat: the nut on the left and the high e on top, like tab. On a phone a long neck scrolls sideways. Upright: the nut on top and the low E on the left, like a chord chart. On a phone, a switch under each neck changes this too.'),
+        D.field('Direction', GT.segmented('Direction', [['horizontal', 'Horizontal'], ['vertical', 'Vertical']], GT.fretboard.isUpright(settings.orientation) ? 'vertical' : 'horizontal', v => set({ orientation: v }))),
+        h('p', { class: 'small muted' }, 'Horizontal: the nut on the left and the high e on top, like tab. On a phone a long neck scrolls sideways. Vertical: the nut on top and the low E on the left, like a chord chart. On a phone, a switch beside each neck changes this too.'),
         D.field('Frets in the library', GT.segmented('Frets', [[12, '12'], [15, '15'], [24, '24']], settings.frets, v => set({ frets: v }))),
         D.field('Tuning', tuning),
+        custom,
+        D.field('Capo', capo),
+        h('p', { class: 'small muted' }, 'With a capo, the Library counts the frets from the capo, and the chords keep the names of their sound. The drills ignore the capo.'),
         preview),
       block('Sound',
         D.field('Sound', GT.segmented('Sound', [[false, 'On'], [true, 'Off']], !!settings.muted, v => set({ muted: v }))),

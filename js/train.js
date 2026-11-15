@@ -23,7 +23,8 @@
     sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
     grid: 'M4.5 4.5h6v6h-6zM13.5 4.5h6v6h-6zM4.5 13.5h6v6h-6zM13.5 13.5h6v6h-6z',
     search: 'M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM20 20l-4.6-4.6',
-    train: 'M4 18V9m5 9V5m5 13v-6m5 6V8'
+    train: 'M4 18V9m5 9V5m5 13v-6m5 6V8',
+    share: 'M12 15V4M7.5 8.5L12 4l4.5 4.5M5 12.5V19h14v-6.5'
   };
   function icon(name, cls = '') {
     const el = GT.fretboard.el;
@@ -120,14 +121,13 @@
     let advanceTimer = null;
 
     const statLine = h('div', { class: 'drill-stats', 'aria-live': 'off' });
-    // The options open on request, so the question and its answers fit one screen. The choice is remembered.
-    const optionsOpen = store.get('drillOptions', false);
+    // The options open on request and start closed on every drill, so the question and its answers fit one screen.
+    const optionsOpen = false;
     const settingsPanel = h('div', { class: 'settings-panel', id: 'drill-options', hidden: !optionsOpen });
     const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options', onclick: () => {
       settingsPanel.hidden = !settingsPanel.hidden;
       settingsPanel.querySelectorAll('.pickset').forEach(even);
       settingsBtn.setAttribute('aria-expanded', String(!settingsPanel.hidden));
-      store.set('drillOptions', !settingsPanel.hidden);
     } }, icon('sliders'), 'Options');
     const title = h('h2', { id: 'q-title' });
     const sub = h('p', { class: 'sub' });

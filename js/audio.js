@@ -185,7 +185,42 @@
 
   // Play-along: a loop of chords and a drone. They run until you stop them, so silence() leaves them
   // alone: a tap on the neck or a new position on the page does not cut the backing.
-  const backing = { nodes: new Set(), timer: null, chords: null, bpm: 84, beats: 4, at: 0, nextTime: 0, onChord: null, drone: null };
+  const backing = { nodes: new Set(), timer: null, chords: null, bpm: 84, beats: 4, at: 0, nextTime: 0, onChord: null, drone: null, drums: false };
+  // Drums under a loop, made from a sine sweep (kick) and filtered noise (snare, hi-hat).
+  let noise = null;
+  function noiseBuffer() {
+    if (!noise) {
+      noise = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.5), ctx.sampleRate);
+      const d = noise.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return noise;
+  }
+  function drum(kind, at, bag) {
+    const g = ctx.createGain();
+    g.connect(master);
+    g.gain.setValueAtTime(0.0001, at);
+    if (kind === 'kick') {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(140, at);
+      o.frequency.exponentialRampToValueAtTime(42, at + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.8, at + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.32);
+      o.connect(g); o.start(at); o.stop(at + 0.34); track(o, bag);
+      return;
+    }
+    const snare = kind === 'snare', len = snare ? 0.16 : 0.045;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuffer();
+    const f = ctx.createBiquadFilter();
+    f.type = snare ? 'bandpass' : 'highpass';
+    f.frequency.value = snare ? 1800 : 7000;
+    if (snare) f.Q.value = 0.7;
+    g.gain.exponentialRampToValueAtTime(snare ? 0.4 : 0.1, at + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + len);
+    src.connect(f); f.connect(g); src.start(at); src.stop(at + len + 0.02); track(src, bag);
+  }
   const STRUM_GAIN = [0.3, 0.15, 0.2, 0.15, 0.2, 0.15];
   function scheduleLoop() {
     // After a pause in the background the clock is behind: go on from now, not with every missed bar at once.
@@ -196,6 +231,12 @@
       // One bar for each chord: the bass rings for the bar, a full strum on beat one, lighter strums after it.
       play(midis[0], when, beat * backing.beats * 0.98, 0.3, backing.nodes);
       for (let k = 0; k < backing.beats; k++) midis.slice(1).forEach((m, j) => play(m, when + k * beat + j * (k ? 0.016 : 0.03), beat * 0.95, STRUM_GAIN[k] || 0.15, backing.nodes));
+      // A rock beat: kick on 1 and 3, snare on 2 and 4, hi-hat on every eighth note.
+      if (backing.drums) for (let k = 0; k < backing.beats; k++) {
+        drum(k % 2 ? 'snare' : 'kick', when + k * beat, backing.nodes);
+        drum('hat', when + k * beat, backing.nodes);
+        drum('hat', when + (k + 0.5) * beat, backing.nodes);
+      }
       if (backing.onChord) {
         const chords = backing.chords;
         setTimeout(() => { if (backing.chords === chords && backing.onChord) backing.onChord(i); }, Math.max(0, (when - ctx.currentTime) * 1000));
@@ -292,6 +333,7 @@
     note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
     startLoop, stopLoop, startDrone, stopDrone,
     setLoopTempo(bpm) { backing.bpm = bpm; },
+    setDrums(v) { backing.drums = !!v; },
     get metronomeRunning() { return metronome.running; },
     get loopRunning() { return !!backing.chords; },
     // The pitch class of the drone that sounds, or null.

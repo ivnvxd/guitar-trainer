@@ -42,7 +42,7 @@
     }
   };
 
-  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', orientation: 'auto', theme: 'auto' };
+  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', customTuning: null, capo: 0, orientation: 'auto', theme: 'auto' };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   function saveSettings(patch) {
     Object.assign(settings, patch);
@@ -58,6 +58,7 @@
     for (const b of document.querySelectorAll('.sound-btn')) {
       b.setAttribute('aria-pressed', String(!!settings.muted));
       b.title = settings.muted ? 'The sound is off' : 'The sound is on';
+      b.setAttribute('aria-label', settings.muted ? 'Turn the sound on' : 'Turn the sound off');
     }
   }
   const setMuted = v => saveSettings({ muted: !!v });
@@ -65,6 +66,9 @@
   GT.audio.onMuted = () => {
     for (const b of document.querySelectorAll('.sound-btn')) { b.classList.remove('is-asked'); void b.offsetWidth; b.classList.add('is-asked'); }
   };
+  // A printout is light, whatever the theme on screen.
+  root.addEventListener('beforeprint', () => document.documentElement.setAttribute('data-theme', 'light'));
+  root.addEventListener('afterprint', () => applyTheme());
   // Theme: 'auto' follows the device. index.html sets it once before the first paint.
   const lightQuery = root.matchMedia ? root.matchMedia('(prefers-color-scheme: light)') : null;
   function applyTheme() {
@@ -74,7 +78,9 @@
     if (meta) meta.content = theme === 'light' ? '#f4f6f9' : '#0f1218';
   }
   if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
-  const tuning = () => (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;
+  // A custom tuning is six MIDI numbers, low string first. The capo is not part of it: the Library adds it.
+  const tuning = () => settings.tuning === 'custom' && Array.isArray(settings.customTuning) && settings.customTuning.length === 6
+    ? settings.customTuning : (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;
 
   // Root names in links: "a", "c-sharp", "e-flat".
   const rootSlug = name => name[0].toLowerCase() + (name.includes('♯') ? '-sharp' : name.includes('♭') ? '-flat' : '');
