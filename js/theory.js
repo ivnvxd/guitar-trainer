@@ -212,9 +212,6 @@
     });
   }
 
-  // Where the chords of a key sit on the circle of fifths. Ring 'major' holds the major keys,
-  // 'minor' their relative minors and 'dim' the vii° of the major key at that position.
-  // Position 0 is C at the top; each step clockwise is a fifth up.
   // Chords from outside the key that songs use often, each with its numeral and group:
   // secondary dominants (the V7 of another chord of the key) and chords borrowed from a near scale.
   // A minor key takes V and V7 from harmonic minor: the major V that most minor-key songs use.
@@ -245,11 +242,13 @@
     }
     return out;
   }
+  // Where the chords of a key sit on the circle of fifths. Ring 'major' holds the major keys and 'minor' their
+  // relative minors. Position 0 is C at the top; each step clockwise is a fifth up.
+  // The diminished chord of the key takes the minor cell with the same root: the cell after iii, clockwise.
   function keyCells(keyName, mode = 'major') {
-    const shift = { major: 0, minor: 3, dim: 1 };
     return diatonic(keyName, mode).map(c => {
-      const ring = c.chord.id === 'major' || c.chord.id === 'minor' ? c.chord.id : 'dim';
-      return Object.assign({}, c, { ring, pos: mod((c.pc + shift[ring]) * 7) });
+      const ring = c.chord.id === 'major' ? 'major' : 'minor';
+      return Object.assign({}, c, { ring, pos: mod((c.pc + (ring === 'major' ? 0 : 3)) * 7) });
     });
   }
 

@@ -96,10 +96,40 @@
   const views = {};
   let current = null;
   function route(name, view) { views[name] = view; }
+  // A choice on a page draws the page again. The control you tapped then stays where it was on the screen,
+  // also when a part above it gets taller or shorter. The page remembers the last tap to find the control again.
+  let lastTap = null;
+  const tapKey = el => `${el.tagName}|${el.getAttribute('aria-label') || ''}|${el.textContent.trim().slice(0, 60)}`;
+  const twins = (tag, key) => [...document.querySelectorAll(`#main ${tag}`)].filter(x => tapKey(x) === key);
+  function remember(e) {
+    const el = e.target && e.target.closest ? e.target.closest('button, a, summary, select, input, [role="button"], [role="link"]') : null;
+    if (!el || !el.closest('#main')) return;
+    const key = tapKey(el), box = el.getBoundingClientRect();
+    // A row of cards that scrolls sideways keeps its place as well.
+    let row = el.parentElement;
+    while (row && row.id !== 'main' && !(row.scrollWidth > row.clientWidth + 1 && /auto|scroll/.test(getComputedStyle(row).overflowX))) row = row.parentElement;
+    if (row && row.id === 'main') row = null;
+    lastTap = { key, tag: el.tagName.toLowerCase(), nth: twins(el.tagName.toLowerCase(), key).indexOf(el), top: box.top, left: box.left, row: row && row.className, at: Date.now() };
+  }
+  for (const type of ['pointerdown', 'click', 'change']) root.addEventListener(type, remember, true);
+  function keepPlace(draw) {
+    const y = root.scrollY, tap = lastTap && Date.now() - lastTap.at < 2000 ? lastTap : null;
+    lastTap = null;
+    draw();
+    root.scrollTo(0, y);
+    if (!tap) return;
+    const same = twins(tap.tag, tap.key), el = same[tap.nth] || (same.length === 1 ? same[0] : null);
+    if (!el || !el.getClientRects().length) return;
+    if (tap.row) {
+      const row = el.closest(`[class="${tap.row}"]`);
+      if (row) row.scrollLeft += el.getBoundingClientRect().left - tap.left;
+    }
+    root.scrollBy(0, el.getBoundingClientRect().top - tap.top);
+  }
   // Open a page. "replace" changes the link without a new history entry (for option changes).
   function go(path, replace) {
     const hash = '#/' + path.replace(/^#?\/?/, '');
-    if (replace) { const y = root.scrollY; history.replaceState(null, '', hash); render(); root.scrollTo(0, y); }
+    if (replace) keepPlace(() => { history.replaceState(null, '', hash); render(); });
     else if (location.hash === hash) render();
     else location.hash = hash;
   }
@@ -114,6 +144,9 @@
     if (name !== 'library') { GT.audio.stopLoop(); GT.audio.stopDrone(); }
     const main = document.getElementById('main');
     main.replaceChildren();
+    // The top bar holds the tools of one page, such as Share. A page puts them back when it draws.
+    const tools = document.getElementById('page-tools');
+    if (tools) tools.replaceChildren();
     current = views[name];
     document.querySelectorAll('[data-nav]').forEach(a => a.setAttribute('aria-current', String(a.dataset.nav === name)));
     current.render(main, rest);
@@ -164,5 +197,5 @@
   }
 
   GT.siteName = 'Guitar Trainer';
-  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, shuffle, pick, segmented });
+  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented });
 })(window);

@@ -32,7 +32,7 @@
   const LOOKUP = { id: 'name', name: 'Name it', title: 'Name it', line: 'Tap notes on the neck and get the name of the chord and the scales that hold them.', find: 'identify chord finder namer reverse lookup what is this' };
   // The drills that train what a topic shows: [drill id, text of the link].
   const PRACTICE = {
-    notes: ['neck-notes', 'neck-find', 'neck-staff'],
+    notes: ['neck-notes', 'neck-find', 'neck-staff', 'neck-play'],
     intervals: ['ear-intervals', 'neck-degrees'],
     scales: ['ear-degrees', 'neck-degrees'],
     chords: ['neck-caged', 'ear-chords'],
@@ -123,8 +123,9 @@
     box.addEventListener('toggle', () => saveLib({ piano: Object.assign({}, lib.piano, { [topic]: box.open }) }));
     return box;
   }
-  const head = (title, sub, buttons) => h('div', { class: 'lib-title' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), h('div', { class: 'row lib-play' }, buttons, shareMenu()));
+  const head = (title, sub, buttons) => h('div', { class: 'lib-title' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
   // Share a page: its link (the state of the page is in the link), the neck as a picture, or a printout.
+  // The button sits in the top bar, so it never covers the buttons of a page.
   function shareMenu() {
     const menu = h('details', { class: 'share' });
     const done = (b, text) => { const was = b.textContent; b.textContent = text; setTimeout(() => { b.textContent = was; menu.open = false; }, 1600); };
@@ -140,6 +141,7 @@
     // The menu opens under the button and stays inside the screen.
     menu.addEventListener('toggle', () => {
       if (!menu.open) return;
+      pic.hidden = !document.querySelector('.lib-main .neck svg.fb');
       const box = menu.querySelector('.share-menu');
       box.style.right = '0px';
       const r = box.getBoundingClientRect();
@@ -147,6 +149,8 @@
     });
     return menu;
   }
+  // A tap anywhere else closes the share menu.
+  document.addEventListener('click', e => { const open = document.querySelector('.page-tools .share[open]'); if (open && !open.contains(e.target)) open.open = false; });
   // The neck as a PNG file: every style the page gives it is copied into the picture, on the background of the page.
   async function savePicture() {
     const svg = document.querySelector('.lib-main .neck svg.fb');
@@ -682,31 +686,44 @@
   const intervalsView = {
     parse(p) {
       const interval = T.INTERVALS.find(i => i.id === p[0]) || T.INTERVALS.find(i => i.id === 'P5');
-      return { interval, root: rootFromSlug(p[1]) || 'C' };
+      // A second interval from the same root, to compare: library/intervals/M3/c/m3.
+      // A unison or an octave has the note of the root, so it is not offered.
+      const cmp = T.INTERVALS.find(i => i.id === p[2] && i.semi !== interval.semi && i.semi % 12) || null;
+      return { interval, root: rootFromSlug(p[1]) || 'C', cmp };
     },
-    link: s => `library/intervals/${s.interval.id}/${rootSlug(s.root)}`,
+    link: s => `library/intervals/${s.interval.id}/${rootSlug(s.root)}${s.cmp ? `/${s.cmp.id}` : ''}`,
     title: s => s.interval.name,
     render(state) {
-      const { interval, root: r } = state;
-      const label = interval.semi === 12 ? '8' : interval.label;
-      const target = T.spell(r, interval.semi === 12 ? '8' : interval.semi === 6 ? '♭5' : label);
-      const both = [{ label: '1', name: r, pc: T.pcOf(r), semi: 0 }, { label, name: target, pc: T.mod(T.pcOf(r) + interval.semi), semi: interval.semi }];
+      const { interval, root: r, cmp } = state;
+      const upper = iv => { const label = iv.semi === 12 ? '8' : iv.label; return { label, name: T.spell(r, iv.semi === 12 ? '8' : iv.semi === 6 ? '♭5' : label), pc: T.mod(T.pcOf(r) + iv.semi), semi: iv.semi }; };
+      const top = upper(interval), target = top.name;
+      const both = [{ label: '1', name: r, pc: T.pcOf(r), semi: 0 }, top];
       // A unison and an octave have one note name: the neck shows it once.
       const tones = interval.semi === 0 || interval.semi === 12 ? both.slice(0, 1) : both;
+      // The compared interval: its upper note is dashed, unless it is a note the neck shows already.
+      const other = cmp ? upper(cmp) : null;
+      const otherTones = other && !tones.some(t => t.pc === other.pc) ? [other] : [];
       const cap = caption();
       const base = 48 + T.mod(T.pcOf(r) - 48);
+      // With a compared interval each button plays the interval, then the compared one.
+      const play = mode => { A.silence(); A.notes([base, base + interval.semi], mode); if (cmp) A.later(() => A.notes([base, base + cmp.semi], mode), mode === 'together' ? 1300 : 1700); };
+      const gap = cmp ? Math.abs(cmp.semi - interval.semi) : 0;
       const inv = T.INTERVALS.find(i => i.semi === 12 - interval.semi);
       const songs = T.INTERVAL_SONGS[interval.semi] || {};
       const out = [
         head(interval.name, `${r} to ${target}, ${interval.semi} ${interval.semi === 1 ? 'fret' : 'frets'} on one string`,
-          [playButton('Up', () => A.notes([base, base + interval.semi], 'up')), playButton('Down', () => A.notes([base, base + interval.semi], 'down')), playButton('Together', () => A.notes([base, base + interval.semi], 'together'))]),
+          [playButton('Up', () => play('up')), playButton('Down', () => play('down')), playButton('Together', () => play('together'))]),
         controls(
           rootCtl(state, intervalsView),
           labelsCtl(rerender),
-          ctl('Interval', h('div', { class: 'grid-chips', style: '--cols:7;--n:13', role: 'group', 'aria-label': 'Interval' }, T.INTERVALS.map(i => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(i.id === interval.id), title: i.name, 'aria-label': i.name, onclick: () => GT.go(intervalsView.link({ interval: i, root: r }), true) }, i.short))), 'ctl-wide ctl-plain'),
+          ctl('Interval', h('div', { class: 'grid-chips', style: '--cols:7;--n:13', role: 'group', 'aria-label': 'Interval' }, T.INTERVALS.map(i => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(i.id === interval.id), title: i.name, 'aria-label': i.name, onclick: () => GT.go(intervalsView.link({ interval: i, root: r, cmp: cmp && cmp.semi !== i.semi ? cmp : null }), true) }, i.short))), 'ctl-wide ctl-plain'),
+          ctl('Compare', h('select', { class: 'more' + (cmp ? ' is-on' : ''), 'aria-label': 'Compare with another interval', onchange: e => GT.go(intervalsView.link({ interval, root: r, cmp: T.INTERVALS.find(i => i.id === e.target.value) || null }), true) },
+            h('option', { value: '', selected: !cmp }, 'Compare with another interval'),
+            T.INTERVALS.filter(i => i.semi !== interval.semi && i.semi % 12).map(i => h('option', { value: i.id, selected: !!cmp && cmp.id === i.id }, `Compare with ${i.name.toLowerCase()} (${r} to ${upper(i).name})`))), 'ctl-wide ctl-plain'),
           fretsCtl(rerender)),
-        neck(toneMarkers(tones), { onPress: pressPlayer(cap, describeNote(tones)), label: `${interval.name} from ${r}` }),
+        neck(toneMarkers(tones).concat(toneMarkers(otherTones, { kind: 'compare' })), { onPress: pressPlayer(cap, describeNote(tones.concat(otherTones))), label: `${interval.name} from ${r}${cmp ? `, compared with ${cmp.name.toLowerCase()}` : ''}` }),
         cap,
+        cmp ? h('p', { class: 'small muted lib-note' }, `The dashed notes are ${other.name}, ${/^[aeiou]/i.test(cmp.name) ? 'an' : 'a'} ${cmp.name.toLowerCase()} from ${r}. ${otherTones.length ? `On one string ${other.name} is ${gap} fret${gap > 1 ? 's' : ''} ${cmp.semi < interval.semi ? 'below' : 'above'} ${target}.` : `It is the same note name as ${target}.`} Each play button plays the ${interval.name.toLowerCase()}, then the ${cmp.name.toLowerCase()}.`) : null,
         practice('intervals'),
         pianoBox('intervals', both, r, `Count the keys from ${r} up to ${target}, black keys too: ${interval.semi}. Each key is one semitone, the same as one fret.`),
         h('p', { class: 'small muted lib-note' }, `Turned upside down, ${/^[aeiou]/i.test(interval.name) ? 'an' : 'a'} ${interval.name.toLowerCase()} is ${inv ? (/^[aeiou]/i.test(inv.name) ? 'an ' : 'a ') + inv.name.toLowerCase() : 'a unison'}.`),
@@ -818,16 +835,23 @@
   // ---------- tuner ----------
   // The microphone hears a string, and the page shows its note and how far it is from the string of your tuning.
   // The pitch comes from the autocorrelation of 4096 samples, about ten times a second. The tuner ignores the capo.
+  // tuner is set from the tap on Start until Stop, also while the microphone starts.
   let tuner = null;
   function stopTuner() {
     if (!tuner) return;
-    clearInterval(tuner.timer);
-    tuner.stream.getTracks().forEach(t => t.stop());
-    tuner.ctx.close().catch(() => {});
     tuner = null;
-    // Back to playback only, so the silent switch of an iPhone does not mute the site.
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+    A.stopListening();
   }
+  // What went wrong when the microphone did not start, and what to do.
+  const micError = e => {
+    const why = e && e.name;
+    return why === 'NotAllowedError' ? 'The microphone is blocked. Allow it for this site in the settings of your browser, then tap Start again.'
+      : why === 'NotFoundError' ? 'This device has no microphone the browser can use.'
+      : why === 'NotReadableError' ? 'Another app uses the microphone. Close it, then tap Start again.'
+      : why === 'NoMicrophone' ? 'This browser gives no microphone to a page.'
+      : `The microphone did not start${why ? ` (${why})` : ''}.`;
+  };
+  GT.micError = micError;
   const tuneView = {
     parse: () => ({}),
     link: () => 'library/tune',
@@ -835,59 +859,93 @@
     render() {
       const strings = GT.tuning();
       const name = m => `${T.PC_PLAIN[T.mod(m)]}${Math.floor(m / 12) - 1}`;
-      const note = h('b', { class: 'tuner-name' }, '–');
-      const detail = h('p', { class: 'tuner-detail muted', 'aria-live': 'polite' }, 'Tap Start and play one string.');
+      const ordinal = s => `${6 - s}${['th', 'th', 'th', 'rd', 'nd', 'st'][s]}`;
       const NS = 'http://www.w3.org/2000/svg';
       const gauge = document.createElementNS(NS, 'svg');
-      gauge.setAttribute('viewBox', '-110 -100 220 112');
+      gauge.setAttribute('viewBox', '-120 -112 240 140');
       gauge.setAttribute('class', 'tuner-gauge');
       gauge.setAttribute('aria-hidden', 'true');
-      const el = (n, attrs) => { const x = document.createElementNS(NS, n); for (const [k, v] of Object.entries(attrs)) x.setAttribute(k, v); gauge.appendChild(x); return x; };
-      el('path', { d: 'M -90 0 A 90 90 0 0 1 90 0', class: 'tuner-arc' });
-      el('path', { d: `M ${-90 * Math.sin(Math.PI / 36)} ${-90 * Math.cos(Math.PI / 36)} A 90 90 0 0 1 ${90 * Math.sin(Math.PI / 36)} ${-90 * Math.cos(Math.PI / 36)}`, class: 'tuner-zone' });
-      for (const c of [-50, -25, 0, 25, 50]) { const a = c * 1.8 * Math.PI / 180; el('line', { x1: 80 * Math.sin(a), y1: -80 * Math.cos(a), x2: 96 * Math.sin(a), y2: -96 * Math.cos(a), class: 'tuner-tick' }); }
+      const el = (n, attrs, text) => { const x = document.createElementNS(NS, n); for (const [k, v] of Object.entries(attrs)) x.setAttribute(k, v); if (text) x.textContent = text; gauge.appendChild(x); return x; };
+      // A half circle from 50 cents low (left) to 50 cents high (right). The green part is in tune: 5 cents either way.
+      const at = (c, r) => { const a = c * 1.8 * Math.PI / 180; return [r * Math.sin(a), -r * Math.cos(a)]; };
+      const arcPath = (c1, c2, r) => { const [x1, y1] = at(c1, r), [x2, y2] = at(c2, r); return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 0 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`; };
+      el('path', { d: arcPath(-50, 50, 92), class: 'tuner-arc' });
+      el('path', { d: arcPath(-5, 5, 92), class: 'tuner-zone' });
+      for (let c = -50; c <= 50; c += 10) { const big = c % 25 === 0 || c === 0; const [x1, y1] = at(c, big ? 74 : 79), [x2, y2] = at(c, 86); el('line', { x1, y1, x2, y2, class: big ? 'tuner-tick is-big' : 'tuner-tick' }); }
+      // Flat and sharp sit under the two ends of the scale.
+      el('text', { x: -92, y: 27, class: 'tuner-end' }, '♭');
+      el('text', { x: 92, y: 27, class: 'tuner-end' }, '♯');
       const needle = el('line', { x1: 0, y1: 0, x2: 0, y2: -84, class: 'tuner-needle' });
-      el('circle', { r: 5, class: 'tuner-hub' });
-      // A string chip plays its note, to tune by ear.
-      const chips = h('div', { class: 'chips tuner-strings', role: 'group', 'aria-label': 'Strings of your tuning. Tap one to hear it.' }, strings.map((m, s) => h('button', { type: 'button', class: 'chip', dataset: { s }, onclick: () => A.note(m, 0, 2.5) }, `${6 - s} · ${name(m)}`)));
-      const box = h('div', { class: 'tuner' }, gauge, note, detail, chips);
-      const start = h('button', { type: 'button', class: 'btn btn-primary', onclick: async () => {
-        if (tuner) { stopTuner(); start.textContent = 'Start'; detail.textContent = 'The tuner is off.'; box.classList.remove('is-on'); return; }
+      el('circle', { r: 6, class: 'tuner-hub' });
+      const note = h('b', { class: 'tuner-name' }, '–');
+      const detail = h('p', { class: 'tuner-detail', 'aria-live': 'polite' }, 'Tap Start, then play one string.');
+      const level = h('i'), meter = h('div', { class: 'tuner-level', title: 'What the microphone hears' }, level);
+      // The strings of your tuning. The string you play lights up, and a tuned string gets a check mark.
+      // A tap plays the note of a string, to tune by ear.
+      const chips = h('div', { class: 'tuner-strings', role: 'group', 'aria-label': 'Strings of your tuning. Tap one to hear it.' },
+        strings.map((m, s) => h('button', { type: 'button', class: 'tuner-string', dataset: { s }, 'aria-label': `${ordinal(s)} string, ${name(m)}. Play it.`, onclick: () => A.note(m, 0, 2.5) },
+          h('small', null, String(6 - s)), h('b', null, T.PC_PLAIN[T.mod(m)]), h('span', { class: 'tuner-check', 'aria-hidden': 'true' }, '✓'))));
+      const box = h('div', { class: 'tuner' }, gauge, note, detail, meter, chips);
+      const say = text => { detail.textContent = text; };
+      const reset = () => { note.textContent = '–'; needle.setAttribute('transform', 'rotate(0)'); box.classList.remove('is-on', 'is-in', 'is-near'); level.style.width = '0%'; chips.querySelectorAll('.tuner-string').forEach(b => b.classList.remove('is-heard')); };
+      const start = h('button', { type: 'button', class: 'btn btn-primary tuner-start', onclick: async () => {
+        if (tuner) { stopTuner(); start.textContent = 'Start the tuner'; start.classList.add('btn-primary'); reset(); say('The tuner is off.'); return; }
+        const me = tuner = {};
+        start.textContent = 'Stop';
+        start.classList.remove('btn-primary');
+        say('Waiting for the microphone…');
+        const last = [];
+        let quiet = 0, silent = 0, inTune = 0;
+        const frame = (buf, rate) => {
+          if (!buf) { say('The sound of the page is paused. Tap Stop, then Start.'); return; }
+          const { rms, peak } = A.levelOf(buf);
+          level.style.width = `${Math.min(100, Math.round(rms / 0.08 * 100))}%`;
+          // About five seconds of nothing at all: the microphone gives the page no sound.
+          silent = peak === 0 ? silent + 1 : 0;
+          if (silent === 55) say('The microphone gives no sound. Tap Stop, then Start. If it stays silent, reload the page.');
+          const f = T.pitchOf(buf, rate);
+          if (!f) {
+            quiet++;
+            if (quiet === 30 && peak > 0) say('Too quiet. Play a string louder, or hold the phone nearer.');
+            if (quiet > 12) { box.classList.remove('is-in', 'is-near'); chips.querySelectorAll('.tuner-string').forEach(b => b.classList.remove('is-heard')); last.length = 0; inTune = 0; }
+            return;
+          }
+          quiet = 0;
+          last.push(f); if (last.length > 5) last.shift();
+          const hz = last.slice().sort((a, b) => a - b)[last.length >> 1];
+          const exact = 69 + 12 * Math.log2(hz / 440), midi = Math.round(exact);
+          // The nearest string of your tuning. Near a string, the needle shows how far you are from it.
+          // Far from every string, it shows the nearest note, for a fretted note or another tuning.
+          const s = strings.reduce((k, m, i) => Math.abs(exact - m) < Math.abs(exact - strings[k]) ? i : k, 0);
+          const off = Math.round((exact - strings[s]) * 100), near = Math.abs(off) <= 300;
+          const cents = near ? off : Math.round((exact - midi) * 100);
+          note.textContent = near ? name(strings[s]) : name(midi);
+          needle.setAttribute('transform', `rotate(${Math.max(-50, Math.min(50, cents)) * 1.8})`);
+          const good = Math.abs(cents) <= 5;
+          box.classList.toggle('is-in', good);
+          box.classList.toggle('is-near', !good && Math.abs(cents) <= 15);
+          inTune = good && near ? inTune + 1 : 0;
+          if (inTune === 8) { chips.querySelector(`[data-s="${s}"]`).classList.add('is-tuned'); }
+          chips.querySelectorAll('.tuner-string').forEach(b => b.classList.toggle('is-heard', near && Number(b.dataset.s) === s));
+          say(near ? `${ordinal(s)} string: ${good ? 'in tune' : `${off < 0 ? 'tune up' : 'tune down'}, ${Math.abs(off)} cents ${off < 0 ? 'low' : 'high'}`}.`
+            : `${name(midi)}, ${Math.abs(cents) <= 5 ? 'in tune' : `${Math.abs(cents)} cents ${cents < 0 ? 'low' : 'high'}`}. No string of your tuning is near.`);
+        };
         try {
-          // An iPhone records only when the page asks for recording and playback together.
-          try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch { /* older browsers */ }
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-          const ctx = new (root.AudioContext || root.webkitAudioContext)();
-          const an = ctx.createAnalyser(); an.fftSize = 4096;
-          ctx.createMediaStreamSource(stream).connect(an);
-          const buf = new Float32Array(an.fftSize), last = [];
-          tuner = { stream, ctx, timer: setInterval(() => {
-            an.getFloatTimeDomainData(buf);
-            const f = T.pitchOf(buf, ctx.sampleRate);
-            if (!f) return;
-            last.push(f); if (last.length > 5) last.shift();
-            const hz = last.slice().sort((a, b) => a - b)[last.length >> 1];
-            const exact = 69 + 12 * Math.log2(hz / 440), midi = Math.round(exact), cents = Math.round((exact - midi) * 100);
-            // The nearest string of your tuning, and how far the sound is from it.
-            const s = strings.reduce((k, m, i) => Math.abs(exact - m) < Math.abs(exact - strings[k]) ? i : k, 0);
-            const off = Math.round((exact - strings[s]) * 100);
-            note.textContent = name(midi);
-            needle.setAttribute('transform', `rotate(${Math.max(-50, Math.min(50, cents)) * 1.8})`);
-            box.classList.toggle('is-in', Math.abs(cents) <= 5);
-            detail.textContent = `${hz.toFixed(1)} Hz, ${cents === 0 ? 'in tune' : `${Math.abs(cents)} cents ${cents < 0 ? 'low' : 'high'}`}. ${Math.abs(off) <= 300 ? `${6 - s}${['th', 'th', 'th', 'rd', 'nd', 'st'][s]} string, ${name(strings[s])}: ${Math.abs(off) <= 5 ? 'in tune' : `${off < 0 ? 'tune up' : 'tune down'}, ${Math.abs(off)} cents`}.` : ''}`;
-            chips.querySelectorAll('.chip').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.s) === s && Math.abs(off) <= 300)));
-          }, 90) };
-          start.textContent = 'Stop';
+          if (!await A.listen(frame) || tuner !== me) return;
           box.classList.add('is-on');
-          detail.textContent = 'Play one string and let it ring.';
+          say('Listening. Play one string and let it ring.');
         } catch (e) {
-          detail.textContent = e && e.name === 'NotAllowedError' ? 'The microphone is blocked. Allow it for this site in the settings of your browser, then tap Start again.' : 'This browser gives no microphone to the page.';
+          if (tuner === me) tuner = null;
+          start.textContent = 'Start the tuner';
+          start.classList.add('btn-primary');
+          say(micError(e));
         }
-      } }, 'Start');
+      } }, 'Start the tuner');
+      box.append(start);
       return [
-        head(TUNE.title, `Tune to ${strings.map(m => T.PC_PLAIN[T.mod(m)]).join(' ')}, the tuning of Settings.`, start),
+        head(TUNE.title, `Tune to ${strings.map(m => T.PC_PLAIN[T.mod(m)]).join(' ')}, the tuning of Settings.`),
         box,
-        h('p', { class: 'small muted lib-note' }, 'The tuner uses the microphone only while it is on, and nothing leaves this device. A capo does not change it: tune the open strings, then put the capo on.')
+        h('p', { class: 'small muted lib-note' }, 'Tap a string to hear its note. The tuner uses the microphone only while it is on, and nothing leaves this device. A capo does not change it: tune the open strings, then put the capo on.')
       ];
     }
   };
@@ -968,6 +1026,7 @@
   const KEY_NAMES = T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean));
   // The angle of the wheel, kept between drawings: a new key turns into place from the last one.
   let lastTurn = null;
+  const ivPicked = new Set([0]);
   const keysView = {
     parse(p) {
       const mode = p[1] === 'minor' ? 'minor' : 'major';
@@ -984,6 +1043,8 @@
       const triads = T.diatonic(key, mode), sevenths = T.diatonic(key, mode, true);
       const cells = T.keyCells(key, mode);
       const circle = circleOfFifths(state, cells);
+      // The diminished chord sits on the circle but is no key: a tap on it works as its chord button does.
+      circle.onChord = cell => { const c = triads.find(t => t.roman === cell.roman); stopBacking(); choose(c); playChord(c); };
       const idx = T.CIRCLE.findIndex(k => k === entry || k.alt === entry);
       const relName = mode === 'major' ? entry.minor : entry.major;
       const next = T.CIRCLE[(idx + 1) % 12], prev = T.CIRCLE[(idx + 11) % 12];
@@ -1009,7 +1070,8 @@
       // The seven chords in one row. A tap plays the chord, marks it on the circle and shows how to play it.
       // The chords from outside the key work the same way, in rows under it.
       const panel = h('div', { class: 'chord-panel', 'aria-live': 'polite' });
-      const chordBtn = c => h('button', { type: 'button', class: 'chord-btn', dataset: { roman: c.roman }, 'aria-pressed': String(c === triads[0]), onclick: () => { stopBacking(); choose(c); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name));
+      // The panel above the chords from outside the key changes height with the chord: the tapped button stays in place.
+      const chordBtn = c => h('button', { type: 'button', class: 'chord-btn', dataset: { roman: c.roman }, 'aria-pressed': String(c === triads[0]), onclick: () => { stopBacking(); GT.keepPlace(() => choose(c)); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name));
       const strip = h('div', { class: 'chord-strip', role: 'group', 'aria-label': `The chords of ${key} ${mode}` }, triads.map(chordBtn));
       const groups = [...new Set(outside.map(c => c.group))];
       const outsideBox = h('div', { class: 'outside' }, groups.map(g => h('div', { class: 'outside-group' }, h('p', { class: 'small muted' }, g),
@@ -1043,8 +1105,9 @@
           h('div', { class: 'chord-panel-text' },
             h('h3', null, c.name, h('small', null, ` ${c.roman} in ${key} ${mode}`)),
             h('p', null, `${chordTones.map(t => t.name).join(' ')}.`, c7 ? ` With a seventh it is ${c7.name}.` : ` ${outsideText(c)}`),
-            h('div', { class: 'row' }, playButton(c.name, () => playChord(c)), c7 ? playButton(c7.name, () => playChord(c7)) : null,
-              h('a', { class: 'btn', href: `#/library/chords/${c.chord.id}/${rootSlug(rootForLink(c.root))}` }, 'All shapes'))),
+            h('div', { class: 'row' }, playButton(c.name, () => playChord(c)), c7 ? playButton(c7.name, () => playChord(c7)) : null),
+            // A link, not a third button: three buttons break into two rows beside the small neck.
+            h('p', { class: 'small' }, h('a', { href: `#/library/chords/${c.chord.id}/${rootSlug(rootForLink(c.root))}` }, `All ${c.name} shapes`))),
           shape ? miniNeck(dots, shape.low, shape.high, `${c.name}, ${shape.name}`, shape.frets.map((f, s) => f === null ? s : null).filter(s => s !== null)) : null);
       }
       choose(triads[0]);
@@ -1061,14 +1124,16 @@
         h('dt', null, 'One fifth down'), h('dd', null, keyLink(pick(prev), mode), ', one step counterclockwise'),
         twin ? [h('dt', null, 'Other name'), h('dd', null, keyLink(pick(twin), mode), `, ${sigText(twin.count)}`)] : null);
       return [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, keysView.title(state)), h('p', { class: 'muted lib-sub' }, sigText(entry.count))),
-          h('div', { class: 'row lib-play' }, GT.segmented('Mode', [['major', 'Major'], ['minor', 'Minor']], mode, v => GT.go(keysView.link({ key, mode: v }), true)), shareMenu())),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, keysView.title(state)), h('p', { class: 'muted lib-sub' }, sigText(entry.count)))),
         h('div', { class: 'circle-wrap' },
           h('div', { class: 'circle-col' },
-            GT.segmented('Circle shows', [['chords', 'Chords'], ['intervals', 'Intervals']], lib.circleMode === 'intervals' ? 'intervals' : 'chords', v => { saveLib({ circleMode: v }); rerender(); }),
+            // The switches of the circle in one row above it: the mode of the key, and what the circle shows.
+            h('div', { class: 'circle-switches' },
+              GT.segmented('Mode', [['major', 'Major'], ['minor', 'Minor']], mode, v => GT.go(keysView.link({ key, mode: v }), true)),
+              GT.segmented('Circle shows', [['chords', 'Chords'], ['intervals', 'Intervals']], lib.circleMode === 'intervals' ? 'intervals' : 'chords', v => { saveLib({ circleMode: v }); rerender(); })),
             circle, circle.readout || null,
             h('p', { class: 'circle-note' }, lib.circleMode === 'intervals'
-              ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap notes to hear them with ${key}. Three or more make the shape of a chord.`
+              ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap an interval to hear its note with ${key}. Three or more make the shape of a chord. Tap a note name to make it the 1.`
               : 'Tap a key to turn the circle to it. The frame at the top holds the seven chords of the key.')),
           h('div', { class: 'keys-main' },
             h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel),
@@ -1108,10 +1173,12 @@
     svg.setAttribute('viewBox', '-212 -212 424 424');
     svg.setAttribute('class', 'circle');
     svg.setAttribute('role', 'group');
-    svg.setAttribute('aria-label', `Circle of fifths, turned to ${state.key} ${state.mode}. The frame at the top holds the chords of the key. Clockwise is a fifth up.`);
+    svg.setAttribute('aria-label', `Circle of fifths, turned to ${state.key} ${state.mode}. The frame at the top holds the seven chords of the key. Clockwise is a fifth up.`);
     const el = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); (parent || svg).appendChild(n); return n; };
     const STEP = Math.PI / 6;
-    const RINGS = { major: [148, 208, 178], minor: [100, 148, 124], dim: [62, 100, 81] };
+    // Two rings: the major keys outside, their relative minors inside. The middle names the key.
+    const HUB = 82;
+    const RINGS = { major: [148, 208, 178], minor: [HUB, 148, 116] };
     const pt = (r, a) => `${(r * Math.sin(a)).toFixed(2)} ${(-r * Math.cos(a)).toFixed(2)}`;
     const arc = (r1, r2, a1, a2) => `M ${pt(r2, a1)} A ${r2} ${r2} 0 0 1 ${pt(r2, a2)} L ${pt(r1, a2)} A ${r1} ${r1} 0 0 0 ${pt(r1, a1)} Z`;
     const tonic = cells[0];
@@ -1119,10 +1186,10 @@
     const paths = new Map();
     const wheel = el('g', { class: 'wheel' });
     // Text lines per ring: numeral, name, signature (offsets from the middle of the cell).
-    const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 5], [-7, 10]], dim: [[null, 4], [-6, 10]] };
+    const LAYOUT = { major: [[null, 2, 19], [-14, 5, 20]], minor: [[null, 6], [-8, 13]] };
     T.CIRCLE.forEach((k, i) => {
       const a = i * STEP;
-      for (const ring of ['major', 'minor', 'dim']) {
+      for (const ring of ['major', 'minor']) {
         const c = inKey.get(`${ring}:${i}`);
         const [r1, r2, mid] = RINGS[ring];
         const d = arc(r1, r2, a - STEP / 2, a + STEP / 2);
@@ -1134,23 +1201,36 @@
         // The words turn back by the angle of the wheel, around the middle of their cell, so they stay upright.
         const words = el('g', { class: 'cell-text', style: `transform-origin:${x}px ${y.toFixed(1)}px` }, g);
         const text = (cls, dy, value) => { el('text', { x, y: (y + dy).toFixed(1), class: cls }, words).textContent = value; };
-        const [numY, nameY, sigY] = LAYOUT[ring][c ? 1 : 0];
-        if (c) text('t-num', numY, c.roman);
+        // The intervals view hides the frame, so every cell uses the plain layout: a change of mode then moves no name.
+        const framed = c && lib.circleMode !== 'intervals';
+        const [numY, nameY, sigY] = LAYOUT[ring][framed ? 1 : 0];
+        if (framed) text('t-num', numY, c.roman);
         // In the intervals view a note is spelled from the key: G♯ in E major, not A♭.
         const spelled = isKey || (ring === 'major' && lib.circleMode === 'intervals') ? T.spell(state.key, ['1', '♭2', '2', '♭3', '3', '4', '♭5', '5', '♭6', '6', '♭7', '7'][T.mod(T.pcOf(k.major) - T.pcOf(state.key))]) : null;
-        text('t-name', nameY, spelled || (c ? c.name : ring === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : ring === 'minor' ? `${k.minor}m` : `${T.spell(k.major, '7')}°`));
+        text('t-name', nameY, spelled || (c ? c.name : ring === 'major' ? (k.alt ? `${k.major}/${k.alt.major}` : k.major) : `${k.minor}m`));
         // Keys such as G♯ major (8♯) exist only in theory, so their cell shows no signature.
         if (ring === 'major' && !(c && Math.abs(sigCount(c.root)) > 7)) text('t-sig', sigY, c ? sigText(sigCount(c.root), true) : k.alt ? `${sigText(k.count, true)}/${sigText(k.alt.count, true)}` : sigText(k.count, true));
-        if (ring === 'dim') continue;
-        // Diminished chords are not keys. Major and minor cells turn the circle to their key.
+        // The diminished chord of the key is not a key: a tap plays it and shows it, as the chord buttons do.
+        if (c && c.chord.id === 'dim' && lib.circleMode !== 'intervals') {
+          g.classList.add('is-dim');
+          g.setAttribute('role', 'button');
+          g.setAttribute('tabindex', '0');
+          g.setAttribute('aria-label', `${c.name}, ${c.roman} in ${state.key} ${state.mode}. Play it.`);
+          const pick = () => svg.onChord && svg.onChord(c);
+          g.addEventListener('click', pick);
+          g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+          continue;
+        }
+        // Major and minor cells turn the circle to their key.
         const pick = e => ring === 'major' ? e.major : e.minor;
         const entry = c && k.alt && pick(k.alt) === c.root ? k.alt : k;
         const target = pick(entry);
         g.setAttribute('role', 'link');
         g.setAttribute('tabindex', '0');
-        g.setAttribute('aria-label', `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}`);
-        // In the intervals view a note cell adds its note to the shape. Otherwise it turns the circle to its key.
-        const open = () => lib.circleMode === 'intervals' ? svg._pickNote && ring === 'major' && svg._pickNote(T.pcOf(target)) : GT.go(keysView.link({ key: target, mode: ring }), true);
+        g.setAttribute('aria-label', lib.circleMode === 'intervals' ? `${target}: make it the 1, ${target} ${state.mode}` : `${target} ${ring}${c ? `, ${c.roman} in ${state.key} ${state.mode}` : ''}, ${sigText(entry.count)}`);
+        // A key cell turns the circle to its key. In the intervals view the note becomes the 1 of the key, in the same mode.
+        // The link uses the name the key page gives that note in the mode, so a minor key gets its own spelling.
+        const open = () => lib.circleMode === 'intervals' ? GT.go(keysView.link(keysView.parse([rootSlug(target), state.mode])), true) : GT.go(keysView.link({ key: target, mode: ring }), true);
         g.addEventListener('click', open);
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
       }
@@ -1162,7 +1242,8 @@
       const tonicPc = T.pcOf(state.key);
       const KIND = s => FB.degreeKind(T.intervalBySemi(s).label === 'TT' ? '♭5' : ({ 0: '1', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4', 6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7' })[s]);
       const semiAt = k => (k * 7) % 12;
-      const picked = new Set([0]);
+      // The picked intervals stay when the key changes: the shape stays, and its notes move to the new key.
+      const picked = ivPicked;
       const layer = el('g', { class: 'iv-layer' });
       const shape = el('path', { class: 'iv-shape' }, layer);
       const dots = el('g', {}, layer);
@@ -1170,8 +1251,8 @@
       for (let k = 0; k < 12; k++) {
         const a = k * STEP, s = semiAt(k);
         const g = el('g', { class: `iv-cell kind-${KIND(s)}`, role: 'button', tabindex: '0', 'aria-pressed': String(k === 0), 'aria-label': `${T.intervalBySemi(s).name}: ${T.PC_PLAIN[T.mod(tonicPc + s)]}` }, layer);
-        el('path', { d: arc(64, 146, a - STEP / 2, a + STEP / 2) }, g);
-        const [x, y] = [127 * Math.sin(a), -127 * Math.cos(a)];
+        el('path', { d: arc(HUB, 148, a - STEP / 2, a + STEP / 2) }, g);
+        const [x, y] = [116 * Math.sin(a), -116 * Math.cos(a)];
         el('text', { x: x.toFixed(1), y: (y + 5).toFixed(1), class: 't-iv' }, g).textContent = s === 0 ? 'P1' : T.intervalBySemi(s).short;
         const toggle = () => { if (k) { if (picked.has(k)) picked.delete(k); else picked.add(k); } draw(true); };
         g.addEventListener('click', toggle);
@@ -1179,12 +1260,11 @@
         cellsIv.push(g);
       }
       layer.appendChild(shape); layer.appendChild(dots);
-      // The note cells of the outer ring add their note too, in place of turning the circle.
-      svg._pickNote = pc => { const k = (T.mod(pc - tonicPc) * 7) % 12; if (k) { if (picked.has(k)) picked.delete(k); else picked.add(k); } draw(true); };
       // The names go under the circle, so the middle stays free for the shape.
       const big = h('b'), small = h('span');
       svg.readout = h('p', { class: 'iv-readout', 'aria-live': 'polite' }, big, small);
-      const R = 94;
+      // The shape is drawn in the middle, which is free in this view.
+      const R = 64;
       const draw = sound => {
         const ks = [...picked].sort((a, b) => a - b);
         cellsIv.forEach((g, k) => g.setAttribute('aria-pressed', String(picked.has(k))));
@@ -1202,7 +1282,7 @@
         const names = up.map(k => T.spell(state.key, ({ 0: '1', 1: '♭2', 2: '2', 3: '♭3', 4: '3', 5: '4', 6: '♭5', 7: '5', 8: '♭6', 9: '6', 10: '♭7', 11: '7' })[semiAt(k)]));
         const ivs = up.map(k => k ? T.intervalBySemi(semiAt(k)).short : 'P1');
         const found = ks.length > 2 ? T.chordsFrom(pcs, tonicPc).find(c => !c.inversion) : null;
-        if (ks.length === 1) { big.textContent = `Intervals from ${state.key}`; small.textContent = 'Tap a note or its interval.'; }
+        if (ks.length === 1) { big.textContent = `Intervals from ${state.key}`; small.textContent = 'Tap an interval to add its note.'; }
         else if (ks.length === 2) { const iv = T.intervalBySemi(semiAt(ks[1])); big.textContent = `${iv.name}: ${names.join(' to ')}`; small.textContent = `${Math.min(ks[1], 12 - ks[1])} step${Math.min(ks[1], 12 - ks[1]) > 1 ? 's' : ''} apart on the circle.`; }
         else { big.textContent = found ? `${found.root} ${lowerName(found.chord.name)}` : names.join(' '); small.textContent = `${found ? found.name + ': ' : ''}${names.join(' ')}, ${ivs.join(' ')}`; }
         if (sound && ks.length > 1) {
@@ -1220,15 +1300,16 @@
       hot.setAttribute('d', paths.get(`${c.ring}:${c.pos}`));
       hot.setAttribute('visibility', 'visible');
     };
-    el('circle', { r: 60, class: 'hub' });
-    const hubName = el('text', { y: -2, class: 't-hub' }), hubSub = el('text', { y: 16, class: 't-hub-sub' }), hubSig = el('text', { y: 34, class: 't-hub-sig' });
+    el('circle', { r: HUB - 2, class: 'hub' });
+    const hubName = el('text', { y: 0, class: 't-hub' }), hubSub = el('text', { y: 21, class: 't-hub-sub' }), hubSig = el('text', { y: 40, class: 't-hub-sig' });
     hubName.textContent = state.key;
     hubSub.textContent = state.mode;
     hubSig.textContent = state.entry.count === 0 ? 'no ♯ or ♭' : sigText(state.entry.count, true);
     if (svg._drawIntervals) { svg.appendChild(svg.querySelector('.iv-layer')); svg._drawIntervals(); }
     // The frame stays at the top. The wheel turns under it.
     const F = steps => steps * STEP;
-    el('path', { class: 'key-frame', d: `M ${pt(208, F(-1.5))} A 208 208 0 0 1 ${pt(208, F(1.5))} L ${pt(100, F(1.5))} A 100 100 0 0 0 ${pt(100, F(0.5))} L ${pt(62, F(0.5))} A 62 62 0 0 0 ${pt(62, F(-0.5))} L ${pt(100, F(-0.5))} A 100 100 0 0 0 ${pt(100, F(-1.5))} Z` });
+    // Three major cells and four minor ones: the minor ring holds ii, vi, iii and the diminished chord after them.
+    el('path', { class: 'key-frame', d: `M ${pt(208, F(-1.5))} A 208 208 0 0 1 ${pt(208, F(1.5))} L ${pt(148, F(1.5))} A 148 148 0 0 1 ${pt(148, F(2.5))} L ${pt(HUB, F(2.5))} A ${HUB} ${HUB} 0 0 0 ${pt(HUB, F(-1.5))} Z` });
     // Turn the short way round from the last key.
     // In the intervals view the note of the key itself goes to the top of the outer ring, also in a minor key.
     const target = lib.circleMode === 'intervals' ? -((T.pcOf(state.key) * 7) % 12) * 30 : -tonic.pos * 30;
@@ -1533,7 +1614,7 @@
     const view = VIEWS[tab];
     const state = view.parse(parts.slice(1));
     // A lookup page changes its link as you tap, so a new drawing reads the link again.
-    rerender = () => render(main, tab === 'name' ? location.hash.replace(/^#\/?/, '').split('/').slice(1) : parts);
+    rerender = () => GT.keepPlace(() => render(main, tab === 'name' ? location.hash.replace(/^#\/?/, '').split('/').slice(1) : parts));
     const fitScope = tab === 'fit' ? `fit:${state.chords.map(c => T.chordName(c.root, c.chord)).join(' ')}` : null;
     // A loop belongs to one key or one scale on one root. The drone follows the root of the scale page.
     const scope = tab === 'keys' ? `keys:${state.key}:${state.mode}` : tab === 'scales' ? `scales:${state.root}:${state.scale.id}` : fitScope;
@@ -1576,6 +1657,8 @@
     const panel = body.querySelector(':scope > .controls');
     if (panel && panel.nextElementSibling) { const stage = h('div', { class: 'lib-stage' }); panel.before(stage); stage.append(panel, panel.nextElementSibling); }
     main.append(h('div', { class: 'lib' }, nav, body));
+    const tools = document.getElementById('page-tools');
+    if (tools) tools.replaceChildren(shareMenu());
     const chosen = tabs.querySelector('[aria-current="true"]');
     if (chosen) tabs.scrollLeft += chosen.getBoundingClientRect().left - tabs.getBoundingClientRect().left - (tabs.clientWidth - chosen.offsetWidth) / 2;
     document.title = `${view.title(state)} · ${GT.siteName}`;

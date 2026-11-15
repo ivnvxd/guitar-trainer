@@ -43,6 +43,8 @@ Every listening task connects back to the guitar. A drill asks for an answer fir
 37. Scales: compare two scales on one neck; a position as tab; no position number is skipped.
 38. Read the staff: a neck drill from the treble staff to the neck.
 39. Tuner, drums under the backing, and a share menu (link, picture, print).
+40. Play the note: the microphone hears the note you play on the guitar. Any octave, every octave of a note, or the exact note on the staff.
+41. Circle of fifths with two rings, the diminished chord in the minor ring, and a key change in the Intervals view. Intervals: compare two.
 
 ## Next
 

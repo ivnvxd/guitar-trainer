@@ -313,6 +313,7 @@
     }
     function finish() {
       session.done = true;
+      if (d.stop) d.stop();
       const acc = session.count ? Math.round(session.correct / session.count * 100) : 0;
       const missed = Object.entries(session.missed).sort((a, b) => b[1] - a[1]);
       stage.replaceChildren(h('div', { class: 'prompt done-panel' },
@@ -393,7 +394,8 @@
     onResize();
     // The phone was turned: an open question is drawn again with the neck that fits the new shape of the screen.
     redraw = () => { if (session.q && !session.answered && !session.done) { d.render(session.q, ui); onResize(); } };
-    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); redraw = null; };
+    // A drill that listens stops the microphone when you leave it.
+    return () => { document.removeEventListener('keydown', onKey); root.removeEventListener('resize', onResize); clearTimeout(advanceTimer); redraw = null; if (d.stop) d.stop(); };
   }
 
   let cleanup = null, redraw = null;

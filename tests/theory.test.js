@@ -174,8 +174,8 @@ eq(`${g1.low}-${g1.high}`, '2-5');
 eq(g1.notes.map(n => `${n.string}/${n.fret}`).join(' '), '0/2 0/3 0/5 1/2 1/3 1/5 2/2 2/4 2/5 3/2 3/4 3/5 4/3 4/5 5/2 5/3 5/5');
 eq(T.boxes('A', T.scaleById('minor-pentatonic')).length, 5, 'a pentatonic scale is its own boxes');
 
-// The chords of every key fill one block on the circle: three positions side by side,
-// three major, three minor and one diminished chord, spelled as in the key.
+// The chords of every key fill one block on the circle: three major chords side by side, and four minor-ring cells
+// (three minor chords, then the diminished chord in the cell with its root, one step clockwise), spelled as in the key.
 for (const k of T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean))) {
   for (const mode of ['major', 'minor']) {
     const key = mode === 'major' ? k.major : k.minor;
@@ -184,11 +184,13 @@ for (const k of T.CIRCLE.flatMap(k => [k, k.alt].filter(Boolean))) {
     const names = T.diatonic(key, mode).map(c => c.name);
     eq(cells.map(c => c.name), names, `${key} ${mode} names`);
     eq(cells.filter(c => c.ring === 'major').length, 3, `${key} ${mode} majors`);
-    eq(cells.filter(c => c.ring === 'minor').length, 3, `${key} ${mode} minors`);
-    eq(cells.filter(c => c.ring === 'dim').map(c => c.pos), [home], `${key} ${mode} diminished`);
-    for (const ring of ['major', 'minor']) {
-      eq(cells.filter(c => c.ring === ring).map(c => T.mod(c.pos - home + 1)).sort(), [0, 1, 2], `${key} ${mode} ${ring} block`);
-    }
+    eq(cells.filter(c => c.ring === 'minor').length, 4, `${key} ${mode} minor ring`);
+    const dim = cells.filter(c => c.chord.id === 'dim');
+    eq(dim.map(c => [c.ring, T.mod(c.pos - home)]), [['minor', 2]], `${key} ${mode} diminished`);
+    eq(cells.filter(c => c.ring === 'major').map(c => T.mod(c.pos - home + 1)).sort(), [0, 1, 2], `${key} ${mode} major block`);
+    eq(cells.filter(c => c.ring === 'minor' && c.chord.id !== 'dim').map(c => T.mod(c.pos - home + 1)).sort(), [0, 1, 2], `${key} ${mode} minor block`);
+    // The diminished cell is the one of the minor key with the same root.
+    for (const c of dim) eq(T.pcOf(T.CIRCLE[c.pos].minor), c.pc, `${key} ${mode} diminished root`);
     const tonic = cells[0];
     eq([tonic.ring, tonic.pos], [mode, home], `${key} ${mode} tonic cell`);
   }

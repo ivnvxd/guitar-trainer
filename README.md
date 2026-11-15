@@ -36,7 +36,7 @@ Three tools sit beside the topics:
 
 - Name it works the other way round. You tap notes on the neck, and the page names the chord, also as a slash chord, and the scales that hold the notes. Its labels show note names, degrees in the chord, or the interval of each note from the first note you tapped.
 - Scales for chords takes the chords of a song and lists the scales that hold every note of them. It loops the chords so you can play over them. When no scale fits, as over a blues, it lists the scales that miss the fewest notes.
-- Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning.
+- Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning. The string you play lights up, a tuned string gets a check mark, and a bar shows that the microphone hears you.
 
 A seven-note scale shows its positions in two ways: as vertical boxes of 4 or 5 frets, or as shapes with three notes on each string. A box is a pentatonic box with the other notes of the scale added. A position that does not fit the frets shown stops at the nut or the last fret. A picked position also shows as tab. A second scale on the same root can show on the same neck, to compare them.
 
@@ -49,6 +49,10 @@ A chord page has:
 
 There are 30 chord types, from triads to 11ths, 13ths and altered dominants such as 7♯9.
 
+The circle of fifths on the Keys page has two rings: the major keys outside and their relative minors inside. A frame holds the seven chords of the key. The diminished chord takes the minor cell with the same root, after iii. An Intervals view shows the interval of each note from the key. A tap on an interval adds its note to a shape, and a tap on a note name makes it the key.
+
+The Intervals page can show a second interval from the same root, to compare the two.
+
 The Keys page also shows chords from outside the key: secondary dominants, chords borrowed from the minor key, and the major V of harmonic minor in a minor key.
 
 Faint layers show what is around the topic of a page. Chips under the neck switch them on and off:
@@ -59,7 +63,9 @@ Faint layers show what is around the topic of a page. Chips under the neck switc
 
 On the Triads page a line also joins the three notes of each shape.
 
-A speaker button in the top bar turns all sound off and on. A share button on each Library page shares its link, saves the neck as a picture, or prints the page.
+A speaker button in the top bar turns all sound off and on. On a Library page a share button beside it shares the link of the page, saves the neck as a picture, or prints the page.
+
+After a choice, a page draws itself again. The control you tapped stays at the same place on the screen.
 
 The neck is a flat diagram: the nut on the left and the high e on top. On a phone a long neck scrolls sideways. A switch beside each neck makes it vertical, and so does Settings. A phone held sideways shows the neck first, and a drill puts the neck beside its answers.
 
@@ -68,7 +74,7 @@ Settings has six tunings and a custom tuning, and a capo. With a capo, the Libra
 Train has three tracks and two tools:
 
 - Ear: intervals, scale degrees in a key, chord quality and chord progressions.
-- Neck: name the note, find every note, read the staff, degrees from a root, triad shapes and CAGED shapes.
+- Neck: name the note, find every note, read the staff, play the note, degrees from a root, triad shapes and CAGED shapes. Play the note listens through the microphone. It checks the pitch only, so it asks for a note in any octave, every octave of a note, or the exact note on the staff.
 - Keys and progressions: key facts, chords in a key, and numbers to chords.
 - Tools: a metronome and one-minute chord changes.
 

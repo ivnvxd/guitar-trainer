@@ -329,7 +329,59 @@
   }
   function setTempo(bpm) { metronome.bpm = bpm; }
 
+  // The microphone, for the tuner and the drill that listens. It runs through the context of the site, which a tap
+  // has started: an iPhone keeps a context made later paused, and an analyser on it reads only silence.
+  // listen() must start inside a tap. onFrame gets 4096 samples about ten times a second, or null while the
+  // context is paused. It resolves to false when stop came first.
+  let mic = null;
+  async function listen(onFrame) {
+    stopListening();
+    const c = context();
+    if (!c || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { const e = new Error('No microphone'); e.name = 'NoMicrophone'; throw e; }
+    const me = mic = { stopped: false };
+    // An iPhone records only when the page asks for recording and playback together.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch { /* older browsers */ }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    } catch (e) { if (mic === me) stopListening(); throw e; }
+    // The page changed, or stop came, while the microphone started.
+    if (me.stopped || mic !== me) { stream.getTracks().forEach(t => t.stop()); return false; }
+    if (c.state !== 'running') c.resume().catch(() => {});
+    const src = c.createMediaStreamSource(stream), an = c.createAnalyser();
+    an.fftSize = 4096;
+    // Safari reads an analyser only when it leads to the output, so a silent gain closes the path.
+    const shut = c.createGain();
+    shut.gain.value = 0;
+    src.connect(an); an.connect(shut); shut.connect(c.destination);
+    const buf = new Float32Array(an.fftSize);
+    Object.assign(me, { stream, nodes: [src, an, shut], timer: setInterval(() => {
+      if (c.state !== 'running') { onFrame(null, c.sampleRate); return; }
+      an.getFloatTimeDomainData(buf);
+      onFrame(buf, c.sampleRate);
+    }, 90) });
+    return true;
+  }
+  function stopListening() {
+    if (!mic) return;
+    mic.stopped = true;
+    clearInterval(mic.timer);
+    if (mic.stream) mic.stream.getTracks().forEach(t => t.stop());
+    if (mic.nodes) mic.nodes.forEach(n => { try { n.disconnect(); } catch { /* gone */ } });
+    mic = null;
+    // Back to playback only, so the silent switch of an iPhone does not mute the site.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+  }
+  // The loudness of a frame (root mean square) and its highest sample.
+  function levelOf(buf) {
+    let sum = 0, peak = 0;
+    for (const v of buf) { sum += v * v; peak = Math.max(peak, Math.abs(v)); }
+    return { rms: Math.sqrt(sum / buf.length), peak };
+  }
+
   GT.audio = {
+    listen, stopListening, levelOf,
+    get listening() { return !!mic; },
     note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
     startLoop, stopLoop, startDrone, stopDrone,
     setLoopTempo(bpm) { backing.bpm = bpm; },
@@ -343,6 +395,7 @@
     setMuted(v) { muted = !!v; if (master) master.gain.value = muted ? 0 : volume; },
     get muted() { return muted; },
     available: () => !!(root.AudioContext || root.webkitAudioContext),
+
     running: () => !!ctx && ctx.state === 'running'
   };
 })(window);

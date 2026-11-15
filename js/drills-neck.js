@@ -202,6 +202,161 @@
     }
   });
 
+  // ---------- play the note ----------
+  // You play a note on your guitar, and the microphone checks it. It hears the pitch only and cannot tell which
+  // string played it, so every question asks for a pitch: a note name in any octave, each octave of a note in the
+  // fret range, or the exact pitch of a note on the staff. The page plays no sound while it listens.
+  const PLAY_MODES = [['any', 'Any octave'], ['octaves', 'Every octave'], ['staff', 'From the staff']];
+  const pitchesOf = (pc, frets) => {
+    const t = GT.tuning(), out = new Set();
+    for (let s = 0; s < 6; s++) for (let f = 0; f <= frets; f++) if (T.mod(t[s] + f) === pc) out.add(t[s] + f);
+    return [...out].sort((a, b) => a - b);
+  };
+  const pitchPlaces = (midi, frets) => {
+    const t = GT.tuning(), out = [];
+    for (let s = 0; s < 6; s++) for (let f = 0; f <= frets; f++) if (t[s] + f === midi) out.push({ string: s, fret: f });
+    return out;
+  };
+  // The listening state lives as long as the drill page: the microphone stays on from one question to the next.
+  // A note counts when its pitch holds for three readings in a row (about a quarter second) and it is new: a new
+  // pluck (the sound grows), or a pitch other than the last one heard. A note that still rings from the last
+  // question does not answer the next one.
+  const ear = { on: false, q: null, ui: null, view: null, t0: 0, floor: 1, fresh: false, run: [], last: null };
+  function hear(buf, rate) {
+    const v = ear.view;
+    if (!v) return;
+    if (!buf) { v.say('The sound of the page is paused. Leave the drill and open it again.'); return; }
+    const { rms } = A.levelOf(buf);
+    v.level.style.width = `${Math.min(100, Math.round(rms / 0.08 * 100))}%`;
+    // The page follows the sound also between questions, so a note played during the feedback is known.
+    if (rms > Math.max(0.012, ear.floor * 1.8)) { ear.fresh = true; ear.run = []; ear.floor = rms; }
+    else ear.floor = Math.min(ear.floor, rms);
+    const f = T.pitchOf(buf, rate);
+    if (!f) { ear.run = []; return; }
+    const midi = Math.round(69 + 12 * Math.log2(f / 440));
+    ear.run.push(midi);
+    if (ear.run.length > 3) ear.run.shift();
+    v.heard(midi);
+    if (ear.run.length < 3 || !ear.run.every(m => m === midi)) return;
+    const q = ear.q;
+    // Between questions, and in the first 300 ms of one, a note is heard but is no answer. A new question then
+    // waits for a new pluck or another pitch.
+    if (!q || q.over || performance.now() - ear.t0 < 300) { ear.last = midi; ear.fresh = false; return; }
+    if (!ear.fresh && midi === ear.last) return;
+    ear.fresh = false; ear.run = []; ear.last = midi;
+    PLAY.answer(q, midi, ear.ui);
+  }
+  const PLAY = {
+    id: 'neck-play', track: 'neck',
+    title: 'Play the note',
+    blurb: 'The page asks for a note. Play it on your guitar, and the microphone checks it.',
+    hint: 'Play one note and let it ring.',
+    help: [
+      'The microphone hears the pitch you play. It cannot tell which string you used, so every place with the right pitch counts. After each answer the neck shows every place of that pitch.',
+      'Any octave: play the named note anywhere. Every octave: play each one in the fret range, best from low to high; the page ticks each one it hears. From the staff: play the exact note on the staff. Guitar music sounds an octave lower than it is written.',
+      'Use a quiet room and hold the phone near the guitar. The page plays no sound while it listens, and it asks for the microphone at the first question.'
+    ],
+    defaults: { mode: 'any', frets: 12, naturals: true },
+    statsKey: c => c.mode,
+    fastMs: c => c.mode === 'octaves' ? 15000 : c.mode === 'staff' ? 5000 : 3500,
+    autoPlay: false,
+    advanceMs: 1300,
+    pool(c) {
+      const pcs = c.naturals ? NATURAL_PCS : [...Array(12).keys()];
+      if (c.mode !== 'staff') return pcs.map(String);
+      const t = GT.tuning(), out = new Set();
+      for (let s = 0; s < 6; s++) for (let f = 0; f <= c.frets; f++) if (pcs.includes(T.mod(t[s] + f))) out.add(String(t[s] + f));
+      return [...out];
+    },
+    // A pitch class (0 to 11) or, from the staff, an exact pitch (a MIDI number, 40 or more).
+    itemName: item => Number(item) > 11 ? octaveName(Number(item)) : T.PC_PLAIN[Number(item)],
+    make(item, c) {
+      const n = Number(item);
+      if (c.mode === 'staff') return { mode: 'staff', midi: n };
+      if (c.mode === 'octaves') return { mode: 'octaves', pc: n, targets: pitchesOf(n, c.frets), found: new Set(), wrong: [] };
+      return { mode: 'any', pc: n };
+    },
+    render(q, ui) {
+      const frets = ui.config.frets;
+      ui.title(q.mode === 'staff' ? 'Play this note' : q.mode === 'octaves' ? `Play every ${T.PC_PLAIN[q.pc]}` : `Play ${/^[AEF]/.test(T.PC_PLAIN[q.pc]) ? 'an' : 'a'} ${T.PC_PLAIN[q.pc]}`);
+      ui.sub(q.mode === 'staff' ? 'The exact pitch on the staff, on any string.' : q.mode === 'octaves' ? `Frets 0–${frets}, best from low to high.` : 'In any octave, on any string.');
+      ui.noChoices();
+      ui.actions([['Show me', () => ui.submit('skip')]]);
+      // The panel under the question: what the microphone hears, and the octaves found so far.
+      const heard = h('b', { class: 'listen-note' }, '–');
+      const say = h('p', { class: 'listen-say', 'aria-live': 'polite' });
+      const level = h('i');
+      const octaves = q.mode === 'octaves' ? h('div', { class: 'listen-octaves', role: 'list', 'aria-label': 'Octaves to play' }) : null;
+      const drawOctaves = () => { if (octaves) octaves.replaceChildren(...q.targets.map(m => h('span', { role: 'listitem', class: 'listen-octave' + (q.found.has(m) ? ' is-found' : '') }, octaveName(m), q.found.has(m) ? ' ✓' : ''))); };
+      drawOctaves();
+      const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: async () => {
+        startBtn.disabled = true;
+        say.textContent = 'Waiting for the microphone…';
+        try {
+          if (!await A.listen(hear)) return;
+          ear.on = true;
+          startBtn.remove();
+          say.textContent = 'Listening.';
+          ear.t0 = performance.now();
+          ui.startClock(0);
+        } catch (e) { startBtn.disabled = false; say.textContent = GT.micError(e); }
+      } }, 'Start listening');
+      const panel = h('div', { class: 'listen' },
+        h('div', { class: 'listen-row' }, h('span', { class: 'muted' }, 'Heard'), heard, h('div', { class: 'listen-level', title: 'What the microphone hears' }, level)),
+        octaves, ear.on ? null : startBtn, say);
+      ear.view = { level, say: t => { say.textContent = t; }, heard: m => { heard.textContent = octaveName(m); } };
+      q.drawOctaves = drawOctaves;
+      ear.q = q; ear.ui = ui; ear.t0 = performance.now(); ear.fresh = false; ear.run = [];
+      ui.board.replaceChildren(...[q.mode === 'staff' ? staff(q.midi) : null, panel].filter(Boolean));
+      if (ear.on) say.textContent = 'Listening.';
+      else say.textContent = 'The page needs the microphone to hear you. It hears only while this drill is open, and nothing leaves this device.';
+    },
+    // A heard note. Any octave and the staff take one note; every octave takes notes until all are found.
+    answer(q, midi, ui) {
+      if (q.mode === 'any') { q.played = midi; ui.submit(T.mod(midi) === q.pc ? 'right' : 'wrong'); return; }
+      if (q.mode === 'staff') { q.played = midi; ui.submit(midi === q.midi ? 'right' : 'wrong'); return; }
+      if (T.mod(midi) !== q.pc) { q.wrong.push(midi); ear.view.say(`${octaveName(midi)} is not ${T.PC_PLAIN[q.pc]}.`); return; }
+      if (!q.targets.includes(midi)) { ear.view.say(`${octaveName(midi)} is outside frets 0–${ui.config.frets}.`); return; }
+      q.found.add(midi);
+      q.drawOctaves();
+      ear.view.say(`${octaveName(midi)}: ${q.found.size} of ${q.targets.length}.`);
+      if (q.found.size === q.targets.length) { q.over = true; ui.submit(q.wrong.length ? 'errors' : 'clean'); }
+    },
+    check: (q, v) => v === 'right' || v === 'clean',
+    feedback(q, v, correct, ui) {
+      q.over = true;
+      const frets = ui.config.frets;
+      const name = T.PC_PLAIN[q.mode === 'staff' ? T.mod(q.midi) : q.pc];
+      let markers = [], text;
+      if (q.mode === 'octaves') {
+        for (const m of q.targets) for (const p of pitchPlaces(m, frets)) markers.push(Object.assign(p, { kind: q.found.has(m) ? 'correct' : 'target', label: name }));
+        text = v === 'skip' ? `Every ${name} in frets 0–${frets}: ${q.targets.map(octaveName).join(', ')}. You played the green ones.`
+          : correct ? `All ${q.targets.length} octaves: ${q.targets.map(octaveName).join(', ')}.` : `All ${q.targets.length} found, with ${q.wrong.length} wrong note${q.wrong.length > 1 ? 's' : ''}.`;
+      } else {
+        const want = q.mode === 'staff' ? [q.midi] : pitchesOf(q.pc, frets);
+        const played = q.played !== undefined && v !== 'skip' ? q.played : null;
+        for (const m of want) for (const p of pitchPlaces(m, frets)) markers.push(Object.assign(p, { kind: played === m ? 'correct' : q.mode === 'staff' ? 'correct' : 'ghost', label: name }));
+        if (played !== null && !correct) for (const p of pitchPlaces(played, frets)) markers.push(Object.assign(p, { kind: 'wrong', label: T.PC_PLAIN[T.mod(played)] }));
+        const what = q.mode === 'staff' ? octaveName(q.midi) : name;
+        text = v === 'skip' ? `${what} is at the marked places.`
+          : correct ? (q.mode === 'staff' ? `Right: ${octaveName(q.midi)}. The green dots are every place of it.` : `Right: you played ${octaveName(played)}. The green dots are the places of that pitch, the faint ones the other ${name}s.`)
+          : `You played ${octaveName(played)}. ${what} is at the ${q.mode === 'staff' ? 'green' : 'marked'} dots.`;
+      }
+      const to = Math.max(frets, ...markers.map(m => m.fret));
+      const neck = ui.neck(markers, { from: 0, to, label: `Every place of ${q.mode === 'staff' ? octaveName(q.midi) : name}` });
+      ui.board.replaceChildren(...[q.mode === 'staff' ? staff(q.midi) : null, neck].filter(Boolean));
+      return { text };
+    },
+    stop() { A.stopListening(); Object.assign(ear, { on: false, q: null, ui: null, view: null }); },
+    options(c, set) {
+      return h('div', { class: 'opts' },
+        D.field('Mode', GT.segmented('Mode', PLAY_MODES, c.mode, v => set({ mode: v }))),
+        D.field('Frets', GT.segmented('Frets', [[4, '0–4'], [7, '0–7'], [12, '0–12']], c.frets, v => set({ frets: v }))),
+        D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
+    }
+  };
+  D.add(PLAY);
+
   // ---------- degrees from a root ----------
   const DEGREES = ['♭2', '2', '♭3', '3', '4', '♭5', '5', '♭6', '6', '♭7', '7', '8'];
   const DEGREE_NAMES = { '♭2': 'minor 2nd', '2': 'major 2nd', '♭3': 'minor 3rd', '3': 'major 3rd', '4': 'perfect 4th', '♭5': 'tritone', '5': 'perfect 5th', '♭6': 'minor 6th', '6': 'major 6th', '♭7': 'minor 7th', '7': 'major 7th', '8': 'octave' };

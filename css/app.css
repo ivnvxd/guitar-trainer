@@ -71,7 +71,6 @@
   /* The circle of fifths. */
   --ring-major: #1a1f28;
   --ring-minor: #161a22;
-  --ring-dim: #12161d;
   --ring-gap: #0f1218;
   /* The chord or beat that sounds now. */
   --live: #ffb347;
@@ -144,7 +143,6 @@
   --shape-d: #9c36b5;
   --ring-major: #ffffff;
   --ring-minor: #f4f6f9;
-  --ring-dim: #eaedf2;
   --ring-gap: #d3d9e1;
   --live: #d9480f;
   --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 10px 28px -16px rgba(16, 24, 40, .18);
@@ -525,8 +523,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .circle-note { margin-top: 10px; font-size: 14px; color: var(--muted); max-width: 44ch; }
 .circle .cell path { fill: var(--ring-major); stroke: var(--ring-gap); stroke-width: 2; transition: fill .15s; }
 .circle .ring-minor path { fill: var(--ring-minor); }
-.circle .ring-dim path { fill: var(--ring-dim); }
-.circle .in-key path { fill: var(--accent-soft-2); }
+.circle .in-key path { fill: color-mix(in srgb, var(--accent) 15%, var(--ring-major)); }
 .circle .is-tonic path { fill: var(--accent); }
 .circle .cell[role="link"] { cursor: pointer; outline: none; }
 .circle .cell[role="link"]:not(.in-key):hover path, .circle .cell[role="link"]:not(.in-key):focus-visible path { fill: var(--surface-3); }
@@ -534,22 +531,20 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .circle .cell[role="link"]:focus-visible path { stroke: var(--accent); stroke-width: 3; }
 .circle .is-tonic[role="link"]:focus-visible path { stroke: var(--text); stroke-width: 4; stroke-dasharray: 7 4; }
 .circle text { pointer-events: none; text-anchor: middle; }
-.circle .t-name { fill: var(--text); font-size: 18px; font-weight: 700; }
-.circle .ring-minor .t-name { fill: var(--muted); font-size: 14px; font-weight: 650; }
-.circle .ring-dim .t-name { fill: var(--faint); font-size: 12.5px; font-weight: 600; }
+.circle .t-name { fill: var(--text); font-size: 21px; font-weight: 700; }
+.circle .ring-minor .t-name { fill: var(--muted); font-size: 17.5px; font-weight: 650; }
 .circle .in-key .t-name { fill: var(--text); }
-.circle .ring-dim.in-key .t-name { font-size: 13px; font-weight: 700; }
-.circle .t-num { fill: var(--accent-text); font-size: 12px; font-weight: 750; }
-.circle .ring-minor .t-num { font-size: 12px; }
-.circle .ring-dim .t-num { font-size: 11.5px; }
-.circle .t-sig { fill: var(--faint); font-size: 12.5px; }
+.circle .t-num { fill: var(--accent-text); font-size: 13.5px; font-weight: 750; }
+.circle .t-sig { fill: var(--faint); font-size: 13px; }
+.circle .is-dim { cursor: pointer; outline: none; }
+.circle .is-dim:focus-visible path { stroke: var(--accent); stroke-width: 3; }
 .circle .in-key .t-sig { fill: var(--muted); }
 .circle .is-tonic .t-name, .circle .is-tonic .t-num, .circle .is-tonic .t-sig { fill: var(--accent-ink); }
 .circle .hub { fill: var(--surface); stroke: var(--line); }
-.circle .t-hub { fill: var(--text); font-size: 25px; font-weight: 750; letter-spacing: -.02em; }
-.circle .t-hub-sub { fill: var(--muted); font-size: 12.5px; }
-.circle .t-hub-sig { fill: var(--accent-text); font-size: 12.5px; font-weight: 700; }
-.circle .key-frame { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; pointer-events: none; }
+.circle .t-hub { fill: var(--text); font-size: 32px; font-weight: 750; letter-spacing: -.02em; }
+.circle .t-hub-sub { fill: var(--muted); font-size: 13.5px; }
+.circle .t-hub-sig { fill: var(--accent-text); font-size: 13.5px; font-weight: 700; }
+.circle .key-frame { fill: none; stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; pointer-events: none; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 50%, transparent)); }
 .circle .hot { fill: color-mix(in srgb, var(--live) 24%, transparent); stroke: var(--live); stroke-width: 3.5; stroke-linejoin: round; pointer-events: none; }
 
 /* Train hub */
@@ -904,8 +899,14 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .share { position: relative; }
 .share > summary { list-style: none; cursor: pointer; }
 .share > summary::-webkit-details-marker { display: none; }
-.share-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: grid; gap: 6px; padding: 8px; min-width: 230px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
-.share-menu .btn { justify-content: flex-start; }
+/* The share button of a Library page sits in the top bar, beside the sound switch, and looks like it. */
+.page-tools { display: flex; }
+.page-tools:empty { display: none; }
+.page-tools .share > summary { display: grid; place-items: center; width: 38px; height: 38px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.page-tools .share[open] > summary { color: var(--text); border-color: var(--line-hover); }
+@media (hover: hover) { .page-tools .share > summary:hover { color: var(--text); border-color: var(--line-hover); } }
+.share-menu { position: absolute; right: 0; top: calc(100% + 10px); z-index: 20; display: grid; gap: 6px; padding: 8px; min-width: 230px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow); }
+.share-menu .btn { justify-content: flex-start; white-space: nowrap; }
 /* Print: the title, the neck and the facts of a page, without the menus and the choices. */
 @media print {
   .topbar, .bottom-nav, nav, .lib-nav, .controls, .neck-tools, .neck-turn, .neck-names, .practice, .lib-play, .piano-box, .backing-row, .prog-list, .drone, .share, .search-box { display: none !important; }
@@ -933,36 +934,46 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .staff-note { fill: var(--text); }
 
 /* Tuner: a gauge from 50 cents low to 50 cents high, the note, and the strings of the tuning. */
-.tuner { display: grid; justify-items: center; gap: 6px; margin: 12px 0; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); }
-.tuner-gauge { width: min(320px, 100%); height: auto; }
-.tuner-arc { fill: none; stroke: var(--line-strong); stroke-width: 8; stroke-linecap: round; }
-.tuner-zone { fill: none; stroke: var(--ok); stroke-width: 8; stroke-linecap: round; }
-.tuner-tick { stroke: var(--muted); stroke-width: 2; }
-.tuner-needle { stroke: var(--muted); stroke-width: 4; stroke-linecap: round; transition: transform .12s ease-out; }
+.tuner { display: grid; justify-items: center; gap: 10px; margin: 12px 0; padding: 18px 16px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); max-width: 520px; }
+.tuner-gauge { width: min(340px, 100%); height: auto; overflow: visible; }
+.tuner-arc { fill: none; stroke: var(--line-strong); stroke-width: 10; stroke-linecap: round; }
+.tuner-zone { fill: none; stroke: var(--ok); stroke-width: 10; opacity: .55; }
+.tuner.is-in .tuner-zone { opacity: 1; }
+.tuner-tick { stroke: var(--faint); stroke-width: 1.5; }
+.tuner-tick.is-big { stroke: var(--muted); stroke-width: 2.5; }
+.tuner-end { font-size: 22px; font-weight: 700; fill: var(--muted); text-anchor: middle; }
+.tuner-needle { stroke: var(--faint); stroke-width: 4; stroke-linecap: round; transition: transform .12s ease-out; }
 .tuner.is-on .tuner-needle { stroke: var(--accent); }
+.tuner.is-near .tuner-needle { stroke: var(--slow); }
 .tuner.is-in .tuner-needle { stroke: var(--ok); }
 .tuner-hub { fill: var(--text); }
-.tuner-name { font-size: 46px; line-height: 1; font-weight: 800; letter-spacing: -.02em; }
+.tuner-name { font-size: 54px; line-height: 1; font-weight: 800; letter-spacing: -.02em; margin-top: -26px; font-variant-numeric: tabular-nums; }
 .tuner.is-in .tuner-name { color: var(--ok); }
-.tuner-detail { text-align: center; min-height: 3em; margin: 0; }
-.tuner-strings { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); width: 100%; }
-.tuner-strings .chip { justify-content: center; padding: 5px 4px; }
-@media (max-width: 560px) { .tuner-strings { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tuner-detail { text-align: center; min-height: 2.9em; margin: 0; color: var(--muted); max-width: 34ch; }
+.tuner.is-in .tuner-detail { color: var(--ok); }
+/* A thin bar shows that the microphone hears something. */
+.tuner-level { width: min(240px, 80%); height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.tuner-level i { display: block; height: 100%; width: 0; background: var(--muted); transition: width .09s linear; }
+.tuner.is-on .tuner-level i { background: var(--accent); }
+.tuner-strings { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; width: 100%; }
+.tuner-string { position: relative; display: grid; justify-items: center; gap: 1px; padding: 7px 2px 8px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface-2); color: var(--text); cursor: pointer; transition: border-color .15s, background-color .15s; }
+.tuner-string small { font-size: 11.5px; color: var(--faint); font-weight: 600; }
+.tuner-string b { font-size: 19px; line-height: 1.1; }
+.tuner-string.is-heard { border-color: var(--accent); background: var(--accent-soft); }
+.tuner.is-in .tuner-string.is-heard { border-color: var(--ok-edge); background: var(--ok-soft); }
+.tuner-check { position: absolute; top: 3px; right: 5px; font-size: 12px; font-weight: 800; color: var(--ok); visibility: hidden; }
+.tuner-string.is-tuned .tuner-check { visibility: visible; }
+@media (hover: hover) { .tuner-string:hover { border-color: var(--line-hover); } }
+.tuner-start { width: 100%; justify-content: center; min-height: 48px; font-size: 16px; margin-top: 4px; }
 
 /* Keys: the chords from outside the key fill even rows. */
 .outside .chord-row { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 6px; }
 /* Scales for chords: the examples fill two columns on a phone. */
 @media (max-width: 560px) { .fit-examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .fit-examples .chip { justify-content: center; } }
-/* On a phone the share button sits at the right of the title, so the play buttons keep their own row. */
-@media (max-width: 760px) {
-  .lib-title { position: relative; }
-  .lib-title .share { position: absolute; top: 2px; right: 0; }
-  .lib-title h1 { padding-right: 48px; }
-}
 
 /* Circle of fifths, intervals view: the inner rings give way to the interval of each note from the key. */
-.circle-col > .seg { display: flex; width: max-content; margin: 0 auto 10px; }
-.circle.is-intervals .ring-minor, .circle.is-intervals .ring-dim, .circle.is-intervals .key-frame, .circle.is-intervals .hot { opacity: 0; pointer-events: none; }
+.circle-switches { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 auto 12px; }
+.circle.is-intervals .ring-minor, .circle.is-intervals .key-frame, .circle.is-intervals .hot { opacity: 0; pointer-events: none; }
 .circle.is-intervals .t-num, .circle.is-intervals .t-sig, .circle.is-intervals .t-hub, .circle.is-intervals .t-hub-sub, .circle.is-intervals .t-hub-sig { opacity: 0; }
 .circle.is-intervals .in-key path { fill: var(--ring-major); }
 .circle.is-intervals .is-tonic path { fill: var(--accent); }
@@ -992,3 +1003,25 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .circle.is-intervals .is-key .t-name { fill: var(--accent-ink); }
 .circle.is-intervals .is-tonic:not(.is-key) path { fill: var(--ring-major); }
 .circle.is-intervals .is-tonic:not(.is-key) .t-name { fill: var(--text); }
+/* The smallest phones: three play buttons, such as Up, Down and Together, do not fit beside the title.
+   They take the line under it, all three in one row. */
+@media (max-width: 360px) {
+  .lib-play { flex-wrap: nowrap; }
+  .lib-title:has(.lib-play > :nth-child(3)) { flex-wrap: wrap; }
+  .lib-play .btn { padding-left: 10px; padding-right: 10px; }
+}
+/* Play the note: what the microphone hears, under the question. */
+.listen { display: grid; gap: 10px; justify-items: center; padding: 12px 0 4px; }
+.listen-row { display: flex; align-items: center; gap: 12px; }
+.listen-note { font-size: 34px; line-height: 1; font-weight: 800; min-width: 2.6ch; text-align: center; font-variant-numeric: tabular-nums; }
+.listen-level { width: 90px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.listen-level i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .09s linear; }
+.listen-say { margin: 0; text-align: center; color: var(--muted); font-size: 14.5px; max-width: 40ch; min-height: 1.5em; }
+.listen-octaves { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.listen-octave { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-weight: 700; font-size: 15px; }
+.listen-octave.is-found { border-color: var(--ok-edge); background: var(--ok-soft); color: var(--ok); }
+/* A phone held sideways: the two switches of the circle keep one row above it. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .circle-switches { gap: 6px; margin-bottom: 8px; }
+  .circle-switches .seg button { padding: 4px 9px; font-size: 13.5px; min-height: 32px; }
+}
