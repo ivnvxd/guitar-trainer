@@ -26,7 +26,7 @@
     return s;
   }
   // The day log: practice time and the number of answers. The time is real practice time: a drill counts the time
-  // its page is in use, and a metronome, a chord-changes minute or a play-along loop counts while it runs.
+  // its page is in use, and a metronome or a play-along loop counts while it runs.
   function logDay(ms, answers) {
     const days = store.get('days', {});
     const d = days[today()] || { ms: 0, q: 0 };

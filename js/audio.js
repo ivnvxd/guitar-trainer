@@ -7,7 +7,7 @@
   const cache = new Map();
   let voice = 'pluck';
   const active = new Set();   // sources that are playing or scheduled
-  const pending = new Set();  // timers that start sounds later
+  const pending = new Map();  // timers that start sounds later, each with what to do if it is cancelled
   const track = (node, bag = active) => { bag.add(node); node.onended = () => bag.delete(node); };
   let volume = 0.8;
   // The sound switch: the volume stays as it is, the output is closed.
@@ -45,6 +45,7 @@
   const SILENT_WAV = 'data:audio/wav;base64,UklGRrQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YZABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA';
   function unlock() {
     if (!context()) return;
+    if (stuckAfterReturn()) rebuild();
     if (ctx.state !== 'running') {
       const src = ctx.createBufferSource();
       src.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
@@ -67,12 +68,57 @@
   }
   const GESTURES = ['pointerdown', 'touchend', 'click', 'keydown'];
   for (const type of GESTURES) root.addEventListener(type, unlock, true);
-  // Back from another app: the context may be paused. The next tap resumes it as well.
+  // Back from another app. iOS can leave the context 'interrupted', or 'running' with a clock that stands still,
+  // and resume() may never answer (WebKit bugs 263627 and 273511). Only a new context helps, as a restart of the
+  // app does. So the page notes the clock on return, and at the next tap it replaces a context that is not running
+  // or whose clock did not move: inside a tap, iOS lets a new context start.
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let back = null;
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !ctx || ctx.state === 'running') return;
-    ctx.resume().catch(() => {});
+    if (!ctx) return;
+    if (document.visibilityState === 'hidden') {
+      // An iPhone stops the sound in the background anyway. The page stops it too, so its buttons say so.
+      if (IOS && stopAll() && GT.render) GT.render();
+      return;
+    }
+    try { if (navigator.audioSession && !mic) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
+    back = { clock: ctx.currentTime, at: performance.now() };
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
     for (const type of GESTURES) root.addEventListener(type, unlock, true);
   });
+  function stuckAfterReturn() {
+    if (!back) return false;
+    const waited = performance.now() - back.at, moved = ctx.currentTime - back.clock;
+    back = null;
+    return ctx.state !== 'running' || (waited > 300 && moved < waited / 4000);
+  }
+  // A new context in place of a stuck one. Every sound stops; the player loads its song again (onNewContext).
+  function rebuild() {
+    stopAll();
+    const old = ctx;
+    ctx = null; master = null; noise = null;
+    cache.clear(); active.clear(); backing.nodes.clear(); rhythm.nodes.clear();
+    try { old.close().catch(() => {}); } catch { /* closed already */ }
+    context();
+    if (GT.audio.onNewContext) GT.audio.onNewContext();
+  }
+  // Everything stops: notes, rhythms, the backing, the drone and the metronome. True when a loop of some kind ran.
+  function stopAll() {
+    const was = metronome.running || !!backing.chords || !!backing.drone || !!rhythm.o;
+    silence(); stopLoop(); stopDrone(); stopMetronome();
+    return was;
+  }
+
+  // One sound at a time: the first note that a tap or a key asks for stops the notes of earlier taps, such as an
+  // interval that still rings or the rest of a run. A loop, the drone, the metronome and a rhythm go on.
+  // A tap is pointerdown and the click after it; the flag holds only while the handlers of the event run.
+  let gesture = 0, cutFor = -1, inGesture = false;
+  const arm = () => { inGesture = true; setTimeout(() => { inGesture = false; }, 0); };
+  root.addEventListener('pointerdown', () => { gesture++; arm(); }, true);
+  root.addEventListener('keydown', e => { if (!e.repeat) gesture++; arm(); }, true);
+  root.addEventListener('click', arm, true);
+  // A new sound from a tap: the notes of earlier taps stop. Notes, loops, the drone and rhythms call this.
+  function fresh() { if (inGesture && cutFor !== gesture) { cutFor = gesture; cut(); } }
   const freq = midi => 440 * Math.pow(2, (midi - 69) / 12);
   // The bass note of a chord, in the lowest octave of the guitar (E2 to D♯3). Lower notes are lost on a phone speaker.
   const bass = pc => 40 + ((pc - 40) % 12 + 12) % 12;
@@ -120,6 +166,7 @@
       g.gain.exponentialRampToValueAtTime(0.0001, at + duration + 0.12);
     }
     src.connect(g); g.connect(master);
+    src.fade = g;
     track(src, bag);
     src.start(at);
     src.stop(at + (duration ? duration + 0.15 : buffer.duration));
@@ -133,6 +180,7 @@
     g.gain.exponentialRampToValueAtTime(gainValue * 0.5, at + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0001, at + len);
     o1.connect(g); o2.connect(g); g.connect(master);
+    o1.fade = o2.fade = g;
     track(o1, bag); track(o2, bag);
     o1.start(at); o2.start(at); o1.stop(at + len + 0.02); o2.stop(at + len + 0.02);
   }
@@ -148,6 +196,7 @@
   function note(midi, at = 0, duration = 0, gainValue = 0.5) {
     if (!context()) return false;
     askedWhileMuted();
+    fresh();
     const when = ctx.currentTime + 0.03 + at;
     (voice === 'soft' ? playSoft : playPluck)(midi, when, duration, gainValue);
     return true;
@@ -170,18 +219,30 @@
     chords.forEach((midis, i) => midis.forEach((m, j) => note(m, i * beat * beatsEach + j * 0.055, beat * beatsEach * 0.95, 0.32)));
     return chords.length * beat * beatsEach;
   }
-  // Stop every note that plays or waits to play, and every delayed sound. The metronome and a backing go on.
+  // Stop every note that plays or waits to play, with a short fade, and every delayed sound.
+  function cut() {
+    const cancelled = [...pending.values()];
+    for (const id of pending.keys()) clearTimeout(id);
+    pending.clear();
+    const now = ctx ? ctx.currentTime : 0;
+    for (const node of active) {
+      const g = node.fade && node.fade.gain;
+      if (g) { try { if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now); else g.cancelScheduledValues(now); g.setTargetAtTime(0, now, 0.015); } catch { /* gone */ } }
+      try { node.stop(g ? now + 0.08 : 0); } catch { /* already stopped */ }
+    }
+    active.clear();
+    cancelled.forEach(f => f && f());
+  }
+  // The same, and a rhythm stops too. The metronome and a backing go on.
   function silence() {
     stopRhythm();
-    for (const id of pending) clearTimeout(id);
-    pending.clear();
-    for (const node of active) { try { node.stop(); } catch { /* already stopped */ } }
-    active.clear();
+    cut();
   }
-  // Run a sound later; silence() cancels it.
-  function later(fn, ms) {
+  // Run a sound later; silence() cancels it. onCancel runs in its place when it is cancelled, for example to
+  // take away a highlight that the sound would have taken away.
+  function later(fn, ms, onCancel) {
     const id = setTimeout(() => { pending.delete(id); fn(); }, ms);
-    pending.add(id);
+    pending.set(id, onCancel || null);
   }
 
   // Play-along: a loop of chords and a drone. They run until you stop them, so silence() leaves them
@@ -249,6 +310,7 @@
   // chords: [[bass, note, note, ...], ...] as MIDI numbers. onChord(i) runs when chord i starts to sound.
   function startLoop(chords, bpm = 84, beats = 4, onChord = null) {
     if (!context()) return false;
+    fresh();
     askedWhileMuted();
     stopLoop();
     Object.assign(backing, { chords, bpm, beats, at: 0, nextTime: ctx.currentTime + 0.1, onChord });
@@ -266,6 +328,7 @@
   // A held root note in three octaves. A phone speaker loses the lowest one, so the upper ones carry it.
   function startDrone(pc) {
     if (!context()) return false;
+    fresh();
     askedWhileMuted();
     stopDrone();
     const now = ctx.currentTime, out = ctx.createGain(), low = bass(pc);
@@ -407,6 +470,7 @@
   }
   function startRhythm(o) {
     if (!context()) return null;
+    fresh();
     askedWhileMuted();
     stopRhythm();
     const beat = o.barSeconds / o.beats, start = ctx.currentTime + 0.12, count = o.countIn || 0;

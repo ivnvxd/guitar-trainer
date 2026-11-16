@@ -187,6 +187,7 @@
       try { buf = await c.decodeAudioData(await file.arrayBuffer()); } catch (e) { throw new Error(`The browser cannot read the sound of ${file.name}. Try an mp3, m4a, wav or mp4 file.`); }
       if (my !== opening) return;
       if (!await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null, my)) return;
+      P.source = { file };
       say('');
       drawAll();
     } catch (e) { if (my === opening) say(e.message || 'The file did not open.'); }
@@ -310,7 +311,7 @@
     if (P.node) { try { await P.node.dropBuffers(); } catch (e) { /* none */ } }
     if (my !== opening) return;
     P.mono = null; P.peaks = null; P.video = null;
-    Object.assign(P, { kind: 'youtube', ytId: id, ytError: null, key: `yt:${id}`, name: (saved.songs[`yt:${id}`] || {}).name || 'YouTube video', duration: 0 });
+    Object.assign(P, { kind: 'youtube', ytId: id, ytError: null, source: null, key: `yt:${id}`, name: (saved.songs[`yt:${id}`] || {}).name || 'YouTube video', duration: 0 });
     restore(P.key);
     P.semis = 0; P.cents = 0; P.filter = 'none';
     drawAll();
@@ -392,6 +393,7 @@
       const c = A.context();
       const buf = await c.decodeAudioData(await r.blob.arrayBuffer());
       if (my !== opening || !await loadDecoded(buf, r.name, `rec:${r.id}`, null, my)) return;
+      P.source = { rec: r };
       say('');
     } catch (e) { if (my === opening) say(e.message || 'The recording did not open.'); }
     drawAll();
@@ -725,6 +727,19 @@
     if (P.kind === 'youtube') { const id = P.ytId; unloadYouTube(); P.ytId = id; }
   }
   root.addEventListener('resize', () => { if (P.ui.wave && P.ui.wave.isConnected) drawWave(); });
+  // A new audio context (an iPhone back from another app, see audio.js): the engine starts again, and the open
+  // song loads again from its file, at the same place.
+  A.onNewContext = () => {
+    if (!P.node) return;
+    P.playing = false; clearTimeout(P.waitTimer); P.waiting = false;
+    if (P.video) P.video.pause();
+    P.node = null; P.out = null; P.chain = [];
+    show();
+    const src = P.source, pos = P.pos;
+    if (!isFile() || !src) return;
+    const same = () => P.source && (P.source.file || P.source.rec) === (src.file || src.rec);
+    (src.file ? openFile(src.file) : openRecording(src.rec)).then(() => { if (same()) { P.pos = Math.min(pos, P.duration); show(); } });
+  };
   // The sound switch and the volume of Settings work for the player too.
   A.onVolume = () => { if (P.out) P.out.gain.value = A.volume; };
 

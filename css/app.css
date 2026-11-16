@@ -1248,9 +1248,10 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 @media (max-width: 560px) { .player-label { flex-basis: 100%; } }
 @media (max-width: 380px) { .player-filter { display: grid; grid-template-columns: 1fr 1fr; } }
 
-/* The Tools tab: four cards, two side by side on a phone. */
-.tool-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 12px; }
-@media (max-width: 560px) { .tool-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+/* The Tools tab: three cards in a row. */
+.tool-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+/* A phone: one card in each row, so three tools do not leave one alone. */
+@media (max-width: 560px) { .tool-cards { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
 .tool-card { display: grid; align-content: start; gap: 6px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line); color: inherit; text-decoration: none; transition: border-color .15s, background-color .15s; }
 @media (hover: hover) { .tool-card:hover { border-color: var(--line-hover); background: var(--surface-2); } }
 .tool-card h2 { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 17px; }
@@ -1274,8 +1275,6 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
   .page-subnav .lib-tabs, .tools-subnav .lib-tabs { gap: 2px; }
   .page-subnav .lib-tabs a, .tools-subnav .lib-tabs a { padding: 8px 7.5px; font-size: 14px; }
   .page-subnav .lib-tabs .lib-tool-link { margin-left: 6px; }
-  /* On a phone the Tools tab at the bottom leads to all the tools, so the row has room for the four tools. */
-  .tools-subnav .lib-home-link { display: none; }
   /* Scales for chords: the two lists and Add on one line. With Clear: the two lists on top, Add and Clear under them. */
   .fit-add { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; }
   .fit-add:has(> :nth-child(4)) { grid-template-columns: 1fr 1fr; }

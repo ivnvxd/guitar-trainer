@@ -69,7 +69,7 @@ The Rhythm topic has two parts:
 
 On the circle of fifths a tap turns the circle to a key. Touch and hold a cell, or right-click it, to hear its chord.
 
-A speaker button in the top bar turns all sound off and on. On a Library page a share button beside it shares the link of the page, saves the neck as a picture, or prints the page.
+A speaker button in the top bar turns all sound off and on. One sound plays at a time: a new tap that plays stops the notes of the tap before it, while a backing, the drone and the metronome go on. On an iPhone the sound stops when you switch to another app, and the first tap after you come back brings it back. On a Library page a share button beside it shares the link of the page, saves the neck as a picture, or prints the page.
 
 After a choice, a page draws itself again. The control you tapped stays at the same place on the screen.
 
@@ -89,7 +89,6 @@ The Tools tab holds the tools you use with the guitar in your hands. On each too
 - Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning. The string you play lights up, a tuned string gets a check mark, and a bar shows that the microphone hears you.
 - Metronome: it can click between the beats, click on 2 and 4 only, leave out whole bars or single beats, and raise the tempo every four bars.
 - Slow down plays a song file (mp3, m4a, wav, flac or a video) or a YouTube link. A file plays at 25% to 150% speed without a change of pitch, in another key, or a few cents sharp or flat. You loop a part from A to B, with a pause before each pass and a little more speed each time, and you mark the parts of the song. A waveform shows the song: a tap jumps, a drag sets the loop. Filters raise or cut the bass or cut the voice in the middle of the mix, and a note guess lists the loudest notes at a spot with a chord name. A YouTube video gets YouTube's own speeds, loops and marks, but no other tools, because YouTube does not let other sites change its sound. On a computer with Chrome or Edge you can record a part of a tab, and the recording gets every tool and stays in the browser until you delete it. Once a song is open, the box to open another one folds into one button. While you scroll down to the speed or the loop, a small bar at the bottom keeps Play, back 5 seconds, the time and Loop in reach. Files never leave the device. The slowing down uses Signalsmith Stretch (MIT license, `js/vendor/`), with one change: it stops its work after a second of silence.
-- Chord changes: switch between two open chords for a minute and beat your count.
 
 The daily goal counts real practice time: the time a drill page is in use, and the time a metronome, a play-along loop or a strumming pattern runs. Settings can turn off the count-in, the bar of clicks before a rhythm starts. Settings also shows the version of the site in use, with a link to its release notes, and links to report a problem and to the code.
 
@@ -113,7 +112,7 @@ Progress and settings stay in the browser's local storage, on one device. The Pr
 | `js/library.js` | The Library pages |
 | `js/train.js` | The Train page and the runner that all drills share |
 | `js/drills-ear.js`, `js/drills-neck.js`, `js/drills-keys.js`, `js/drills-rhythm.js` | The drills |
-| `js/tools.js` | The Tools tab, the metronome and chord changes |
+| `js/tools.js` | The Tools tab and the metronome |
 | `js/pages.js` | Progress and Settings |
 
 ## Tests

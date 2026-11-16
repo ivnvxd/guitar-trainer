@@ -1,8 +1,8 @@
-/* Tools: a metronome and one-minute chord changes. */
+/* Tools: the Tools tab, its row of tools, and the metronome. */
 (function (root) {
   'use strict';
   const GT = root.GT;
-  const T = GT.theory, A = GT.audio;
+  const A = GT.audio;
   const { h, store } = GT;
 
   // The metronome. Besides the tempo and the beats it has practice modes for your time: clicks between the beats,
@@ -77,85 +77,11 @@
     return () => { document.removeEventListener('keydown', onKey); A.stopMetronome(); };
   }
 
-  // One-minute changes: switch between two chords for 60 seconds and count the changes.
-  const CHANGE_CHORDS = ['C', 'A', 'G', 'E', 'D', 'Am', 'Em', 'Dm', 'F', 'A7', 'D7', 'E7', 'G7', 'C7', 'B7'];
-  const chordFor = label => {
-    const minor = label.endsWith('m'), seventh = label.endsWith('7');
-    const rootName = label.replace(/m$|7$/, '');
-    return T.OPEN_CHORDS.find(c => c.root === rootName && c.chord === (minor ? 'minor' : seventh ? '7' : 'major'));
-  };
-  function changes(main) {
-    const saved = Object.assign({ a: 'C', b: 'G', best: {} }, store.get('changes', {}));
-    const key = () => [saved.a, saved.b].sort().join('-');
-    let timer = null, endAt = 0;
-    const clock = h('output', { class: 'bpm' }, '60');
-    const status = h('p', { class: 'muted', 'aria-live': 'polite' });
-    const countInput = h('input', { type: 'number', min: 0, max: 200, inputmode: 'numeric', placeholder: 'Count', 'aria-label': 'Changes you made', style: 'width:90px;min-height:40px;padding:6px 10px;border-radius:8px;border:1px solid var(--line-strong);background:var(--surface-2)' });
-    const saveBtn = h('button', { type: 'button', class: 'btn', onclick: () => {
-      const n = Number(countInput.value);
-      if (!Number.isFinite(n) || n <= 0) { status.textContent = 'Type how many changes you made.'; return; }
-      const best = saved.best[key()] || 0;
-      if (n > best) saved.best[key()] = n;
-      store.set('changes', saved);
-      status.textContent = n > best ? `New best for ${saved.a} and ${saved.b}: ${n} changes.` : `${n} changes. Your best for this pair is ${best}.`;
-      countInput.value = '';
-      redrawBest();
-    } }, 'Save count');
-    const bestList = h('div', { class: 'chips' });
-    const redrawBest = () => bestList.replaceChildren(...Object.entries(saved.best).sort((x, y) => x[1] - y[1]).map(([pair, n]) => h('span', { class: 'chip', style: 'cursor:default' }, pair.replace('-', ' ↔ '), h('small', null, n))),
-      Object.keys(saved.best).length ? '' : h('p', { class: 'muted small' }, 'No counts yet. Save your first count above.'));
-    const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => {
-      // The played part of the minute counts as practice time.
-      // Stop, also during the count-in: the clicks stop too.
-      if (timer) { clearInterval(timer); timer = null; A.stopMetronome(); GT.progress.logTime(Math.max(0, Math.min(60000, 64000 - (endAt - performance.now()) - 4000))); startBtn.textContent = 'Start one minute'; clock.textContent = '60'; return; }
-      // A count-in of four clicks, then 60 seconds.
-      A.startMetronome(60, 4, beat => { if (beat === 3) { A.stopMetronome(); } });
-      status.textContent = 'Get ready: four clicks, then go.';
-      endAt = performance.now() + 4000 + 60000;
-      startBtn.textContent = 'Stop';
-      timer = setInterval(() => {
-        const left = Math.ceil((endAt - performance.now()) / 1000);
-        if (left > 60) { clock.textContent = '60'; return; }
-        if (left === 60) status.textContent = 'Go: change between the two chords, cleanly.';
-        clock.textContent = Math.max(0, left);
-        if (left <= 0) {
-          clearInterval(timer); timer = null; startBtn.textContent = 'Start one minute';
-          GT.progress.logTime(60000);
-          A.notes([64, 64], 'up', 0.2, 0.2);
-          status.textContent = 'Time. How many changes did you make? Each switch counts as one.';
-          countInput.focus();
-        }
-      }, 200);
-    } }, 'Start one minute');
-    const chordCard = which => {
-      const label = saved[which], c = chordFor(label);
-      const frets = c.frets.filter(f => f !== null);
-      const tones = T.tonesOn(c.root, T.chordById(c.chord));
-      const markers = c.frets.map((f, s) => f === null ? null : (() => { const t = tones.find(x => x.pc === T.mod(T.STANDARD[s] + f)); return { string: s, fret: f, kind: GT.fretboard.degreeKind(t.label), label: t.name }; })()).filter(Boolean);
-      const box = h('div', { class: 'neck' });
-      GT.fretboard.render(box, { from: 0, to: Math.max(4, Math.max(...frets)), markers, muted: c.frets.map((f, s) => f === null ? s : null).filter(s => s !== null), orientation: 'vertical', mini: true, label: label });
-      const select = h('select', { 'aria-label': which === 'a' ? 'First chord' : 'Second chord' }, CHANGE_CHORDS.map(n => h('option', { value: n, selected: n === label }, n)));
-      select.addEventListener('change', () => { saved[which] = select.value; store.set('changes', saved); GT.render(); });
-      return h('div', { class: 'card', style: 'display:grid;gap:8px' }, select, h('button', { type: 'button', class: 'btn', onclick: () => A.notes(c.frets.map((f, s) => f === null ? null : T.STANDARD[s] + f).filter(m => m !== null), 'strum') }, '▶ Strum'), box);
-    };
-    redrawBest();
-    main.append(h('div', { class: 'drill' },
-      h('h1', null, 'One-minute chord changes'),
-      h('p', { class: 'muted', style: 'margin-top:6px;max-width:64ch' }, 'Pick two open chords. Switch between them for one minute, strumming once per chord, and count every switch. Clean changes count, rushed ones do not. Beat your best a little each day.'),
-      h('div', { class: 'cards', style: 'margin-top:18px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))' }, chordCard('a'), chordCard('b')),
-      h('div', { class: 'prompt', style: 'margin-top:16px;display:grid;gap:14px;justify-items:center;text-align:center' },
-        clock, startBtn, status,
-        h('div', { class: 'row', style: 'justify-content:center' }, countInput, saveBtn)),
-      h('section', { class: 'lib-section' }, h('h2', null, 'Your best counts'), h('p', null, 'Slowest pairs first. Practice those.'), bestList)));
-    return () => { if (timer) clearInterval(timer); A.stopMetronome(); };
-  }
-
   // The Tools tab: the tools you use with the guitar in your hands.
   const TOOLS = [
     { id: 'tune', title: 'Tuner', line: 'Tune your guitar with the microphone.', icon: 'M4 16a8 8 0 0 1 16 0M12 16l4-6M3 20h18' },
     { id: 'metronome', title: 'Metronome', line: 'Tempo, accents, silent bars and a rising tempo.', icon: 'M8.5 20h7l-2.4-15h-2.2zM12 15l5-8' },
-    { id: 'play', title: 'Slow down', line: 'Slow down a song or a YouTube video, loop a part and play along.', icon: 'M3 12h1.5M7 8v8M11 5v14M15 9v6M19 10.5v3' },
-    { id: 'changes', title: 'Chord changes', line: 'Switch between two open chords for a minute. Beat your count.', icon: 'M5 8h11l-3-3M19 16H8l3 3' }
+    { id: 'play', title: 'Slow down', line: 'Slow down a song or a YouTube video, loop a part and play along.', icon: 'M3 12h1.5M7 8v8M11 5v14M15 9v6M19 10.5v3' }
   ];
   function toolsHome(main) {
     const el = GT.fretboard.el;
@@ -185,8 +111,7 @@
       const id = parts[0];
       // A tool page starts with the submenu row; the page of the tool goes under it.
       if (TOOLS.some(t => t.id === id)) { const page = h('div', { class: 'lib-main' }); main.append(h('div', { class: 'lib' }, toolsNav(id), page)); main = page; }
-      if (id === 'changes') cleanup = changes(main);
-      else if (id === 'metronome') cleanup = metronome(main);
+      if (id === 'metronome') cleanup = metronome(main);
       else if (id === 'tune') { libraryTool(main, GT.tuner.view); cleanup = GT.tuner.stop; }
       else if (id === 'play') { libraryTool(main, GT.player.view); cleanup = GT.player.leave; }
       else toolsHome(main);

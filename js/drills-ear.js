@@ -126,7 +126,9 @@
           tiles.forEach((t, k) => t.classList.toggle('is-playing', k === i));
           playInterval(q.root, q.dir === 'down' ? q.root - semi : q.root + semi, q.dir);
         }, i * step * 1000));
-        A.later(() => tiles.forEach(t => t.classList.remove('is-playing')), semis.length * step * 1000);
+        // The light goes out at the end, or at once when another sound cuts the tour.
+        const dark = () => tiles.forEach(t => t.classList.remove('is-playing'));
+        A.later(dark, semis.length * step * 1000, dark);
       };
       ui.actions([['▶ Replay', replay, 'R'], ['▶ First note', () => A.note(q.root, 0, 1)], ['▶ Hear all', tour, 'H']]);
       q.tour = tour;
