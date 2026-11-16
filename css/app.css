@@ -27,6 +27,7 @@
   --accent-soft-2: rgba(250, 179, 135, .22);
   --accent-text: #fab387;
   --ok: #a6e3a1;
+  --ok-text: #a6e3a1;
   --ok-soft: rgba(166, 227, 161, .11);
   --ok-edge: rgba(166, 227, 161, .42);
   --bad: #f38ba8;
@@ -34,6 +35,7 @@
   --bad-edge: rgba(243, 139, 168, .42);
   /* Notes on the neck. The root is the accent. Tones outside the chord are quiet. */
   --root: #fab387;
+  /* The ink on the root, and on the other note colors that are light: the seventh, a slow and a right answer. */
   --root-ink: #11111b;
   --third: #89b4fa;
   --fifth: #cba6f7;
@@ -91,7 +93,7 @@
   --surface: #e6e9ef;
   --surface-2: #dce0e8;
   --surface-3: #ccd0da;
-  --raised: #c2c6d1;
+  --raised: #bcc0cc;
   --line: #dce0e8;
   --line-strong: #ccd0da;
   --line-hover: #9ca0b0;
@@ -103,9 +105,11 @@
   --accent-ink: #11111b;
   --accent-soft: rgba(254, 100, 11, .10);
   --accent-soft-2: rgba(254, 100, 11, .18);
-  /* Peach is too light for small text on this page, so text takes a darker peach. The same holds for green and yellow. */
+  /* Every fill is a Latte color. Two things are not: the dark ink on peach, pink, yellow and green, which is the
+     crust of Mocha, and small colored text, which takes a darker peach and green so it stays readable. */
   --accent-text: #983f08;
-  --ok: #27781a;
+  --ok: #40a02b;
+  --ok-text: #27781a;
   --ok-soft: rgba(64, 160, 43, .13);
   --ok-edge: rgba(64, 160, 43, .5);
   --bad: #d20f39;
@@ -115,23 +119,23 @@
   --root-ink: #11111b;
   --third: #1e66f5;
   --fifth: #8839ef;
-  --seventh: #c4449a;
+  --seventh: #ea76cb;
   --other: #ccd0da;
   --other-edge: #8c8fa1;
   --other-ink: #4c4f69;
-  --slow: #9d5d0a;
-  --q-major: #27781a;
+  --slow: #df8e1d;
+  --q-major: #40a02b;
   --q-minor: #1e66f5;
   --q-dim: #e64553;
   --q-mix: 30%;
   --q-text: #4c4f69;
-  --q-ink: #ffffff;
-  --board: #ffffff;
+  --q-ink: #11111b;
+  --board: #e6e9ef;
   --fret: #9ca0b0;
   --nut: #5c5f77;
-  --inlay: #e6e9ef;
+  --inlay: #dce0e8;
   --string: #bcc0cc;
-  --dot-ink: #ffffff;
+  --dot-ink: #eff1f5;
   --target: #4c4f69;
   --flash: #4c4f69;
   --shade: #eff1f5;
@@ -140,17 +144,17 @@
   --link-shape: #4c4f69;
   --faint-stroke: .6;
   --faint-label: .85;
-  --pkey-white: #ffffff;
+  --pkey-white: #eff1f5;
   --pkey-black: #4c4f69;
   --pkey-edge: #acb0be;
   --search-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235c5f77' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4.5 4.5'/%3E%3C/svg%3E");
   --shape-c: #d20f39;
-  --shape-a: #9d5d0a;
-  --shape-g: #27781a;
+  --shape-a: #df8e1d;
+  --shape-g: #40a02b;
   --shape-e: #1e66f5;
   --shape-d: #8839ef;
-  --ring-major: #e6e9ef;
-  --ring-minor: #e9ecf1;
+  --ring-major: #dce0e8;
+  --ring-minor: #e6e9ef;
   --ring-gap: #eff1f5;
   --live: #983f08;
   --shadow: 0 10px 28px -12px rgba(76, 79, 105, .35);
@@ -330,10 +334,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-root { --c: var(--root); --ink: var(--root-ink); --edge: var(--board); }
 .fb-third { --c: var(--third); --ink: var(--dot-ink); --edge: var(--board); }
 .fb-fifth { --c: var(--fifth); --ink: var(--dot-ink); --edge: var(--board); }
-.fb-seventh { --c: var(--seventh); --ink: var(--dot-ink); --edge: var(--board); }
-.fb-correct { --c: var(--ok); --ink: var(--dot-ink); --edge: var(--board); }
+.fb-seventh { --c: var(--seventh); --ink: var(--root-ink); --edge: var(--board); }
+.fb-correct { --c: var(--ok); --ink: var(--root-ink); --edge: var(--board); }
 .fb-wrong { --c: var(--bad); --ink: var(--dot-ink); --edge: var(--board); }
-.fb-slow { --c: var(--slow); --ink: var(--dot-ink); --edge: var(--board); }
+.fb-slow { --c: var(--slow); --ink: var(--root-ink); --edge: var(--board); }
 .fb-target { --c: var(--target); --ink: var(--board); --edge: var(--board); }
 .fb-dot { fill: var(--c); stroke: var(--edge); stroke-width: 1.6; }
 .fb-ring { fill: none; stroke: var(--c); stroke-width: 2; stroke-dasharray: 3 2.5; }
@@ -367,6 +371,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-region-label { --rc: var(--accent); }
 .fb-region-label circle { fill: var(--rc); }
 .fb-region-label text { fill: var(--dot-ink); font-size: 12px; font-weight: 800; text-anchor: middle; }
+.fb-region-label.shape-A text, .fb-region-label.shape-G text { fill: var(--root-ink); }
 .fb-region-label.is-near { opacity: .65; }
 /* A faint layer behind the main picture: the CAGED shapes around a triad or a scale. */
 .fb-region.is-faint { fill-opacity: .05; stroke-opacity: var(--faint-stroke, .4); stroke-width: 1.4; }
@@ -580,6 +585,8 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .circle { touch-action: manipulation; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .circle .in-key .t-sig { fill: var(--q-text); opacity: .65; }
 .circle .is-tonic .t-name, .circle .is-tonic .t-num, .circle .is-tonic .t-sig { fill: var(--q-ink); opacity: 1; }
+/* The tonic of a minor key is blue, and blue takes the ink of a blue note. */
+.circle .ring-minor.is-tonic .t-name, .circle .ring-minor.is-tonic .t-num { fill: var(--dot-ink); }
 .circle .hub { fill: var(--bg); }
 .circle .t-hub { fill: var(--text); font-size: 32px; font-weight: 750; letter-spacing: -.02em; }
 .circle .t-hub-sub { fill: var(--muted); font-size: 13.5px; }
@@ -670,7 +677,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .bad .result-icon { background: var(--bad); }
 .result-say { display: grid; gap: 1px; min-width: 0; }
 .result-verdict { font-size: 13.5px; font-weight: 700; }
-.ok .result-verdict { color: var(--ok); }
+.ok .result-verdict { color: var(--ok-text); }
 .bad .result-verdict { color: var(--bad); }
 .result-answer { font-size: 22px; font-weight: 750; letter-spacing: -.02em; line-height: 1.2; }
 .result-sub { font-size: 14px; color: var(--muted); }
@@ -1026,9 +1033,9 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .tuner.is-in .tuner-needle { stroke: var(--ok); }
 .tuner-hub { fill: var(--text); }
 .tuner-name { font-size: 54px; line-height: 1; font-weight: 800; letter-spacing: -.02em; margin-top: -26px; font-variant-numeric: tabular-nums; }
-.tuner.is-in .tuner-name { color: var(--ok); }
+.tuner.is-in .tuner-name { color: var(--ok-text); }
 .tuner-detail { text-align: center; min-height: 2.9em; margin: 0; color: var(--muted); max-width: 34ch; }
-.tuner.is-in .tuner-detail { color: var(--ok); }
+.tuner.is-in .tuner-detail { color: var(--ok-text); }
 /* A thin bar shows that the microphone hears something. */
 .tuner-level { width: min(240px, 80%); height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .tuner-level i { display: block; height: 100%; width: 0; background: var(--muted); transition: width .09s linear; }
@@ -1039,7 +1046,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .tuner-string b { font-size: 19px; line-height: 1.1; }
 .tuner-string.is-heard { border-color: var(--accent); background: var(--accent-soft); }
 .tuner.is-in .tuner-string.is-heard { border-color: var(--ok-edge); background: var(--ok-soft); }
-.tuner-check { position: absolute; top: 3px; right: 5px; font-size: 12px; font-weight: 800; color: var(--ok); visibility: hidden; }
+.tuner-check { position: absolute; top: 3px; right: 5px; font-size: 12px; font-weight: 800; color: var(--ok-text); visibility: hidden; }
 .tuner-string.is-tuned .tuner-check { visibility: visible; }
 @media (hover: hover) { .tuner-string:hover { border-color: var(--line-hover); } }
 .tuner-start { width: 100%; justify-content: center; min-height: 48px; font-size: 16px; margin-top: 4px; }
@@ -1098,7 +1105,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .listen-say { margin: 0; text-align: center; color: var(--muted); font-size: 14.5px; max-width: 40ch; min-height: 1.5em; }
 .listen-octaves { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .listen-octave { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--muted); font-weight: 700; font-size: 15px; }
-.listen-octave.is-found { border-color: var(--ok-edge); background: var(--ok-soft); color: var(--ok); }
+.listen-octave.is-found { border-color: var(--ok-edge); background: var(--ok-soft); color: var(--ok-text); }
 /* A phone held sideways: the two switches of the circle keep one row above it. */
 @media (orientation: landscape) and (max-height: 500px) {
   .circle-switches { gap: 6px; margin-bottom: 8px; }
@@ -1115,7 +1122,7 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .day-bar.is-some i { background: var(--muted); }
 .day-bar.is-goal i { background: var(--ok); }
 .day-min { font-size: 11px; font-weight: 700; color: var(--muted); min-height: 1.3em; font-variant-numeric: tabular-nums; }
-.day-bar.is-goal .day-min { color: var(--ok); }
+.day-bar.is-goal .day-min { color: var(--ok-text); }
 
 /* Rhythm: one bar on a single line, as rhythm parts are written. */
 .rhythm { display: block; width: 100%; height: auto; }
