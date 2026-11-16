@@ -126,7 +126,30 @@
     box.addEventListener('toggle', () => saveLib({ piano: Object.assign({}, lib.piano, { [topic]: box.open }) }));
     return box;
   }
-  const head = (title, sub, buttons) => h('div', { class: 'lib-title' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
+  // The name of a chord or a key set as in print: the sharp or flat is raised and the kind of the chord is smaller.
+  // "F♯m7" is F, a raised ♯ and a small m7. A word after the name stays as it is: "C♯ minor", "Cm triads", "D♭/C♯".
+  const NAME = /^([A-G])([♯♭]?)([^\s/]*)(.*)$/, BASS = /^\/([A-G])([♯♭])(.*)$/;
+  function nameParts(name) {
+    const m = NAME.exec(name);
+    if (!m) return [{ text: name }];
+    const [, letter, acc, kind, tail] = m, bass = BASS.exec(tail);
+    return [{ text: letter }, acc && { text: acc, cls: 'acc' }, kind && { text: kind, cls: 'kind' },
+      ...(bass ? [{ text: '/' + bass[1] }, { text: bass[2], cls: 'acc' }, bass[3] && { text: bass[3] }] : [tail && { text: tail }])].filter(Boolean);
+  }
+  // One span holds the parts, so a chip or a row with gaps keeps the name together.
+  const setName = name => h('span', null, nameParts(name).map(p => p.cls === 'acc' ? h('sup', { class: 'acc' }, p.text) : p.cls ? h('span', { class: p.cls }, p.text) : p.text));
+  // The same in a drawing. A raised sign moves the line up, so the part after it moves back down.
+  function setSvgName(text, name) {
+    const SIZE = { acc: .62, kind: .72 }, RISE = .45;
+    let up = 0;
+    for (const p of nameParts(name)) {
+      const size = SIZE[p.cls] || 1, dy = p.cls === 'acc' ? -RISE : up / size;
+      FB.el('tspan', Object.assign(p.cls ? { class: p.cls } : {}, dy ? { dy: dy.toFixed(3) + 'em' } : {}), text).textContent = p.text;
+      up = p.cls === 'acc' ? RISE * SIZE.acc : 0;
+    }
+  }
+  // The name of a chord, a key or a triad changes with your choices: big sets it large on a phone, as in print.
+  const head = (title, sub, buttons, big) => h('div', { class: 'lib-title' }, h('div', null, h('h1', { 'data-big': big }, big ? setName(title) : title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
   // Share a page: its link (the state of the page is in the link), the neck as a picture, or a printout.
   // The button sits in the top bar, so it never covers the buttons of a page.
   function shareMenu() {
@@ -363,7 +386,7 @@
     const now = (item, g) => item.id === backing.id && backing.at !== null && backing.at >= g.from && backing.at <= g.to;
     return h('div', { class: 'prog-list ' + cls }, items.map(item => h('button', { type: 'button', class: 'prog', dataset: { id: item.id }, 'aria-pressed': String(item.id === backing.id), onclick: () => item.id === backing.id ? stopBacking() : start(item) },
       h('span', { class: 'prog-play', 'aria-hidden': 'true' }), h('b', null, item.name),
-      h('span', { class: 'prog-chords' }, groups(item).map(g => h('span', { class: now(item, g) ? 'is-now' : null, dataset: { from: g.from, to: g.to } }, g.name, g.to > g.from ? ` ×${g.to - g.from + 1}` : null))))));
+      h('span', { class: 'prog-chords' }, groups(item).map(g => h('span', { class: now(item, g) ? 'is-now' : null, dataset: { from: g.from, to: g.to } }, setName(g.name), g.to > g.from ? ` ×${g.to - g.from + 1}` : null))))));
   }
   const pcsOf = (rootName, chord) => chord.toneList.map(t => T.mod(T.pcOf(rootName) + t.semi));
   // Backings that fit a scale: degrees of the chords built on the scale itself. A mode gets the two or three chords
@@ -580,9 +603,14 @@
     }
   };
   const SCALE_QUICK = [['major', 'Major'], ['minor', 'Minor'], ['minor-pentatonic', 'Minor pent.'], ['major-pentatonic', 'Major pent.'], ['blues', 'Blues']];
+  // The kind of a chord, for its color: major, minor or diminished. Other chords, such as augmented and sus, get none.
+  function kindClass(chord) {
+    const t = chord ? ` ${chord.tones} ` : '';
+    return t.includes(' ♭3 ') ? (t.includes(' ♭5 ') ? ' kind-dim' : ' kind-minor') : t.includes(' 3 ') && !t.includes(' ♯5 ') ? ' kind-major' : '';
+  }
   function chordLink(c) {
     const href = c.chord ? `#/library/chords/${c.chord.id}/${rootSlug(rootForLink(c.root))}` : null;
-    return h(href ? 'a' : 'span', { class: 'chord-btn', href, style: 'text-decoration:none;color:inherit' }, h('small', null, c.roman || c.label), h('b', null, c.name));
+    return h(href ? 'a' : 'span', { class: 'chord-btn' + kindClass(c.chord), href, style: 'text-decoration:none;color:inherit' }, h('small', null, c.roman || c.label), h('b', null, setName(c.name)));
   }
   // Links use the 17 picker roots; a rare spelling such as E♯ falls back to its plain name.
   const rootForLink = name => T.ROOTS.includes(name) ? name : T.PC_PLAIN[T.pcOf(name)];
@@ -641,7 +669,7 @@
         const match = shapes.find(s => s.frets.every((f, i) => f === c.frets[i]));
         return '#/' + chordsView.link({ chord: T.chordById(c.chord), root: c.root, shape: match ? match.id : null });
       };
-      return h('div', { class: 'chip-grid' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c) }, T.chordName(c.root, T.chordById(c.chord)))));
+      return h('div', { class: 'chip-grid' }, T.OPEN_CHORDS.filter(c => c.chord !== 'power').map(c => h('a', { class: 'chip', href: openLink(c) }, setName(T.chordName(c.root, T.chordById(c.chord))))));
     },
     title: s => T.chordName(s.root, s.chord) + (s.bass && T.pcOf(s.bass) !== T.pcOf(s.root) ? '/' + s.bass : ''),
     render(state) {
@@ -746,11 +774,11 @@
           miniNeck(m, s.low, s.high, `${title} of ${chordsView.title(state)}`, mutedStrings, { links: [{ points: placesOf(s), cls: 'is-shape' }] }));
       };
       const out = [
-        head(chordsView.title(state), `${r} ${lowerName(chord.name)}${bass ? ` with ${bass} in the bass` : ''}`, [playButton('Strum', strum), playButton('Arpeggio', arpeggio)]),
+        head(chordsView.title(state), `${r} ${lowerName(chord.name)}${bass ? ` with ${bass} in the bass` : ''}`, [playButton('Strum', strum), playButton('Arpeggio', arpeggio)], true),
         controls(
           rootCtl(state, chordsView),
           labelsCtl(rerender),
-          ctl('Chord', typePick('Chord', CHORD_QUICK.map(id => [id, T.chordName(r, T.chordById(id))]), groups, chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r, bass }), true)), 'ctl-wide ctl-plain'),
+          ctl('Chord', typePick('Chord', CHORD_QUICK.map(id => [id, setName(T.chordName(r, T.chordById(id)))]), groups, chord.id, v => GT.go(chordsView.link({ chord: T.chordById(v), root: r, bass }), true)), 'ctl-wide ctl-plain'),
           shapes.length ? ctl('Shape', GT.segmented('Shape', shapeOptions, current, v => GT.go(chordsView.link(Object.assign({}, state, { shape: v })), true)), 'ctl-plain') : null,
           positionsCtl,
           ctl('Bass', bassPick, 'ctl-plain'),
@@ -1124,12 +1152,12 @@
       const cagedOk = !!T.CAGED[state.quality] && cagedTuning();
       const caged = cagedOk && lib.triadCaged;
       const out = [
-        head(triadsView.title(state), `${tones.map(t => t.name).join(' ')} on ${set.name.replace('Strings', 'strings')}`, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum'))),
+        head(triadsView.title(state), `${tones.map(t => t.name).join(' ')} on ${set.name.replace('Strings', 'strings')}`, playButton('Play', () => A.notes(chordMidis(r, chord), 'strum')), true),
         controls(
           rootCtl(state, triadsView),
           labelsCtl(rerender),
           // The same chips as the chord types on the Chords page.
-          ctl('Quality', typePick('Quality', TRIAD_QUALITIES.map(q => [q, T.chordName(r, T.chordById(q))]), [], state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true)), 'ctl-wide ctl-plain'),
+          ctl('Quality', typePick('Quality', TRIAD_QUALITIES.map(q => [q, setName(T.chordName(r, T.chordById(q)))]), [], state.quality, v => GT.go(triadsView.link(Object.assign({}, state, { quality: v })), true)), 'ctl-wide ctl-plain'),
           ctl('Strings', GT.segmented('String set', T.TRIAD_SETS.map((s, i) => [s.id, [i ? null : h('span', { class: 'seg-word' }, 'Strings '), s.id.split('').reverse().join('–')]]), state.set, v => GT.go(triadsView.link(Object.assign({}, state, { set: v })), true)), 'ctl-plain'),
           fretsCtl(rerender)),
         neck(toneMarkers(tones, { only: s => onSet(s) }).map(m => picked !== null && !lit.has(`${m.string}:${m.fret}`) ? Object.assign(m, { dim: true }) : m).concat(around), { links, regions: caged ? cagedBehind(r, state.quality) : null,
@@ -1213,7 +1241,7 @@
       // The chords from outside the key work the same way, in rows under it.
       const panel = h('div', { class: 'chord-panel', 'aria-live': 'polite' });
       // The panel above the chords from outside the key changes height with the chord: the tapped button stays in place.
-      const chordBtn = c => h('button', { type: 'button', class: 'chord-btn', dataset: { roman: c.roman }, 'aria-pressed': String(c === triads[0]), onclick: () => { stopBacking(); GT.keepPlace(() => choose(c)); playChord(c); } }, h('small', null, c.roman), h('b', null, c.name));
+      const chordBtn = c => h('button', { type: 'button', class: 'chord-btn' + kindClass(c.chord), dataset: { roman: c.roman }, 'aria-pressed': String(c === triads[0]), onclick: () => { stopBacking(); GT.keepPlace(() => choose(c)); playChord(c); } }, h('small', null, c.roman), h('b', null, setName(c.name)));
       const strip = h('div', { class: 'chord-strip', role: 'group', 'aria-label': `The chords of ${key} ${mode}` }, triads.map(chordBtn));
       const groups = [...new Set(outside.map(c => c.group))];
       const outsideBox = h('div', { class: 'outside' }, groups.map(g => h('div', { class: 'outside-group' }, h('p', { class: 'small muted' }, g),
@@ -1245,7 +1273,7 @@
         }).filter(Boolean) : [];
         panel.replaceChildren(
           h('div', { class: 'chord-panel-text' },
-            h('h3', null, c.name, h('small', null, ` ${c.roman} in ${key} ${mode}`)),
+            h('h3', null, setName(c.name), h('small', null, ` ${c.roman} in ${key} ${mode}`)),
             h('p', null, `${chordTones.map(t => t.name).join(' ')}.`, c7 ? ` With a seventh it is ${c7.name}.` : ` ${outsideText(c)}`),
             h('div', { class: 'row' }, playButton(c.name, () => playChord(c)), c7 ? playButton(c7.name, () => playChord(c7)) : null),
             // A link, not a third button: three buttons break into two rows beside the small neck.
@@ -1266,7 +1294,7 @@
         h('dt', null, 'One fifth down'), h('dd', null, keyLink(pick(prev), mode), ', one step counterclockwise'),
         twin ? [h('dt', null, 'Other name'), h('dd', null, keyLink(pick(twin), mode), `, ${sigText(twin.count)}`)] : null);
       return [
-        h('div', { class: 'lib-title' }, h('div', null, h('h1', null, keysView.title(state)), h('p', { class: 'muted lib-sub' }, sigText(entry.count)))),
+        h('div', { class: 'lib-title' }, h('div', null, h('h1', { 'data-big': true }, setName(keysView.title(state))), h('p', { class: 'muted lib-sub' }, sigText(entry.count)))),
         h('div', { class: 'circle-wrap' },
           h('div', { class: 'circle-col' },
             // The switches of the circle in one row above it: the mode of the key, and what the circle shows.
@@ -1276,7 +1304,7 @@
             circle, circle.readout || null,
             h('p', { class: 'circle-note' }, lib.circleMode === 'intervals'
               ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap an interval to add its note, and tap it again to take it away. Three or more make the shape of a chord. Play plays them all again, and Clear starts over from ${key}. Tap a note name to make it the 1, or hold it to hear it.`
-              : 'Tap a key to turn the circle to it. Touch and hold a key, or right-click it, to hear its chord. The frame at the top holds the seven chords of the key.')),
+              : 'Tap a key to turn the circle to it. Touch and hold a key, or right-click it, to hear its chord. The colored cells at the top are the seven chords of the key.')),
           h('div', { class: 'keys-main' },
             h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel),
             h('div', { class: 'lib-section' }, h('h2', null, 'Outside the key'),
@@ -1307,7 +1335,7 @@
   // Sharps (plus) or flats (minus) in the major scale of a key name, also for names such as C♭.
   const sigCount = name => T.tonesOn(name, T.scaleById('major')).reduce((n, t) => n + (t.name.match(/♯/g) || []).length - (t.name.match(/♭/g) || []).length, 0);
   // Three rings: major keys, their relative minors, and the vii° of the major key at each position.
-  // The wheel turns, so the chosen key is always at the top. A frame there holds the seven chords of the key,
+  // The wheel turns, so the chosen key is always at the top. The colored cells there are the seven chords of the key,
   // each with its Roman numeral: IV, I and V outside, ii, vi and iii inside, vii° below.
   // A tap runs onTap. Touch and hold for about half a second, or a right-click, runs onHold, and the tap after a hold
   // does nothing. Moving the finger cancels the hold, so scrolling the page does not play.
@@ -1332,7 +1360,7 @@
     svg.setAttribute('viewBox', '-212 -212 424 424');
     svg.setAttribute('class', 'circle');
     svg.setAttribute('role', 'group');
-    svg.setAttribute('aria-label', `Circle of fifths, turned to ${state.key} ${state.mode}. The frame at the top holds the seven chords of the key. Clockwise is a fifth up.`);
+    svg.setAttribute('aria-label', `Circle of fifths, turned to ${state.key} ${state.mode}. The colored cells at the top are the seven chords of the key. Clockwise is a fifth up.`);
     const el = (name, attrs, parent) => { const n = document.createElementNS(NS, name); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); (parent || svg).appendChild(n); return n; };
     const STEP = Math.PI / 6;
     // Two rings: the major keys outside, their relative minors inside. The middle names the key.
@@ -1354,13 +1382,13 @@
         const d = arc(r1, r2, a - STEP / 2, a + STEP / 2);
         paths.set(`${ring}:${i}`, d);
         const isKey = ring === 'major' && lib.circleMode === 'intervals' && T.pcOf(k.major) === T.pcOf(state.key);
-        const g = el('g', { class: `cell ring-${ring}${c ? ' in-key' : ''}${c === tonic ? ' is-tonic' : ''}${isKey ? ' is-key' : ''}` }, wheel);
+        const g = el('g', { class: `cell ring-${ring}${c ? ' in-key' + kindClass(c.chord) : ''}${c === tonic ? ' is-tonic' : ''}${isKey ? ' is-key' : ''}` }, wheel);
         el('path', { d }, g);
         const x = (mid * Math.sin(a)).toFixed(1), y = -mid * Math.cos(a);
         // The words turn back by the angle of the wheel, around the middle of their cell, so they stay upright.
         const words = el('g', { class: 'cell-text', style: `transform-origin:${x}px ${y.toFixed(1)}px` }, g);
-        const text = (cls, dy, value) => { el('text', { x, y: (y + dy).toFixed(1), class: cls }, words).textContent = value; };
-        // The intervals view hides the frame, so every cell uses the plain layout: a change of mode then moves no name.
+        const text = (cls, dy, value) => { const t = el('text', { x, y: (y + dy).toFixed(1), class: cls }, words); if (cls === 't-name') setSvgName(t, value); else t.textContent = value; };
+        // The intervals view shows no chords, so every cell uses the plain layout: a change of mode then moves no name.
         const framed = c && lib.circleMode !== 'intervals';
         const [numY, nameY, sigY] = LAYOUT[ring][framed ? 1 : 0];
         if (framed) text('t-num', numY, c.roman);
@@ -1478,14 +1506,10 @@
     };
     el('circle', { r: HUB - 2, class: 'hub' });
     const hubName = el('text', { y: 0, class: 't-hub' }), hubSub = el('text', { y: 21, class: 't-hub-sub' }), hubSig = el('text', { y: 40, class: 't-hub-sig' });
-    hubName.textContent = state.key;
+    setSvgName(hubName, state.key);
     hubSub.textContent = state.mode;
     hubSig.textContent = state.entry.count === 0 ? 'no ♯ or ♭' : sigText(state.entry.count, true);
     if (svg._drawIntervals) { svg.appendChild(svg.querySelector('.iv-layer')); svg._drawIntervals(); }
-    // The frame stays at the top. The wheel turns under it.
-    const F = steps => steps * STEP;
-    // Three major cells and four minor ones: the minor ring holds ii, vi, iii and the diminished chord after them.
-    el('path', { class: 'key-frame', d: `M ${pt(208, F(-1.5))} A 208 208 0 0 1 ${pt(208, F(1.5))} L ${pt(148, F(1.5))} A 148 148 0 0 1 ${pt(148, F(2.5))} L ${pt(HUB, F(2.5))} A ${HUB} ${HUB} 0 0 0 ${pt(HUB, F(-1.5))} Z` });
     // Turn the short way round from the last key.
     // In the intervals view the note of the key itself goes to the top of the outer ring, also in a minor key.
     const target = lib.circleMode === 'intervals' ? -((T.pcOf(state.key) * 7) % 12) * 30 : -tonic.pos * 30;
@@ -1627,7 +1651,7 @@
       draw();
       return [
         head(LOOKUP.title, 'Tap notes on the neck. The page names the chord, and the scales that hold the notes.', [play, clear]),
-        h('div', { class: 'lib-stage' }, controls(ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees'], ['intervals', 'Intervals']], mode, v => { saveLib({ nameLabels: v }); rerender(); }), 'ctl-plain'), fretsCtl(rerender)), neckSlot),
+        h('div', { class: 'lib-stage lib-stage-taps' }, controls(ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees'], ['intervals', 'Intervals']], mode, v => { saveLib({ nameLabels: v }); rerender(); }), 'ctl-plain'), fretsCtl(rerender)), neckSlot),
         h('p', { class: 'small muted', style: 'margin-top:6px' }, 'Tap a note to add it. Tap it again to take it away.'),
         result
       ];

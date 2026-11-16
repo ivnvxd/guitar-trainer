@@ -63,8 +63,17 @@
   }
   const setMuted = v => saveSettings({ muted: !!v });
   // A tap that asks for a sound while the sound is off: the switch pulses, so you see why it is quiet.
+  // On a phone the switch can be out of view, far up the page. Then a note at the top says it for four seconds,
+  // and a tap on the note turns the sound on.
+  let soundNote = null;
   GT.audio.onMuted = () => {
     for (const b of document.querySelectorAll('.sound-btn')) { b.classList.remove('is-asked'); void b.offsetWidth; b.classList.add('is-asked'); }
+    const btn = document.querySelector('.sound-btn');
+    if (soundNote || !btn || btn.getBoundingClientRect().bottom > 0) return;
+    const done = () => { if (soundNote) soundNote.remove(); soundNote = null; };
+    soundNote = h('button', { type: 'button', class: 'sound-note', onclick: () => { setMuted(false); done(); } }, 'The sound is off. Tap to turn it on.');
+    document.body.append(soundNote);
+    setTimeout(done, 4000);
   };
   // A printout is light, whatever the theme on screen.
   root.addEventListener('beforeprint', () => document.documentElement.setAttribute('data-theme', 'light'));
@@ -75,7 +84,7 @@
     const theme = settings.theme === 'auto' ? (lightQuery && lightQuery.matches ? 'light' : 'dark') : settings.theme;
     document.documentElement.dataset.theme = theme;
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.content = theme === 'light' ? '#f4f6f9' : '#0f1218';
+    if (meta) meta.content = theme === 'light' ? '#eff1f5' : '#1e1e2e';
   }
   if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
   // A custom tuning is six MIDI numbers, low string first. The capo is not part of it: the Library adds it.
@@ -210,7 +219,7 @@
   // The version of the site: major.minor.patch. The first number goes up for a redesign, the middle one for new
   // features, the last one for fixes only. Give VERSION in sw.js the same version when you publish new files.
   // Each version has a release with its notes on GitHub, tagged v and the version.
-  GT.version = '1.14.0';
+  GT.version = '2.0.0';
   // A submenu row as in the Library: a round button to the start page of the section (or none), then its pages.
   // items: [{ href, text, current, apart }]. An item with apart: true stands after a thin line.
   // The chosen page scrolls to the middle of the row when the row is wider than the screen.
