@@ -7,11 +7,17 @@
   const D = GT.drills;
   const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
   const ord = s => FB.ordinal(6 - s);
-  const where = (s, f) => `${ord(s)} string, ${f === 0 ? 'open' : 'fret ' + f}`;
+  // Fret 0 is the open string, or the capo. Texts name the frets as the neck prints them: from the nut.
+  const place = f => f === 0 ? (GT.capo() ? 'at the capo' : 'open') : 'fret ' + (f + GT.capo());
+  const where = (s, f) => `${ord(s)} string, ${place(f)}`;
+  const span = (lo, hi) => `${lo + GT.capo()}–${hi + GT.capo()}`;
   const DUAL = ['C', 'C♯/D♭', 'D', 'D♯/E♭', 'E', 'F', 'F♯/G♭', 'G', 'G♯/A♭', 'A', 'A♯/B♭', 'B'];
   const NATURAL_PCS = [0, 2, 4, 5, 7, 9, 11];
-  const RANGES = [['0-4', '0–4'], ['5-9', '5–9'], ['0-12', '0–12'], ['0-15', '0–15']];
   const range = r => r.split('-').map(Number);
+  const ranges = () => ['0-4', '5-9', '0-12', '0-15'].map(r => [r, span(...range(r))]);
+  const upTo = list => list.map(n => [n, span(0, n)]);
+  // The strings a drill does not use, for the × beside their names.
+  const unused = c => [0, 1, 2, 3, 4, 5].filter(s => !c.strings.includes(s));
   const NOTE_ROOTS = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'F♯', 'G', 'A♭', 'A', 'B♭', 'B'];
 
   // ---------- name the note ----------
@@ -29,18 +35,18 @@
     fastMs: 2500,
     autoPlay: false,
     pool(c) {
-      const t = GT.tuning(), [lo, hi] = range(c.frets), out = [];
+      const t = GT.openStrings(), [lo, hi] = range(c.frets), out = [];
       for (const s of c.strings) for (let f = lo; f <= hi; f++) if (!c.naturals || NATURAL_PCS.includes(T.mod(t[s] + f))) out.push(`${s}:${f}`);
       return out;
     },
-    itemName: item => { const [s, f] = item.split(':').map(Number); return `${T.PC_PLAIN[T.mod(GT.tuning()[s] + f)]}: ${ord(s)} string, ${f ? 'fret ' + f : 'open'}`; },
+    itemName: item => { const [s, f] = item.split(':').map(Number); return `${T.PC_PLAIN[T.mod(GT.openStrings()[s] + f)]}: ${where(s, f)}`; },
     // The places you missed, on one neck, each with its note name.
     missedVisual(items, ui) {
-      const [lo, hi] = range(ui.config.frets), t = GT.tuning();
+      const [lo, hi] = range(ui.config.frets), t = GT.openStrings();
       const markers = items.map(item => { const [s, f] = item.split(':').map(Number); return { string: s, fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(t[s] + f)] }; });
       return ui.neck(markers, { from: lo === 0 ? 0 : lo - 1, to: Math.max(hi, (lo === 0 ? 0 : lo - 1) + 5), turn: false, label: 'The places you missed' });
     },
-    make(item) { const [s, f] = item.split(':').map(Number); return { string: s, fret: f, midi: GT.tuning()[s] + f }; },
+    make(item) { const [s, f] = item.split(':').map(Number); return { string: s, fret: f, midi: GT.openStrings()[s] + f }; },
     // On a phone the neck stands upright, so show six frets around the dot to keep the answers on screen.
     view(q, ui) {
       const [lo, hi] = range(ui.config.frets);
@@ -60,7 +66,7 @@
     check: (q, v) => Number(v) === T.mod(q.midi),
     feedback(q, v, correct, ui) {
       A.note(q.midi, 0, 1);
-      const t = GT.tuning(), { from, to } = this.view(q, ui);
+      const t = GT.openStrings(), { from, to } = this.view(q, ui);
       const markers = [];
       for (let s = 0; s < 6; s++) for (let f = from; f <= to; f++) if (T.mod(t[s] + f) === T.mod(q.midi)) markers.push({ string: s, fret: f, kind: s === q.string && f === q.fret ? 'correct' : 'ghost', label: T.PC_PLAIN[T.mod(q.midi)] });
       ui.board.replaceChildren(ui.neck(markers, { from, to, label: 'The same note in other places' }));
@@ -69,7 +75,7 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })),
-        D.field('Frets', GT.segmented('Frets', RANGES, c.frets, v => set({ frets: v }))),
+        D.field('Frets', GT.segmented('Frets', ranges(), c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   });
@@ -81,19 +87,20 @@
     blurb: 'One note name, every place on the neck. Tap them all.',
     hint: 'Use octave shapes: two strings up and two frets up.',
     help: [
-      'You see a note name. Tap every place of that note on the neck in the fret range. A wrong tap counts against you, but you can go on.',
+      'You see a note name. Tap every place of that note on the neck in the fret range. A wrong tap counts against you, but you can go on. Options let you use some of the strings only: the other strings get an × and do not take a tap.',
       'Look for octave shapes. Two strings higher and two frets up is the same note (three frets across the B string). Fret 12 repeats the open strings.',
       'Try one note around the cycle of fourths: C, F, B♭, E♭ and so on.'
     ],
-    defaults: { frets: 12, naturals: false },
+    defaults: { frets: 12, naturals: false, strings: [0, 1, 2, 3, 4, 5] },
     fastMs: 14000,
     autoPlay: false,
     advanceMs: 1400,
-    pool(c) { return (c.naturals ? NATURAL_PCS : [...Array(12).keys()]).map(String); },
+    // Only the notes that the chosen strings hold in the fret range: a note with no place would never end.
+    pool(c) { return (c.naturals ? NATURAL_PCS : [...Array(12).keys()]).filter(pc => c.strings.some(s => onString(s, pc, c.frets).length)).map(String); },
     itemName: item => T.PC_PLAIN[Number(item)],
     make(item, c) {
-      const pc = Number(item), t = GT.tuning(), positions = [];
-      for (let s = 0; s < 6; s++) for (let f = 0; f <= c.frets; f++) if (T.mod(t[s] + f) === pc) positions.push(`${s}:${f}`);
+      const pc = Number(item), t = GT.openStrings(), positions = [];
+      for (const s of c.strings.slice().sort((a, b) => a - b)) for (let f = 0; f <= c.frets; f++) if (T.mod(t[s] + f) === pc) positions.push(`${s}:${f}`);
       return { pc, positions, found: new Set(), wrong: [] };
     },
     render(q, ui) {
@@ -103,9 +110,9 @@
       const draw = () => {
         ui.sub(`${q.found.size} of ${q.positions.length} found${q.wrong.length ? `, ${q.wrong.length} wrong tap${q.wrong.length > 1 ? 's' : ''}` : ''}.`);
         const markers = [...q.found].map(k => { const [s, f] = k.split(':').map(Number); return { string: s, fret: f, kind: 'correct', label: T.PC_PLAIN[q.pc] }; })
-          .concat(q.wrong.slice(-1).map(k => { const [s, f] = k.split(':').map(Number); return { string: s, fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(GT.tuning()[s] + f)] }; }));
-        ui.board.replaceChildren(ui.neck(markers, { from: 0, to: ui.config.frets, label: `Tap every ${T.PC_PLAIN[q.pc]}`, onPress: (s, f, midi) => {
-          if (q.over) return;
+          .concat(q.wrong.slice(-1).map(k => { const [s, f] = k.split(':').map(Number); return { string: s, fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(GT.openStrings()[s] + f)] }; }));
+        ui.board.replaceChildren(ui.neck(markers, { from: 0, to: ui.config.frets, muted: unused(ui.config), label: `Tap every ${T.PC_PLAIN[q.pc]}`, onPress: (s, f, midi) => {
+          if (q.over || !ui.config.strings.includes(s)) return;
           const key = `${s}:${f}`;
           A.note(midi, 0, 0.7);
           if (q.positions.includes(key)) q.found.add(key); else q.wrong.push(key);
@@ -119,12 +126,13 @@
     feedback(q, v, correct, ui) {
       q.over = true;
       const markers = q.positions.map(k => { const [s, f] = k.split(':').map(Number); return { string: s, fret: f, kind: q.found.has(k) ? 'correct' : 'target', label: T.PC_PLAIN[q.pc] }; });
-      ui.board.replaceChildren(ui.neck(markers, { from: 0, to: ui.config.frets, label: `Every ${T.PC_PLAIN[q.pc]}` }));
+      ui.board.replaceChildren(ui.neck(markers, { from: 0, to: ui.config.frets, muted: unused(ui.config), label: `Every ${T.PC_PLAIN[q.pc]}` }));
       return { text: v === 'gave-up' ? `Here are all ${q.positions.length} places. You found the green ones.` : correct ? `All ${q.positions.length} places, no wrong taps.` : `All found, with ${q.wrong.length} wrong tap${q.wrong.length > 1 ? 's' : ''}.` };
     },
     options(c, set) {
       return h('div', { class: 'opts' },
-        D.field('Frets', GT.segmented('Frets', [[5, '0–5'], [12, '0–12'], [15, '0–15']], c.frets, v => set({ frets: v }))),
+D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })),
+        D.field('Frets', GT.segmented('Frets', upTo([5, 12, 15]), c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   });
@@ -161,25 +169,25 @@
     hint: 'Guitar music sounds an octave lower than written: the bottom line, E, is the open D string up two frets.',
     help: [
       'A note appears on the treble staff. Tap one place on the neck that plays it, in the same octave. Guitar music is written an octave higher than it sounds, so the open low E string sits three ledger lines below the staff.',
-      'Start in the first position, frets 0 to 4, with natural notes. Most beginner music stays there.',
+      'Start in the first position, frets 0 to 4, with natural notes. Most beginner music stays there. Options let you use some of the strings only.',
       'Landmarks: the bottom line E is the D string at fret 2, the top line F is the high e string at fret 1, and the middle line B is the open B string.'
     ],
-    defaults: { frets: 4, naturals: true },
+    defaults: { frets: 4, naturals: true, strings: [0, 1, 2, 3, 4, 5] },
     fastMs: 4000,
     autoPlay: false,
     pool(c) {
-      const t = GT.tuning(), out = new Set();
-      for (let s = 0; s < 6; s++) for (let f = 0; f <= c.frets; f++) if (!c.naturals || NATURAL_PCS.includes(T.mod(t[s] + f))) out.add(String(t[s] + f));
+      const t = GT.openStrings(), out = new Set();
+      for (const s of c.strings) for (let f = 0; f <= c.frets; f++) if (!c.naturals || NATURAL_PCS.includes(T.mod(t[s] + f))) out.add(String(t[s] + f));
       return [...out];
     },
     itemName: item => octaveName(Number(item)),
     make(item) { return { midi: Number(item) }; },
     render(q, ui) {
       ui.title('Where do you play this note?');
-      ui.sub('Tap one place on the neck. Any string works, in the same octave.');
+      ui.sub(unused(ui.config).length ? 'Tap one place on the neck, in the same octave. A string with an × is not in use.' : 'Tap one place on the neck. Any string works, in the same octave.');
       ui.noChoices();
-      ui.board.replaceChildren(staff(q.midi), ui.neck([], { from: 0, to: ui.config.frets, label: 'Tap where the note is', onPress: (s, f, midi) => {
-        if (q.over) return;
+      ui.board.replaceChildren(staff(q.midi), ui.neck([], { from: 0, to: ui.config.frets, muted: unused(ui.config), label: 'Tap where the note is', onPress: (s, f, midi) => {
+        if (q.over || !ui.config.strings.includes(s)) return;
         q.over = true;
         A.note(midi, 0, 0.7);
         q.tap = { string: s, fret: f, midi };
@@ -188,7 +196,7 @@
     },
     check: (q, v) => v === 'right',
     feedback(q, v, correct, ui) {
-      const t = GT.tuning(), places = [];
+      const t = GT.openStrings(), places = [];
       for (let s = 0; s < 6; s++) for (let f = 0; f <= Math.max(ui.config.frets, 12); f++) if (t[s] + f === q.midi) places.push({ string: s, fret: f, kind: 'correct', label: T.PC_PLAIN[T.mod(q.midi)] });
       const markers = places.concat(q.tap && !correct ? [{ string: q.tap.string, fret: q.tap.fret, kind: 'wrong', label: T.PC_PLAIN[T.mod(q.tap.midi)] }] : []);
       ui.board.replaceChildren(staff(q.midi), ui.neck(markers, { from: 0, to: Math.max(ui.config.frets, ...places.map(p => p.fret)), label: `Every place of ${octaveName(q.midi)}` }));
@@ -197,7 +205,8 @@
     },
     options(c, set) {
       return h('div', { class: 'opts' },
-        D.field('Frets', GT.segmented('Frets', [[4, '0–4'], [7, '0–7'], [12, '0–12']], c.frets, v => set({ frets: v }))),
+D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.STRING_NAMES[s] })), c.strings, v => set({ strings: v })),
+        D.field('Frets', GT.segmented('Frets', upTo([4, 7, 12]), c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   });
@@ -205,15 +214,23 @@
   // ---------- play the note ----------
   // You play a note on your guitar, and the microphone checks it. It hears the pitch only and cannot tell which
   // string played it, so every question asks for a pitch: a note name in any octave, each octave of a note in the
-  // fret range, or the exact pitch of a note on the staff. The page plays no sound while it listens.
-  const PLAY_MODES = [['any', 'Any octave'], ['octaves', 'Every octave'], ['staff', 'From the staff']];
+  // fret range, the exact pitch of a note on the staff, or the pitch of a note on one string. The page plays no
+  // sound while it listens.
+  const PLAY_MODES = [['any', 'Any octave'], ['octaves', 'Every octave'], ['string', 'String'], ['staff', 'Staff']];
+  // The pitches of a note on one string, in the fret range: one, or two when the fret range holds an octave.
+  const onString = (s, pc, frets) => {
+    const open = GT.openStrings()[s], out = [];
+    for (let f = 0; f <= frets; f++) if (T.mod(open + f) === pc) out.push(open + f);
+    return out;
+  };
+  const an = name => `${/^[AEF]/.test(name) ? 'an' : 'a'} ${name}`;
   const pitchesOf = (pc, frets) => {
-    const t = GT.tuning(), out = new Set();
+    const t = GT.openStrings(), out = new Set();
     for (let s = 0; s < 6; s++) for (let f = 0; f <= frets; f++) if (T.mod(t[s] + f) === pc) out.add(t[s] + f);
     return [...out].sort((a, b) => a - b);
   };
   const pitchPlaces = (midi, frets) => {
-    const t = GT.tuning(), out = [];
+    const t = GT.openStrings(), out = [];
     for (let s = 0; s < 6; s++) for (let f = 0; f <= frets; f++) if (t[s] + f === midi) out.push({ string: s, fret: f });
     return out;
   };
@@ -241,7 +258,7 @@
     else ear.floor = Math.min(ear.floor, rms);
     const f = T.pitchOf(buf, rate);
     if (!f) { ear.run = []; return; }
-    const midi = Math.round(69 + 12 * Math.log2(f / 440));
+    const midi = Math.round(69 + 12 * Math.log2(f / GT.a4()));
     ear.run.push(midi);
     if (ear.run.length > 3) ear.run.shift();
     v.heard(midi);
@@ -261,24 +278,29 @@
     hint: 'Play one note and let it ring.',
     help: [
       'The microphone hears the pitch you play. It cannot tell which string you used, so every place with the right pitch counts. After each answer the neck shows every place of that pitch.',
-      'Any octave: play the named note anywhere. Every octave: play each one in the fret range, best from low to high; the page ticks each one it hears. From the staff: play the exact note on the staff. Guitar music sounds an octave lower than it is written.',
-      'Use a quiet room and hold the phone near the guitar. The page plays no sound while it listens, and it asks for the microphone at the first question.'
+      'Any octave: play the named note anywhere. Every octave: play each one in the fret range, best from low to high; the page ticks each one it hears. Staff: play the exact note on the staff. Guitar music sounds an octave lower than it is written.',
+      'String: the page names a note and a string, for example A on the 6th string. Find the note on that string and play it. Choose the strings in Options. The page checks the pitch, so the same pitch on another string also counts: play it on the named string to learn that string.',
+      'Use a quiet room and hold the phone near the guitar. With a guitar plugged into a sound card, choose the card in the Input list, which shows after Start listening when the device has more than one input. The page plays no sound while it listens, and it asks for the microphone at the first question.'
     ],
-    defaults: { mode: 'any', frets: 12, naturals: true },
+    defaults: { mode: 'any', frets: 12, naturals: true, strings: [0, 1, 2, 3, 4, 5] },
     statsKey: c => c.mode,
-    fastMs: c => c.mode === 'octaves' ? 15000 : c.mode === 'staff' ? 5000 : 3500,
+    fastMs: c => c.mode === 'octaves' ? 15000 : c.mode === 'staff' ? 5000 : c.mode === 'string' ? 4500 : 3500,
     autoPlay: false,
     advanceMs: 1300,
     pool(c) {
       const pcs = c.naturals ? NATURAL_PCS : [...Array(12).keys()];
+      // A note on a string: 'string:note', for the notes that the fret range holds on that string.
+      if (c.mode === 'string') return c.strings.flatMap(s => pcs.filter(pc => onString(s, pc, c.frets).length).map(pc => `${s}:${pc}`));
       if (c.mode !== 'staff') return pcs.map(String);
-      const t = GT.tuning(), out = new Set();
+      const t = GT.openStrings(), out = new Set();
       for (let s = 0; s < 6; s++) for (let f = 0; f <= c.frets; f++) if (pcs.includes(T.mod(t[s] + f))) out.add(String(t[s] + f));
       return [...out];
     },
-    // A pitch class (0 to 11) or, from the staff, an exact pitch (a MIDI number, 40 or more).
-    itemName: item => Number(item) > 11 ? octaveName(Number(item)) : T.PC_PLAIN[Number(item)],
+    // A pitch class (0 to 11), from the staff an exact pitch (a MIDI number, 40 or more), or a string and a pitch class.
+    itemName: item => item.includes(':') ? `${T.PC_PLAIN[Number(item.split(':')[1])]} on the ${ord(Number(item.split(':')[0]))} string`
+      : Number(item) > 11 ? octaveName(Number(item)) : T.PC_PLAIN[Number(item)],
     make(item, c) {
+      if (c.mode === 'string') { const [s, pc] = item.split(':').map(Number); return { mode: 'string', string: s, pc, targets: onString(s, pc, c.frets) }; }
       const n = Number(item);
       if (c.mode === 'staff') return { mode: 'staff', midi: n };
       if (c.mode === 'octaves') return { mode: 'octaves', pc: n, targets: pitchesOf(n, c.frets), found: new Set(), wrong: [] };
@@ -286,8 +308,8 @@
     },
     render(q, ui) {
       const frets = ui.config.frets;
-      ui.title(q.mode === 'staff' ? 'Play this note' : q.mode === 'octaves' ? `Play every ${T.PC_PLAIN[q.pc]}` : `Play ${/^[AEF]/.test(T.PC_PLAIN[q.pc]) ? 'an' : 'a'} ${T.PC_PLAIN[q.pc]}`);
-      ui.sub(q.mode === 'staff' ? 'The exact pitch on the staff, on any string.' : q.mode === 'octaves' ? `Frets 0–${frets}, best from low to high.` : 'In any octave, on any string.');
+      ui.title(q.mode === 'staff' ? 'Play this note' : q.mode === 'octaves' ? `Play every ${T.PC_PLAIN[q.pc]}` : `Play ${an(T.PC_PLAIN[q.pc])}${q.mode === 'string' ? ` on the ${ord(q.string)} string` : ''}`);
+      ui.sub(q.mode === 'staff' ? 'The exact pitch on the staff, on any string.' : q.mode === 'string' ? `The ${ord(q.string)} string sounds ${an(T.PC_PLAIN[T.mod(GT.openStrings()[q.string])])} ${GT.capo() ? 'at the capo' : 'open'}. Frets ${span(0, frets)}.` : q.mode === 'octaves' ? `Frets ${span(0, frets)}, best from low to high.` : 'In any octave, on any string.');
       ui.noChoices();
       ui.actions([['Show me', () => ui.submit('skip')]]);
       // The panel under the question: what the microphone hears, and the octaves found so far.
@@ -297,6 +319,12 @@
       const octaves = q.mode === 'octaves' ? h('div', { class: 'listen-octaves', role: 'list', 'aria-label': 'Octaves to play' }) : null;
       const drawOctaves = () => { if (octaves) octaves.replaceChildren(...q.targets.map(m => h('span', { role: 'listitem', class: 'listen-octave' + (q.found.has(m) ? ' is-found' : '') }, octaveName(m), q.found.has(m) ? ' ✓' : ''))); };
       drawOctaves();
+      // Another input: listen again, to the new one.
+      const input = GT.micPicker(async () => {
+        if (!ear.on) return;
+        try { if (await A.listen(hear)) { say.textContent = 'Listening.'; input.fill(); } }
+        catch (e) { ear.on = false; ear.restart(); say.textContent = GT.micError(e); }
+      });
       const startBtn = h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: async () => {
         startBtn.disabled = true;
         say.textContent = 'Waiting for the microphone…';
@@ -304,6 +332,7 @@
           if (!await A.listen(hear)) return;
           ear.on = true;
           startBtn.remove();
+          input.fill();
           say.textContent = 'Listening.';
           ear.t0 = performance.now();
           ui.startClock(0);
@@ -311,22 +340,23 @@
       } }, 'Start listening');
       const panel = h('div', { class: 'listen' },
         h('div', { class: 'listen-row' }, h('span', { class: 'muted' }, 'Heard'), heard, h('div', { class: 'listen-level', title: 'What the microphone hears' }, level)),
-        octaves, ear.on ? null : startBtn, say);
+        octaves, ear.on ? null : startBtn, say, input.el);
       // Back on the page after the microphone stopped: the button comes back.
       ear.restart = () => { startBtn.disabled = false; if (!startBtn.isConnected) panel.insertBefore(startBtn, say); };
       ear.view = { level, say: t => { say.textContent = t; }, heard: m => { heard.textContent = octaveName(m); } };
       q.drawOctaves = drawOctaves;
       ear.q = q; ear.ui = ui; ear.t0 = performance.now(); ear.fresh = false; ear.run = [];
       ui.board.replaceChildren(...[q.mode === 'staff' ? staff(q.midi) : null, panel].filter(Boolean));
-      if (ear.on) say.textContent = 'Listening.';
+      if (ear.on) { say.textContent = 'Listening.'; input.fill(); }
       else say.textContent = 'The page needs the microphone to hear you. It hears only while this drill is open, and nothing leaves this device.';
     },
     // A heard note. Any octave and the staff take one note; every octave takes notes until all are found.
     answer(q, midi, ui) {
       if (q.mode === 'any') { q.played = midi; ui.submit(T.mod(midi) === q.pc ? 'right' : 'wrong'); return; }
       if (q.mode === 'staff') { q.played = midi; ui.submit(midi === q.midi ? 'right' : 'wrong'); return; }
+      if (q.mode === 'string') { q.played = midi; ui.submit(q.targets.includes(midi) ? 'right' : 'wrong'); return; }
       if (T.mod(midi) !== q.pc) { q.wrong.push(midi); ear.view.say(`${octaveName(midi)} is not ${T.PC_PLAIN[q.pc]}.`); return; }
-      if (!q.targets.includes(midi)) { ear.view.say(`${octaveName(midi)} is outside frets 0–${ui.config.frets}.`); return; }
+      if (!q.targets.includes(midi)) { ear.view.say(`${octaveName(midi)} is outside frets ${span(0, ui.config.frets)}.`); return; }
       q.found.add(midi);
       q.drawOctaves();
       ear.view.say(`${octaveName(midi)}: ${q.found.size} of ${q.targets.length}.`);
@@ -338,9 +368,17 @@
       const frets = ui.config.frets;
       const name = T.PC_PLAIN[q.mode === 'staff' ? T.mod(q.midi) : q.pc];
       let markers = [], text;
-      if (q.mode === 'octaves') {
+      if (q.mode === 'string') {
+        // The note on its string in green. A wrong note shows in red at every place of its pitch.
+        const open = GT.openStrings()[q.string];
+        const played = q.played !== undefined && v !== 'skip' ? q.played : null;
+        for (const m of q.targets) markers.push({ string: q.string, fret: m - open, kind: 'correct', label: name });
+        if (played !== null && !correct) for (const p of pitchPlaces(played, frets)) markers.push(Object.assign(p, { kind: 'wrong', label: T.PC_PLAIN[T.mod(played)] }));
+        const at = `${name} on the ${ord(q.string)} string: ${q.targets.map(m => place(m - open)).join(' and ')}.`;
+        text = v === 'skip' ? at : correct ? `Right. ${at}` : `You played ${octaveName(played)}. ${at}`;
+      } else if (q.mode === 'octaves') {
         for (const m of q.targets) for (const p of pitchPlaces(m, frets)) markers.push(Object.assign(p, { kind: q.found.has(m) ? 'correct' : 'target', label: name }));
-        text = v === 'skip' ? `Every ${name} in frets 0–${frets}: ${q.targets.map(octaveName).join(', ')}. You played the green ones.`
+        text = v === 'skip' ? `Every ${name} in frets ${span(0, frets)}: ${q.targets.map(octaveName).join(', ')}. You played the green ones.`
           : correct ? `All ${q.targets.length} octaves: ${q.targets.map(octaveName).join(', ')}.` : `All ${q.targets.length} found, with ${q.wrong.length} wrong note${q.wrong.length > 1 ? 's' : ''}.`;
       } else {
         const want = q.mode === 'staff' ? [q.midi] : pitchesOf(q.pc, frets);
@@ -361,7 +399,8 @@
     options(c, set) {
       return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', PLAY_MODES, c.mode, v => set({ mode: v }))),
-        D.field('Frets', GT.segmented('Frets', [[4, '0–4'], [7, '0–7'], [12, '0–12']], c.frets, v => set({ frets: v }))),
+        c.mode === 'string' ? D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`, sub: T.PC_PLAIN[T.mod(GT.tuning()[s])] })), c.strings, v => set({ strings: v })) : null,
+        D.field('Frets', GT.segmented('Frets', upTo([4, 7, 12]), c.frets, v => set({ frets: v }))),
         D.field('Notes', GT.segmented('Notes', [[true, 'Natural notes'], [false, 'All notes']], c.naturals, v => set({ naturals: v }))));
     }
   };
@@ -386,7 +425,7 @@
     pool: c => c.set,
     itemName: item => `${item} (${DEGREE_NAMES[item]})`,
     make(item, c) {
-      const t = GT.tuning(), s = c.strings[randInt(0, c.strings.length - 1)], f = randInt(2, 10);
+      const t = GT.openStrings(), s = c.strings[randInt(0, c.strings.length - 1)], f = randInt(2, 10);
       return { label: item, semi: item === '8' ? 12 : T.parseDegree(item).semi, string: s, fret: f, root: t[s] + f, from: Math.max(0, f - 3), to: Math.min(15, f + 4) };
     },
     render(q, ui) {
@@ -405,10 +444,10 @@
     },
     check: (q, v) => {
       const [s, f] = String(v).split(':').map(Number);
-      return T.mod(GT.tuning()[s] + f - q.root) === T.mod(q.semi) && !(s === q.string && f === q.fret);
+      return T.mod(GT.openStrings()[s] + f - q.root) === T.mod(q.semi) && !(s === q.string && f === q.fret);
     },
     feedback(q, v, correct, ui) {
-      const t = GT.tuning(), rootName = T.PC_PLAIN[T.mod(q.root)];
+      const t = GT.openStrings(), rootName = T.PC_PLAIN[T.mod(q.root)];
       const markers = [{ string: q.string, fret: q.fret, kind: 'root', label: '1' }];
       for (let s = 0; s < 6; s++) for (let f = q.from; f <= q.to; f++) {
         if (s === q.string && f === q.fret) continue;
@@ -439,28 +478,28 @@
     hint: 'Find the bass note of the inversion first.',
     help: [
       'You get a chord, an inversion and a string set. Tap one note on each of the three strings. Any octave counts.',
-      'Root position has the root in the bass, first inversion the third, second inversion the fifth. Find that bass note on the lowest string of the set first, then the two notes above it.',
+      'Root position has the root in the bass, first inversion the third, second inversion the fifth. Find that bass note on the lowest string of the set first, then the two notes above it. Options let you start with root position only.',
       'The Library shows every triad shape under Triads.'
     ],
-    defaults: { qualities: ['major', 'minor'], sets: ['123', '234'] },
+    defaults: { qualities: ['major', 'minor'], sets: ['123', '234'], inversions: [0, 1, 2] },
     fastMs: 6000,
     autoPlay: false,
-    pool(c) { return c.qualities.flatMap(q => [0, 1, 2].flatMap(i => c.sets.map(s => `${q}:${i}:${s}`))); },
+    pool(c) { return c.qualities.flatMap(q => c.inversions.flatMap(i => c.sets.map(s => `${q}:${i}:${s}`))); },
     itemName: item => { const [q, i, s] = item.split(':'); return `${T.chordById(q).name} ${['root', '1st inv.', '2nd inv.'][i]} on ${s.split('').reverse().join('-')}`; },
     make(item) {
       const [quality, inv, setId] = item.split(':');
       const rootName = NOTE_ROOTS[randInt(0, 11)];
-      const voicings = T.triadVoicings(rootName, quality, setId, GT.tuning(), 15)[Number(inv)];
+      const voicings = T.triadVoicings(rootName, quality, setId, GT.openStrings(), 15)[Number(inv)];
       return { quality, inversion: Number(inv), setId, rootName, voicings, set: T.TRIAD_SETS.find(s => s.id === setId).strings, picked: {} };
     },
     render(q, ui) {
       const chord = T.chordById(q.quality);
       ui.title(`${T.chordName(q.rootName, chord)}, ${T.INVERSIONS[q.inversion].toLowerCase()}`);
-      ui.actions([['▶ Hear it', () => A.notes(q.voicings[0].frets.map((f, i) => GT.tuning()[q.set[i]] + f), 'strum')]]);
+      ui.actions([['▶ Hear it', () => A.notes(q.voicings[0].frets.map((f, i) => GT.openStrings()[q.set[i]] + f), 'strum')]]);
       ui.noChoices();
       const draw = () => {
         ui.sub(`Strings ${q.setId.split('').reverse().join('–')}: tap one note on each. ${Object.keys(q.picked).length} of 3.`);
-        const markers = Object.entries(q.picked).map(([s, f]) => ({ string: Number(s), fret: f, kind: 'other', label: T.PC_PLAIN[T.mod(GT.tuning()[s] + f)] }));
+        const markers = Object.entries(q.picked).map(([s, f]) => ({ string: Number(s), fret: f, kind: 'other', label: T.PC_PLAIN[T.mod(GT.openStrings()[s] + f)] }));
         ui.board.replaceChildren(ui.neck(markers, { from: 0, to: 15, label: 'Tap the triad', onPress: (s, f, midi) => {
           if (q.over || !q.set.includes(s)) return;
           if (q.picked[s] === f) delete q.picked[s]; else q.picked[s] = f;
@@ -476,18 +515,19 @@
       const best = q.voicings.slice().sort((a, b) => Math.abs(a.frets[0] - given[0]) - Math.abs(b.frets[0] - given[0]))[0];
       const tones = T.tonesOn(q.rootName, T.chordById(q.quality));
       const markers = best.frets.map((f, i) => {
-        const t = tones.find(x => x.pc === T.mod(GT.tuning()[q.set[i]] + f));
+        const t = tones.find(x => x.pc === T.mod(GT.openStrings()[q.set[i]] + f));
         return { string: q.set[i], fret: f, kind: FB.degreeKind(t.label), label: t.label };
       });
-      if (!correct) given.forEach((f, i) => { if (best.frets[i] !== f) markers.push({ string: q.set[i], fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(GT.tuning()[q.set[i]] + f)] }); });
+      if (!correct) given.forEach((f, i) => { if (best.frets[i] !== f) markers.push({ string: q.set[i], fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(GT.openStrings()[q.set[i]] + f)] }); });
       ui.board.replaceChildren(ui.neck(markers, { from: 0, to: 15, label: 'The triad shape' }));
-      const midis = best.frets.map((f, i) => GT.tuning()[q.set[i]] + f);
+      const midis = best.frets.map((f, i) => GT.openStrings()[q.set[i]] + f);
       A.notes(midis, 'strum');
-      return { hold: 1.2, text: `${T.INVERSIONS[q.inversion]}: ${best.tones.map(l => tones.find(t => t.label === l).name).join(' ')} from low to high, frets ${best.frets.join('-')}.`, actions: [['▶ Hear it', () => A.notes(midis, 'strum')], ['Open in Library', () => GT.go(`library/triads/${q.quality}/${GT.rootSlug(q.rootName)}/${q.setId}`)]] };
+      return { hold: 1.2, text: `${T.INVERSIONS[q.inversion]}: ${best.tones.map(l => tones.find(t => t.label === l).name).join(' ')} from low to high, frets ${best.frets.map(f => f + GT.capo()).join('-')}.`, actions: [['▶ Hear it', () => A.notes(midis, 'strum')], ['Open in Library', () => GT.go(`library/triads/${q.quality}/${GT.rootSlug(q.rootName)}/${q.setId}`)]] };
     },
     options(c, set) {
       return h('div', { class: 'opts' },
         D.pickset('Quality', ['major', 'minor', 'dim', 'aug'].map(id => ({ value: id, main: T.chordById(id).name })), c.qualities, v => set({ qualities: v })),
+        D.pickset('Inversions', [0, 1, 2].map(i => ({ value: i, main: T.INVERSIONS[i] })), c.inversions, v => set({ inversions: v })),
         D.pickset('String sets', T.TRIAD_SETS.map(s => ({ value: s.id, main: s.id.split('').reverse().join('–'), sub: s.name.replace(/^Strings [^(]+/, '') })), c.sets, v => set({ sets: v })));
     }
   });
@@ -524,7 +564,7 @@
     help: [
       'Name the shape: a major or minor chord shape appears. Name which open chord it comes from: C, A, G, E or D.',
       'Shapes from a root: a root sits on one string. Pick the two shapes that have their root on that string. From the 6th string you can build the E and G shapes, from the 5th the A and C shapes, and so on.',
-      'Use CAGED as a map of the neck: each shape joins the next one, and the five cover the whole neck. This drill uses standard tuning.'
+      'Use CAGED as a map of the neck: each shape joins the next one, and the five cover the whole neck. This drill uses standard tuning without a capo.'
     ],
     defaults: { mode: 'name', quality: 'major' },
     fastMs: 3500,
@@ -553,7 +593,7 @@
         const win = ui.narrow() ? { from: Math.max(0, q.shape.low - 1), to: Math.max(q.shape.low - 1, 0) + 5 } : { from: 0, to: 15 };
         q.win = win; q.markers = markers;
         // Lines join the notes, so the shape reads as one figure. The lane under the neck waits for the answer's letters.
-        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, win, { tuning: T.STANDARD, lane: true, links: [{ points: placesOf(q.shape.frets), cls: 'is-shape' }], muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'A CAGED shape' })));
+        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, win, { tuning: T.STANDARD, capo: 0, lane: true, links: [{ points: placesOf(q.shape.frets), cls: 'is-shape' }], muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'A CAGED shape' })));
         ui.choices(['C', 'A', 'G', 'E', 'D'].map(l => ({ value: l, main: l, sub: `${l} shape` })));
         return;
       }
@@ -562,7 +602,7 @@
       ui.actions([]);
       ui.noChoices();
       const win = ui.narrow() ? { from: Math.max(0, q.fret - 2), to: Math.max(0, q.fret - 2) + 5 } : { from: 0, to: 15 };
-      ui.board.replaceChildren(ui.neck([{ string: q.string, fret: q.fret, kind: 'root', label: q.rootName }], Object.assign(win, { tuning: T.STANDARD, label: 'The root' })));
+      ui.board.replaceChildren(ui.neck([{ string: q.string, fret: q.fret, kind: 'root', label: q.rootName }], Object.assign(win, { tuning: T.STANDARD, capo: 0, label: 'The root' })));
       const row = h('div', { class: 'answers' });
       const draw = () => row.replaceChildren(...['C', 'A', 'G', 'E', 'D'].map((l, i) => h('button', { type: 'button', class: 'answer', 'aria-pressed': String(q.picked.includes(l)), onclick: () => toggle(l) }, h('b', null, l), h('span', null, 'shape'), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
       const toggle = l => {
@@ -583,7 +623,7 @@
         // The answer on the same neck: the shape's outline and the shapes before and after it.
         const pic = cagedPicture(q.rootName, q.quality, [q.shape]);
         const markers = q.markers.map(m => Object.assign({}, m, { ring: pic.ring(m.string, m.fret) }));
-        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, q.win, { tuning: T.STANDARD, lane: true, regions: pic.regions, links: pic.links, muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'The shape and its neighbors' })));
+        ui.board.replaceChildren(ui.neck(markers, Object.assign({}, q.win, { tuning: T.STANDARD, capo: 0, lane: true, regions: pic.regions, links: pic.links, muted: q.shape.frets.map((f, i) => f === null ? i : null).filter(i => i !== null), label: 'The shape and its neighbors' })));
         const near = pic.regions.filter(r => r.cls.startsWith('is-near')).map(r => r.label);
         return {
           title: `${q.letter} shape`,
@@ -606,7 +646,7 @@
           markers.push({ string: s, fret: f, kind: FB.degreeKind(t.label), label: t.label, ring: pic.ring(s, f) });
         });
         const lo = Math.min(...both.map(b => b.low)), hi = Math.max(...both.map(b => b.high));
-        visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(17, Math.max(hi + 1, lo + 5)), tuning: T.STANDARD, turn: false, regions: pic.regions, links: pic.links, label: 'The two shapes from this root' });
+        visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(17, Math.max(hi + 1, lo + 5)), tuning: T.STANDARD, capo: 0, turn: false, regions: pic.regions, links: pic.links, label: 'The two shapes from this root' });
       }
       return { title: `${q.expected.join(' and ')} shapes`, text: `From a root on the ${ord(q.string)} string, ${q.rootName} at fret ${q.fret}. The two shapes overlap where they share notes.`, visual, actions: [['Open in Library', () => GT.go(`library/chords/${q.quality}/${GT.rootSlug(q.rootName)}`)]] };
     },

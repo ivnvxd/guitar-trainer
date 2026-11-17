@@ -13,7 +13,7 @@
   const describe = bar => R.parse(bar).map(e => `${e.dot ? 'dotted ' : ''}${R.VALUE_NAMES[e.value]}${e.rest ? ' rest' : ''}${e.tie ? ' tied to' : ''}`).join(', ').replace(/ tied to,/g, ' tied to');
   const stageNames = ids => ids.map(id => R.STAGES.find(s => s.id === id).name.toLowerCase()).join(', ');
   const stagePick = (c, set) => D.pickset('Rhythms', R.STAGES.map(s => ({ value: s.id, main: s.name })), c.set, v => set({ set: v }));
-  const tempoPick = (c, set) => D.field('Tempo', GT.segmented('Tempo', [[60, '60'], [72, '72'], [90, '90']], c.tempo, v => set({ tempo: v })));
+  const tempoPick = (c, set) => D.field('Tempo', GT.segmented('Tempo', [[50, '50'], [60, '60'], [72, '72'], [90, '90'], [100, '100']], c.tempo, v => set({ tempo: v })));
   // One bar of held tones after one bar of clicks (the count-in of Settings). The clicks go on under the bar.
   const countIn = () => settings.countIn === false ? 0 : 4;
   function playBar(bar, bpm, onEnd) {
@@ -262,7 +262,7 @@
           h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms less', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) - 10 }); set({}); } }, '−'),
           h('output', null, delay === undefined ? 'not measured' : `${delay} ms`),
           h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms more', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) + 10 }); set({}); } }, '+'),
-          h('button', { type: 'button', class: 'btn', onclick: () => { GT.saveSettings({ tapOffset: undefined }); set({}); } }, 'Measure again'))));
+          h('button', { type: 'button', class: 'btn', onclick: () => { GT.saveSettings({ tapOffset: undefined }); set({}); } }, delay === undefined ? 'Measure' : 'Measure again'))));
     }
   });
 })(window);

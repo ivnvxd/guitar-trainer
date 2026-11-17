@@ -42,7 +42,7 @@
     }
   };
 
-  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', customTuning: null, capo: 0, orientation: 'auto', theme: 'auto' };
+  const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', customTuning: null, capo: 0, orientation: 'auto', theme: 'auto', micId: '', a4: 440 };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
   function saveSettings(patch) {
     Object.assign(settings, patch);
@@ -87,9 +87,14 @@
     if (meta) meta.content = theme === 'light' ? '#eff1f5' : '#1e1e2e';
   }
   if (lightQuery) lightQuery.addEventListener('change', () => { if (settings.theme === 'auto') applyTheme(); });
-  // A custom tuning is six MIDI numbers, low string first. The capo is not part of it: the Library adds it.
+  // A custom tuning is six MIDI numbers, low string first. The capo is not part of it.
   const tuning = () => settings.tuning === 'custom' && Array.isArray(settings.customTuning) && settings.customTuning.length === 6
     ? settings.customTuning : (T.TUNINGS.find(t => t.id === settings.tuning) || T.TUNINGS[0]).midi;
+  // With a capo, the open strings sound at the capo. The Library and the drills play from there: fret 0 is the capo.
+  const capo = () => settings.capo || 0;
+  // The pitch of the A above middle C, in Hz. The sounds of the site, the tuner and the drill that listens use it.
+  const a4 = () => Number(settings.a4) || 440;
+  const openStrings = () => tuning().map(m => m + capo());
 
   // Root names in links: "a", "c-sharp", "e-flat".
   const rootSlug = name => name[0].toLowerCase() + (name.includes('♯') ? '-sharp' : name.includes('♭') ? '-flat' : '');
@@ -142,11 +147,20 @@
   // Open a page. "replace" changes the link without a new history entry (for option changes).
   function go(path, replace) {
     const hash = '#/' + path.replace(/^#?\/?/, '');
-    if (replace) keepPlace(() => { history.replaceState(null, '', hash); render(); });
+    if (replace) keepPlace(() => { history.replaceState(history.state, '', hash); render(); });
     else if (location.hash === hash) render();
     else location.hash = hash;
   }
+  // Back and Forward open a page where you left it. Each history entry gets a mark, and the page remembers the
+  // scroll place of each mark. A tapped link is a new entry: it opens at the top.
+  const places = new Map();
+  let marks = 0, traversed = false;
+  root.addEventListener('popstate', () => { traversed = true; });
+  root.addEventListener('scroll', () => { const st = history.state; if (st && st.gt) places.set(st.gt, root.scrollY); }, { passive: true });
   function render() {
+    const came = traversed && history.state && history.state.gt;
+    traversed = false;
+    if (!history.state || !history.state.gt) history.replaceState({ gt: `${Date.now()}:${++marks}` }, '');
     // A broken link (for example a lone %) opens what it can, not a blank page.
     const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(p => { try { return decodeURIComponent(p); } catch (e) { return p; } });
     const name = views[parts[0]] ? parts[0] : 'library';
@@ -170,7 +184,7 @@
     document.title = (title ? title.textContent + ' · ' : '') + GT.siteName;
     if (!render.first) main.focus({ preventScroll: true });
     render.first = false;
-    window.scrollTo(0, 0);
+    window.scrollTo(0, came ? places.get(came) || 0 : 0);
   }
   render.first = true;
 
@@ -211,15 +225,32 @@
     };
     const buttons = options.map(([v, text]) => h('button', { type: 'button', role: 'radio', onclick: () => choose(v) }, text));
     show();
-    return h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label, onkeydown: onKey }, buttons);
+    const box = h('div', { class: 'seg ' + cls, role: 'radiogroup', 'aria-label': label, onkeydown: onKey }, buttons);
+    if (rows) rows.observe(box);
+    return box;
   }
+  // Choices that do not fit one line become a grid of even rows, so no choice stands alone. The check runs when the
+  // control gets its size, before it is painted.
+  function evenRows(box) {
+    box.classList.remove('is-grid');
+    box.style.gridTemplateColumns = '';
+    const kids = [...box.children], n = kids.length;
+    if (n < 3 || !box.clientWidth) return;
+    const lines = new Set(kids.map(k => k.offsetTop)).size;
+    if (lines < 2) return;
+    let cols = Math.ceil(n / lines);
+    while (cols > 1 && n % cols === 1) cols--;
+    box.classList.add('is-grid');
+    box.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  }
+  const rows = root.ResizeObserver ? new ResizeObserver(list => { for (const e of list) evenRows(e.target); }) : null;
 
   GT.siteName = 'Guitar Trainer';
   // The version of the files in use. It must match VERSION in sw.js, which a new upload changes.
   // The version of the site: major.minor.patch. The first number goes up for a redesign, the middle one for new
   // features, the last one for fixes only. Give VERSION in sw.js the same version when you publish new files.
   // Each version has a release with its notes on GitHub, tagged v and the version.
-  GT.version = '2.0.1';
+  GT.version = '2.1.0';
   // A submenu row as in the Library: a round button to the start page of the section (or none), then its pages.
   // items: [{ href, text, current, apart }]. An item with apart: true stands after a thin line.
   // The chosen page scrolls to the middle of the row when the row is wider than the screen.
@@ -245,5 +276,5 @@
     requestAnimationFrame(mark);
   }
 
-  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented, subnav, fadeEdges });
+  Object.assign(GT, { h, store, settings, saveSettings, applyTheme, applySound, setMuted, tuning, capo, a4, openStrings, rootSlug, rootFromSlug, route, go, render, keepPlace, shuffle, pick, segmented, subnav, fadeEdges });
 })(window);

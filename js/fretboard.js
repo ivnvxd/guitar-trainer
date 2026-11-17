@@ -12,6 +12,8 @@
   // Where you scrolled a flat neck, for each page and range of frets, so the next drawing opens at the same place.
   // Another page opens at the nut.
   const seen = new Map();
+  // The position that had the keyboard focus last. A neck is one Tab stop: the arrow keys move between its positions.
+  let focusAt = null;
 
   function el(name, attrs = {}, parent) {
     const node = document.createElementNS(NS, name);
@@ -51,6 +53,9 @@
    */
   function render(container, options) {
     const o = Object.assign({ from: 0, to: 15, tuning: GT.theory.STANDARD, markers: [], orientation: 'auto', leftHanded: false }, options);
+    // A drill draws its neck again after each press. The focus then goes to the same position of the new neck.
+    const active = document.activeElement, hadFocus = !!(active && active.matches && active.matches('.fb-pos[role="button"]'));
+    const stops = [];
     const strings = o.tuning.length;
     const capo = o.capo || 0;
     // String names are the open strings, without the capo.
@@ -212,7 +217,8 @@
         const midi = o.tuning[s] + f;
         if (pressable) {
           g.setAttribute('role', 'button');
-          g.setAttribute('tabindex', '0');
+          g.setAttribute('tabindex', '-1');
+          stops.push({ g, s, f, x: p.x, y: p.y, marked: !!m });
           const stringNo = strings - s;
           g.setAttribute('aria-label', `${m && m.label ? m.label + ', ' : ''}${ordinal(stringNo)} string, ${f === 0 ? (capo ? 'at the capo, fret ' + capo : 'open') : 'fret ' + (f + capo)}`);
           g.dataset.string = s; g.dataset.fret = f;
@@ -250,7 +256,35 @@
         o.onPress(s, f, o.tuning[s] + f, g);
       };
       svg.addEventListener('click', e => handler(e.target));
-      svg.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest) { e.preventDefault(); handler(e.target); } });
+      // One Tab stop: the position that had the focus last, else the first marked one, else the first one.
+      const same = t => focusAt && t.s === focusAt.s && t.f === focusAt.f;
+      const first = stops.find(same) || stops.find(t => t.marked) || stops[0];
+      if (first) first.g.setAttribute('tabindex', '0');
+      const DIR = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      svg.addEventListener('keydown', e => {
+        if (!e.target.closest) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(e.target); return; }
+        const d = DIR[e.key], here = d && stops.find(t => t.g === e.target.closest('.fb-pos'));
+        if (!here) return;
+        e.preventDefault();
+        // The nearest position that way on the screen: first along the arrow, then the least to the side.
+        let best = null;
+        for (const t of stops) {
+          const ahead = (t.x - here.x) * d[0] + (t.y - here.y) * d[1], side = Math.abs((t.x - here.x) * d[1]) + Math.abs((t.y - here.y) * d[0]);
+          if (ahead < 1) continue;
+          const cost = ahead + side * 3;
+          if (!best || cost < best.cost) best = { t, cost };
+        }
+        if (best) best.t.g.focus();
+      });
+      svg.addEventListener('focusin', e => {
+        const t = e.target.closest && stops.find(x => x.g === e.target.closest('.fb-pos'));
+        if (!t) return;
+        focusAt = { s: t.s, f: t.f };
+        for (const x of stops) x.g.setAttribute('tabindex', x === t ? '0' : '-1');
+      });
+      const again = hadFocus && stops.find(t => t.s === Number(active.dataset.string) && t.f === Number(active.dataset.fret));
+      if (again) queueMicrotask(() => { if (svg.isConnected && !active.isConnected && (!document.activeElement || document.activeElement === document.body)) again.g.focus({ preventScroll: true }); });
     }
 
     // A flat neck that is longer than its box scrolls. Open it where the notes in question are.

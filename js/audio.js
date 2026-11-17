@@ -119,15 +119,21 @@
   root.addEventListener('click', arm, true);
   // A new sound from a tap: the notes of earlier taps stop. Notes, loops, the drone and rhythms call this.
   function fresh() { if (inGesture && cutFor !== gesture) { cutFor = gesture; cut(); } }
-  const freq = midi => 440 * Math.pow(2, (midi - 69) / 12);
+  // The pitch of A comes from Settings. The plucked notes are kept ready, so a new pitch makes them again.
+  let tunedTo = 440;
+  const freq = midi => {
+    const a = GT.a4 ? GT.a4() : 440;
+    if (a !== tunedTo) { cache.clear(); tunedTo = a; }
+    return a * Math.pow(2, (midi - 69) / 12);
+  };
   // The bass note of a chord, in the lowest octave of the guitar (E2 to D♯3). Lower notes are lost on a phone speaker.
   const bass = pc => 40 + ((pc - 40) % 12 + 12) % 12;
 
   // Karplus-Strong. The averaging filter delays by half a sample, so the period is N + 0.5.
   // The playback rate then corrects the pitch exactly, which matters for ear training.
   function pluckBuffer(midi) {
-    if (cache.has(midi)) return cache.get(midi);
     const sr = ctx.sampleRate, f = freq(midi);
+    if (cache.has(midi)) return cache.get(midi);
     const N = Math.max(2, Math.floor(sr / f - 0.5));
     const seconds = midi < 52 ? 3.2 : midi < 64 ? 2.6 : 2.0;
     const out = new Float32Array(Math.floor(sr * seconds));
@@ -504,6 +510,8 @@
   // has started: an iPhone keeps a context made later paused, and an analyser on it reads only silence.
   // listen() must start inside a tap. onFrame gets 4096 samples about ten times a second, or null while the
   // context is paused. It resolves to false when stop came first.
+  // The sound comes from the input you chose (settings.micId), for example a sound card with the guitar plugged in.
+  // Two channels are asked for, so a guitar in the second socket of a sound card is heard too.
   let mic = null;
   async function listen(onFrame) {
     stopListening();
@@ -512,9 +520,17 @@
     const me = mic = { stopped: false };
     // An iPhone records only when the page asks for recording and playback together.
     try { if (navigator.audioSession) navigator.audioSession.type = 'play-and-record'; } catch { /* older browsers */ }
+    const ask = id => navigator.mediaDevices.getUserMedia({ audio: Object.assign({ echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: { ideal: 2 } }, id ? { deviceId: { exact: id } } : {}) });
+    const chosen = GT.settings.micId;
     let stream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      try { stream = await ask(chosen); }
+      catch (e) {
+        // The chosen input is gone, for example an unplugged sound card: forget it and use the input of the device.
+        if (!chosen || !['OverconstrainedError', 'NotFoundError'].includes(e.name)) throw e;
+        GT.saveSettings({ micId: '' });
+        stream = await ask('');
+      }
     } catch (e) { if (mic === me) stopListening(); throw e; }
     // The page changed, or stop came, while the microphone started.
     if (me.stopped || mic !== me) { stream.getTracks().forEach(t => t.stop()); return false; }
@@ -543,6 +559,18 @@
     // Back to playback only, so the silent switch of an iPhone does not mute the site.
     try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* older browsers */ }
   }
+  // The sound inputs of this device: [{ id, label }]. A browser gives their names only while the page may listen,
+  // so ask after listen() started. The input that is on comes with on: true.
+  async function inputs() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return [];
+    const track = mic && mic.stream && mic.stream.getAudioTracks()[0];
+    const now = track && track.getSettings ? track.getSettings().deviceId : '';
+    const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput' && d.label);
+    // Chrome also lists the input of the system as 'default', named after the real one: "Default - Name".
+    const system = all.find(d => d.deviceId === 'default');
+    return all.filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications')
+      .map(d => ({ id: d.deviceId, label: d.label, on: d.deviceId === now || (now === 'default' && !!system && system.label.endsWith(d.label)) }));
+  }
   // The loudness of a frame (root mean square) and its highest sample.
   function levelOf(buf) {
     let sum = 0, peak = 0;
@@ -551,7 +579,7 @@
   }
 
   GT.audio = {
-    listen, stopListening, levelOf, startRhythm, stopRhythm, heardAt,
+    listen, stopListening, inputs, levelOf, startRhythm, stopRhythm, heardAt,
     get rhythmRunning() { return !!rhythm.o; },
     get listening() { return !!mic; },
     note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,

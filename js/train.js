@@ -52,8 +52,11 @@
     const min = parseFloat(style.getPropertyValue('--min')) || 124, gap = parseFloat(style.columnGap) || 8;
     const fit = Math.max(1, Math.floor((box.clientWidth + gap) / (min + gap)));
     const rows = Math.ceil(n / fit);
-    box.style.setProperty('--cols', rows === 1 ? fit : Math.ceil(n / rows));
+    const cols = rows === 1 ? fit : Math.ceil(n / rows);
+    box.style.setProperty('--cols', cols);
     box.dataset.rows = rows === 1 ? 'one' : 'many';
+    // One item left for the last row: a pick list gives it the whole row.
+    box.dataset.lone = String(rows > 1 && n % cols === 1);
   }
 
   // ---------- hub ----------
@@ -177,6 +180,15 @@
       settingsPanel.querySelectorAll('.pickset').forEach(even);
       settingsBtn.setAttribute('aria-expanded', String(!settingsPanel.hidden));
     } }, icon('sliders'), 'Options');
+    // Done, at the end of the options: close them and show the question. The page moves only when the top of the
+    // question card is above the screen.
+    const closeOptions = () => {
+      settingsPanel.hidden = true;
+      settingsBtn.setAttribute('aria-expanded', 'false');
+      const top = promptBox.getBoundingClientRect().top;
+      if (top < 0) root.scrollBy(0, top - 8);
+      settingsBtn.focus({ preventScroll: true });
+    };
     const title = h('h2', { id: 'q-title' });
     const sub = h('p', { class: 'sub' });
     const promptActions = h('div', { class: 'prompt-actions' });
@@ -221,7 +233,7 @@
       startClock(delaySeconds = 0) { session.started = performance.now() + delaySeconds * 1000; },
       neck(markers, opts = {}) {
         const box = h('div', { class: 'neck' });
-        GT.fretboard.render(box, Object.assign({ from: 0, to: 12, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, compact: true, turn: true }, opts));
+        GT.fretboard.render(box, Object.assign({ from: 0, to: 12, tuning: GT.openStrings(), capo: GT.capo(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, compact: true, turn: true }, opts));
         return box;
       },
       rebuild: () => restart(),
@@ -236,7 +248,7 @@
       statLine.replaceChildren(
         h('span', null, h('b', null, length ? `${Math.min(session.count + (session.answered ? 0 : 1), length)} / ${length}` : session.count + 1), 'question'),
         h('span', null, h('b', null, session.count ? acc + '%' : '–'), 'right'),
-        h('span', null, h('b', null, med ? (med / 1000).toFixed(1) + ' s' : '–'), 'typical time'),
+        h('span', null, h('b', null, med ? (med / 1000).toFixed(1) + ' s' : '–'), 'typical', h('small', { class: 'stat-long' }, ' time')),
         h('span', { class: session.streak >= 3 ? 'is-hot' : '' }, h('b', null, session.streak), 'in a row'));
     }
     function pool() { const all = d.pool(config); return session.only ? all.filter(item => session.only.includes(item)) : all; }
@@ -342,6 +354,9 @@
       const bar = document.querySelector('.topbar nav');
       const covered = bar && getComputedStyle(bar).position === 'fixed' ? bar.offsetHeight : 0;
       if (feedback.getBoundingClientRect().bottom > root.innerHeight - covered) {
+        // The page keeps this height at the next question, so it moves once and then stays: without it the page
+        // would get shorter and jump back up after every answer.
+        promptBox.style.minHeight = Math.max(parseFloat(promptBox.style.minHeight) || 0, promptBox.offsetHeight) + 'px';
         const still = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
         feedback.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
       }
@@ -362,7 +377,7 @@
       cfg.set = cfg.set.concat(added);
       saveConfig(def, cfg);
       buildSettings();
-      return def.unlockText ? def.unlockText(added) : 'New items added.';
+      return def.unlockText ? def.unlockText(added, cfg) : 'New items added.';
     }
     function finish() {
       session.done = true;
@@ -381,7 +396,7 @@
         h('div', { class: 'row done-actions' },
           missed.length ? h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => review(missed.map(([item]) => item)) }, 'Practice the missed ones') : null,
           h('button', { type: 'button', class: 'btn btn-big' + (missed.length ? '' : ' btn-primary'), onclick: restart }, missed.length ? 'New session' : 'Practice again'),
-          h('a', { class: 'btn btn-big', href: '#/train' }, 'Back to Train'))));
+          h('a', { class: 'btn btn-big', href: `#/train/${d.track}` }, `Back to ${(TRACKS.find(t => t.id === d.track) || { short: 'Train' }).short}`))));
       stage.querySelector('.btn-primary').focus();
     }
     function begin(only, length) {
@@ -425,7 +440,8 @@
       settingsPanel.replaceChildren(
         d.options ? d.options(config, patch => { Object.assign(config, patch); saveConfig(d, config); buildSettings(); restart(); }) : null,
         h('div', { class: 'opts' },
-          h('div', { class: 'field' }, h('span', null, 'Session length'), GT.segmented('Session length', [[10, '10'], [20, '20'], [40, '40'], [0, 'No end']], config.length, v => { config.length = v; saveConfig(d, config); buildSettings(); updateStats(); }))));
+          h('div', { class: 'field' }, h('span', null, 'Session length'), GT.segmented('Session length', [[10, '10'], [20, '20'], [40, '40'], [0, 'No end']], config.length, v => { config.length = v; saveConfig(d, config); buildSettings(); updateStats(); }))),
+        h('button', { type: 'button', class: 'btn btn-primary opts-done', onclick: closeOptions }, 'Done'));
       settingsPanel.querySelectorAll('.pickset').forEach(even);
     }
     if (config.length === undefined) config.length = 20;

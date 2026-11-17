@@ -3,6 +3,9 @@ These font files are under the SIL Open Font License, Version 1.1.
 geist.woff2 (Latin subset, from Fontsource)
 Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)
 
+literata-names.woff2 (bold, only the characters of chord, key and scale names, from Google Fonts)
+Copyright 2017 The Literata Project Authors (https://github.com/googlefonts/literata)
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL

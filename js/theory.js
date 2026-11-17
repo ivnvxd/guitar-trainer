@@ -760,6 +760,41 @@
   // on its lowest fret. The other notes get the finger of their distance from the lowest fret, or the next free one.
   // Where this rule is not sure (two notes side by side on the lowest fret without a barre, or a fifth finger),
   // every finger is null: no number is better than a wrong one.
+  // Fingers for the notes of one position of a scale: a Map from "string:fret" to a finger, 1 (index) to 4 (little).
+  // An open string, or a string at the capo, has no finger. null: this rule is not sure, and no number is better than
+  // a wrong one.
+  // A box: the hand has a place, four frets wide, with one finger for each fret. The place is the four frets that
+  // hold the most notes, the higher one when two hold as many. A string whose notes do not fit there moves the hand
+  // one fret, as the B string does in many boxes. A string with open notes is played in the first position, where
+  // the finger has the number of the fret.
+  // Notes five frets apart on one string are a stretch: 1 and 4 at the ends. A note between them is 3 when it sits
+  // one fret under the highest, else 2. Shapes of three notes on each string (threePerString) use this on every string.
+  function scaleFingers(notes, threePerString = false) {
+    const out = new Map(), fretted = notes.filter(n => n.fret > 0);
+    if (!fretted.length) return out;
+    const all = fretted.map(n => n.fret), lo = Math.min(...all), hi = Math.max(...all);
+    if (!threePerString && hi - lo > 4) return null;
+    let place = lo;
+    if (notes.some(n => n.fret === 0)) place = 1;
+    else if (hi - lo === 4) { const inside = w => all.filter(f => f >= w && f <= w + 3).length; place = inside(lo + 1) >= inside(lo) ? lo + 1 : lo; }
+    for (const s of new Set(fretted.map(n => n.string))) {
+      const on = fretted.filter(n => n.string === s).map(n => n.fret).sort((a, b) => a - b);
+      const first = on[0], last = on[on.length - 1], span = last - first, put = (f, finger) => out.set(`${s}:${f}`, finger);
+      if (notes.some(n => n.string === s && n.fret === 0)) {
+        if (last > 4) return null;
+        for (const f of on) put(f, f);
+      } else if (on.length === 3 && span <= 4 && (threePerString || span === 4)) {
+        put(first, 1); put(last, 4); put(on[1], last - on[1] === 1 && on[1] - first > 1 ? 3 : 2);
+      } else if (on.length === 2 && span === 4) {
+        put(first, 1); put(last, 4);
+      } else if (span <= 3) {
+        // The place of the hand, moved only as far as these notes need.
+        const w = first < place ? first : last > place + 3 ? last - 3 : place;
+        for (const f of on) put(f, f - w + 1);
+      } else return null;
+    }
+    return out;
+  }
   function fingers(frets) {
     const none = frets.map(() => null);
     const fretted = frets.map((f, s) => ({ f, s })).filter(x => x.f !== null && x.f > 0);
@@ -901,7 +936,7 @@
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, outsideChords, keyOf, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes, SEQUENCES, sequence,
-    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, modeInKey, voiceLead,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, scaleFingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, modeInKey, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

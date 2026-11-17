@@ -9,6 +9,9 @@
   const sound = document.querySelector('.sound-btn');
   // Settings shows the same switch, so it is drawn again there.
   if (sound) sound.addEventListener('click', () => { GT.setMuted(!GT.settings.muted); if (location.hash.startsWith('#/settings')) { const y = root.scrollY; GT.render(); root.scrollTo(0, y); } });
+  // The skip link moves the keyboard focus to the page. It must not change the link of the page.
+  const skip = document.querySelector('.skip-link');
+  if (skip) skip.addEventListener('click', e => { e.preventDefault(); document.getElementById('main').focus(); });
   root.addEventListener('hashchange', GT.render);
   GT.render();
   if ('serviceWorker' in navigator && root.isSecureContext && root.location.protocol !== 'file:') {

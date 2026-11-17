@@ -642,11 +642,11 @@
     const names = r.notes.map(n => T.PC_PLAIN[n.pc]);
     const markers = [];
     for (let s = 0; s < 6; s++) for (let f = 0; f <= 12; f++) {
-      const pc = T.mod(GT.tuning()[s] + f), n = r.notes.find(x => x.pc === pc);
+      const pc = T.mod(GT.openStrings()[s] + f), n = r.notes.find(x => x.pc === pc);
       if (n) markers.push({ string: s, fret: f, kind: pc === r.bass ? 'root' : 'other', label: T.PC_PLAIN[pc] });
     }
     const neckBox = h('div', { class: 'neck' });
-    FB.render(neckBox, { from: 0, to: 12, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true, label: 'The notes heard here' });
+    FB.render(neckBox, { from: 0, to: 12, tuning: GT.openStrings(), capo: GT.capo(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true, label: 'The notes heard here' });
     const list = [...new Set(names)];
     u.notes.replaceChildren(
       h('p', null, ...[r.chord ? h('span', null, 'Maybe ', h('b', null, r.chord.name), '. ') : null, `Loudest note${list.length > 1 ? 's' : ''} at ${fmt(P.pos)}: ${list.join(', ')}.`].filter(Boolean)),

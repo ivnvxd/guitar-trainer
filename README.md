@@ -22,7 +22,7 @@ Upload these files and folders:
 
 Do not upload `docs/`, `tests/`, `README.md` or `.git/`. The site does not need them.
 
-`fonts/` holds the typeface of the site, Geist, and its license. The site serves it itself.
+`fonts/` holds the typeface of the site, Geist, the bold serif for the large names of chords, keys and scales (Literata, cut down to the characters of those names), and their license. The site serves them itself.
 
 The version has three parts, major.minor.patch: the first goes up for a redesign, the middle one for new features, the last one for fixes only. When you publish a new version, change `VERSION` in `sw.js` and `GT.version` in `js/core.js` to the same version, and make a GitHub release tagged `v` and the version, with its notes. Browsers then replace the files they keep for offline use, and the version in Settings links to the release notes.
 
@@ -75,19 +75,19 @@ After a choice, a page draws itself again. The control you tapped stays at the s
 
 The neck is a flat diagram: the nut on the left and the high e on top. On a phone a long neck scrolls sideways. A switch beside each neck makes it vertical, and so does Settings. A phone held sideways shows the neck first, and a drill puts the neck beside its answers.
 
-Settings has six tunings and a custom tuning, and a capo. With a capo, the Library counts the frets from the capo and shows the shapes you play there; a chord keeps the name of its sound. CAGED shapes show in standard tuning and in tunings that move every string the same way: a capo, half step down and drop D. The drills ignore the capo.
+Settings has six tunings and a custom tuning, and a capo. With a capo, the Library and the drills play from the capo: a neck starts at the capo, drawn as a bar, and the fret numbers count from the nut. The Library shows the shapes you play there; a chord keeps the name of its sound. CAGED shapes show in standard tuning and in tunings that move every string the same way: a capo, half step down and drop D. The tuner and the CAGED drill ignore the capo.
 
 Train has four tracks. A row at the top leads to Today, to a page for each track, and to Progress. Today shows the day's goal, three drills picked for today (missed answers first, then drills you left for a while, then something new) and a card for each track:
 
-- Ear: intervals, scale degrees in a key, chord quality and chord progressions.
-- Neck: name the note, find every note, read the staff, play the note, degrees from a root, triad shapes and CAGED shapes. Play the note listens through the microphone. It checks the pitch only, so it asks for a note in any octave, every octave of a note, or the exact note on the staff.
+- Ear: intervals, scale degrees in a key, chord quality and chord progressions. Progressions have major and minor keys, with three or four chords.
+- Neck: name the note, find every note, read the staff, play the note, degrees from a root, triad shapes and CAGED shapes. Play the note listens through the microphone. It checks the pitch only, so it asks for a note in any octave, every octave of a note, a note on one string, or the exact note on the staff. The same pitch on another string also counts. Find every note and Read the staff can use some of the strings only, and Triad shapes lets you choose the inversions.
 - Keys and progressions: key facts, chords in a key, and numbers to chords.
 - Rhythm: name the rhythm you hear, and tap in time. Tap in time has three modes: read a bar and tap it, hear a bar and tap it back, and keep the pulse when the click stops. It measures the delay of your device once, with twelve taps on clicks.
 
 The Tools tab holds the tools you use with the guitar in your hands. On each tool, a row at the top leads to the others:
 
-- Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning. The string you play lights up, a tuned string gets a check mark, and a bar shows that the microphone hears you.
-- Metronome: it can click between the beats, click on 2 and 4 only, leave out whole bars or single beats, and raise the tempo every four bars.
+- Tuner listens through the microphone and shows the note, how many cents it is off, and the nearest string of your tuning. The string you play lights up, a tuned string gets a check mark, and a bar shows that the microphone hears you. The pitch of A is 440 Hz, or the value you choose in Settings. When the device has more than one sound input, for example a sound card with the guitar plugged in, the tuner and Play the note let you choose the input.
+- Metronome: bars of 2 to 7 beats. It can click between the beats, click on the even beats only, leave out whole bars or single beats, and raise the tempo every four bars.
 - Slow down plays a song file (mp3, m4a, wav, flac or a video) or a YouTube link. A file plays at 25% to 150% speed without a change of pitch, in another key, or a few cents sharp or flat. You loop a part from A to B, with a pause before each pass and a little more speed each time, and you mark the parts of the song. A waveform shows the song: a tap jumps, a drag sets the loop. Filters raise or cut the bass or cut the voice in the middle of the mix, and a note guess lists the loudest notes at a spot with a chord name. A YouTube video gets YouTube's own speeds, loops and marks, but no other tools, because YouTube does not let other sites change its sound. On a computer with Chrome or Edge you can record a part of a tab, and the recording gets every tool and stays in the browser until you delete it. Once a song is open, the box to open another one folds into one button. While you scroll down to the speed or the loop, a small bar at the bottom keeps Play, back 5 seconds, the time and Loop in reach. Files never leave the device. The slowing down uses Signalsmith Stretch (MIT license, `js/vendor/`), with one change: it stops its work after a second of silence.
 
 The daily goal counts real practice time: the time a drill page is in use, and the time a metronome, a play-along loop or a strumming pattern runs. Settings can turn off the count-in, the bar of clicks before a rhythm starts. Settings also shows the version of the site in use, with a link to its release notes, and links to report a problem and to the code.

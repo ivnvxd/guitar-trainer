@@ -10,9 +10,8 @@
   const lib = Object.assign({ labels: 'notes', triadNotes: true, scaleShapes: 'boxes' }, store.get('library', {}));
   const saveLib = patch => { Object.assign(lib, patch); store.set('library', lib); };
   // The Library plays with the capo of Settings: the open strings sound at the capo, and a neck counts its frets
-  // from there. The drills ignore the capo.
-  const capo = () => settings.capo || 0;
-  const openStrings = () => GT.tuning().map(m => m + capo());
+  // from there. The drills do the same.
+  const { capo, openStrings } = GT;
   const lastFret = () => Math.max(5, settings.frets - capo());
   // CAGED shapes exist in standard tuning and its family: a capo, half step down, drop D.
   const cagedTuning = () => T.standardShift(openStrings()) !== null;
@@ -77,7 +76,8 @@
       quick.map(([v, t]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(v === value), onclick: () => { if (v !== value) onChange(v); } }, t)), rest.length ? select : null);
   }
   function labelsCtl(onChange) {
-    return ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees']], lib.labels, v => { saveLib({ labels: v }); onChange(); }), 'ctl-plain');
+    // None: empty dots on the main neck, to test yourself. Cards, the list of tones and the tap on a note still name the notes.
+    return ctl('Labels', GT.segmented('Labels', [['notes', 'Notes'], ['degrees', 'Degrees'], ['none', 'None']], lib.labels, v => { saveLib({ labels: v }); onChange(); }), 'ctl-plain');
   }
   // On a phone the neck scrolls, so the number of frets matters less: this control shows on wide screens only.
   function fretsCtl(onChange) {
@@ -91,7 +91,7 @@
   }
   const toneInside = t => [
     h('i', { class: 'swatch' + (kindOf(t) === 'root' ? ' is-root' : ''), style: `background:var(--${kindOf(t)})` }),
-    h('b', null, lib.labels === 'notes' ? t.name : t.label), h('span', null, lib.labels === 'notes' ? t.label : t.name)];
+    h('b', null, lib.labels === 'degrees' ? t.label : t.name), h('span', null, lib.labels === 'degrees' ? t.name : t.label)];
   // A two-octave keyboard from C, with the tones of the page from the root up. A key plays its note.
   // On a keyboard a semitone is the very next key, so the steps of a scale or chord are easy to see.
   function piano(tones, rootName) {
@@ -104,7 +104,7 @@
       const g = el('g', { class: `pkey ${cls}${t ? ' is-on fb-' + kindOf(t) : ''}`, role: 'button', tabindex: '0', 'aria-label': t ? `${t.name}, ${t.label}` : T.PC_PLAIN[k % 12] }, svg);
       el('rect', { x, y: 1, width: w, height, rx: 3 }, g);
       if (t) {
-        const text = lib.labels === 'notes' || t.kind ? t.name : t.label;
+        const text = lib.labels !== 'degrees' || t.kind ? t.name : t.label;
         const cx = x + w / 2, cy = height - 13, r = cls === 'black' ? 7 : 8.5;
         if (kindOf(t) === 'root') el('rect', { x: cx - r, y: cy - r, width: r * 2, height: r * 2, rx: r * 0.42, class: 'pdot' }, g);
         else el('circle', { cx, cy, r, class: 'pdot' }, g);
@@ -149,7 +149,9 @@
     }
   }
   // The name of a chord, a key or a triad changes with your choices: big sets it large on a phone, as in print.
-  const head = (title, sub, buttons, big) => h('div', { class: 'lib-title' }, h('div', null, h('h1', { 'data-big': big }, big ? setName(title) : title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
+  // big: the large name of a chord, a key or a triad. 'name': a name of normal size, as for a scale. Both are set as
+  // in print: a serif, with a raised sharp or flat.
+  const head = (title, sub, buttons, big) => h('div', { class: 'lib-title' }, h('div', null, h('h1', { 'data-big': big === true, 'data-name': big === 'name' }, big ? setName(title) : title), sub ? h('p', { class: 'muted lib-sub' }, sub) : null), buttons ? h('div', { class: 'row lib-play' }, buttons) : null);
   // Share a page: its link (the state of the page is in the link), the neck as a picture, or a printout.
   // The button sits in the top bar, so it never covers the buttons of a page.
   function shareMenu() {
@@ -229,7 +231,8 @@
       const t = tones.find(x => x.pc === T.mod(tuning[s] + f));
       if (!t) continue;
       if (opts.only && !opts.only(s, f)) continue;
-      out.push({ string: s, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: opts.kind || FB.degreeKind(t.label), small: opts.small, dim: (opts.focus && t.label !== opts.focus) || (opts.lit && !opts.lit.has(t.pc)), title: `${t.name}, ${t.label}` });
+      // named: a page without the Labels choice always names its notes.
+      out.push({ string: s, fret: f, label: lib.labels === 'none' && !opts.named ? '' : lib.labels === 'degrees' ? t.label : t.name, kind: opts.kind || FB.degreeKind(t.label), small: opts.small, dim: (opts.focus && t.label !== opts.focus) || (opts.lit && !opts.lit.has(t.pc)), title: `${t.name}, ${t.label}` });
     }
     return out;
   }
@@ -304,13 +307,16 @@
     document.body.classList.remove('has-play-bar');
   }
   // A change you cannot see is lost. After a tap far from the neck, bring the neck (or a part of it) into view,
-  // smoothly, and only when no part of it shows: a tap near it keeps the page where it is.
+  // smoothly, and only when too little of it shows (under half, or under 150 px of a long neck): a tap near it
+  // keeps the page where it is.
   function bringIntoView(box) {
     if (!box) return;
-    const top = (document.querySelector('.topbar') || { offsetHeight: 0 }).offsetHeight;
+    // On a phone the top bar scrolls away with the page and covers nothing.
+    const bar = document.querySelector('.topbar'), top = bar && getComputedStyle(bar).position === 'sticky' ? bar.offsetHeight : 0;
     const nav = document.querySelector('.topbar nav'), bottom = nav && getComputedStyle(nav).position === 'fixed' ? nav.offsetHeight : 0;
     const r = box.getBoundingClientRect();
-    if (r.bottom > top + 8 && r.top < innerHeight - bottom - 8) return;
+    const shown = Math.min(r.bottom, innerHeight - bottom) - Math.max(r.top, top);
+    if (shown >= Math.min(r.height / 2, 150)) return;
     const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
     root.scrollTo({ top: Math.max(0, root.scrollY + r.top - top - 12), behavior: smooth ? 'smooth' : 'auto' });
   }
@@ -376,6 +382,8 @@
       showPlayBar(item.name, item.chords[0] && item.chords[0].name);
       const row = document.querySelector(`.prog[data-id="${item.id}"]`);
       if (row) row.setAttribute('aria-pressed', 'true');
+      // The loop lights its notes on the neck of the page: show that neck. The bar at the bottom stops the loop.
+      bringIntoView(document.querySelector('#main .lib-stage .neck'));
     };
     // The page was drawn again under a running loop: point the loop at the new rows.
     const playing = items.find(item => item.id === backing.id);
@@ -520,16 +528,22 @@
       const onlyHere = cmp ? tones.filter(t => !cmpPcs.has(t.pc)) : [], onlyThere = cmpTones.filter(t => !basePcs.has(t.pc));
       const cap = caption();
       const neckSlot = h('div');
+      // The fingers of the chosen position, or null when the rule is not sure of them.
+      const threeEach = scale.toneList.length === 7 && lib.scaleShapes === 'nps';
+      const fingers = pos && lib.scaleFingers && !pos.partial ? T.scaleFingers(pos.notes, threeEach) : null;
       const drawNeck = () => {
         let markers;
         if (pos) {
           const inPos = new Set(pos.notes.map(n => `${n.string}:${n.fret}`));
-          markers = toneMarkers(tones, { focus, lit: now }).map(m => inPos.has(`${m.string}:${m.fret}`) ? m : Object.assign(m, { kind: 'ghost', label: m.label }));
+          // Fingers: the notes of the position show the finger that plays them. An open string has no number.
+          const finger = m => fingers ? Object.assign(m, { label: String(fingers.get(`${m.string}:${m.fret}`) || '') }) : m;
+          markers = toneMarkers(tones, { focus, lit: now }).map(m => inPos.has(`${m.string}:${m.fret}`) ? finger(m) : Object.assign(m, { kind: 'ghost', label: m.label }));
         } else markers = toneMarkers(tones, { focus, lit: now });
         if (cmp) markers = markers.map(m => cmpPcs.has(T.mod(openStrings()[m.string] + m.fret)) || m.kind === 'ghost' ? m : Object.assign(m, { ring: true }))
           .concat(toneMarkers(onlyThere, { kind: 'compare' }));
         neckSlot.replaceChildren(neck(markers, { onPress: pressPlayer(cap, describeNote(tones)), pressMarkersOnly: false, dimOutside: pos ? [pos.low, pos.high] : null,
-          regions: caged ? cagedBehind(r, tonic) : null, tools: tonic ? [layerChip('scaleCaged', 'CAGED', 'CAGED shapes', `Show the five CAGED shapes of ${tonicName}`)] : null, label: `${scalesView.title(state)} on the neck` }));
+          regions: caged ? cagedBehind(r, tonic) : null, tools: [tonic ? layerChip('scaleCaged', 'CAGED', 'CAGED shapes', `Show the five CAGED shapes of ${tonicName}`) : null,
+            pos ? layerChip('scaleFingers', 'Fingers', 'Finger numbers', 'Show which finger plays each note of the position') : null], label: `${scalesView.title(state)} on the neck` }));
       };
       const follow = (item, i) => {
         now = i === null ? null : new Set(item.chords[i].pcs);
@@ -562,7 +576,7 @@
       const posOptions = [[0, 'All']].concat(positions.slice().sort((a, b) => a.index - b.index).map(p => [p.index, `${p.index}`]));
       const groups = T.SCALE_GROUPS.map(g => ({ name: g.name, items: g.items.map(i => [i.id, i.name]) }));
       const out = [
-        head(scalesView.title(state), null, playButton('Play', play)),
+        head(scalesView.title(state), null, playButton('Play', play), 'name'),
         controls(
           rootCtl(state, scalesView),
           labelsCtl(rerender),
@@ -583,6 +597,7 @@
           : `Position ${pos.index} starts on the ${pos.startLabel} on the 6th string, frets ${pos.low + capo()}–${pos.high + capo()}. `) : '',
           pos && twoKinds && lib.scaleShapes !== 'nps' ? 'A box is a pentatonic box with the other notes of the scale added. A note one fret outside it takes a stretch. ' : '', 'Tap a tone to light it on the neck.',
           caged ? ` The faint outlines are the CAGED shapes of ${tonicName}, the chord on the root.` : null,
+          pos && lib.scaleFingers ? (fingers ? ' The numbers are fingers: 1 is the index finger and 4 the little finger. On some strings the hand moves one fret.' : ' This position has no sure fingering, so it shows no finger numbers.') : null,
           cmp ? ` Compared with ${r} ${lowerName(cmp.name)}: ${onlyThere.length ? `the dashed notes (${onlyThere.map(t => t.name).join(' ')}) are only in ${r} ${lowerName(cmp.name)}` : `it has no other notes`}${onlyHere.length ? `, and the ringed notes (${onlyHere.map(t => t.name).join(' ')}) are only in ${r} ${lowerName(scale.name)}` : ''}.` : null),
         pos ? sequenceSection(state, pos) : null,
         practice('scales'),
@@ -763,7 +778,7 @@
         const fingers = fingerOf(s);
         const m = s.frets.map((f, i) => f === null ? null : (() => {
           const t = allTones.find(x => x.pc === T.mod(openStrings()[i] + f));
-          return { string: i, fret: f, label: fingers && fingers[i] ? String(fingers[i]) : lib.labels === 'notes' ? t.name : t.label, kind: FB.degreeKind(t.label) };
+          return { string: i, fret: f, label: fingers && fingers[i] ? String(fingers[i]) : lib.labels === 'degrees' ? t.label : t.name, kind: FB.degreeKind(t.label) };
         })()).filter(Boolean);
         const mutedStrings = s.frets.map((f, i) => f === null ? i : null).filter(i => i !== null);
         // A card shows its shape on the neck and plays it, as the inversion cards on the Triads page do.
@@ -948,10 +963,10 @@
       const neckSlot = h('div');
       let now = null;
       const drawNeck = () => {
-        if (!best) { neckSlot.replaceChildren(neck(toneMarkers(T.tonesOn(chords[0].root, chords[0].chord)), { label: 'The notes of the chords' })); return; }
+        if (!best) { neckSlot.replaceChildren(neck(toneMarkers(T.tonesOn(chords[0].root, chords[0].chord), { named: true }), { label: 'The notes of the chords' })); return; }
         const tones = T.tonesOn(best.root, best.scale);
         const lit = now || new Set(pcs);
-        const markers = toneMarkers(tones).map(m => lit.has(T.mod(openStrings()[m.string] + m.fret)) ? m : Object.assign(m, { kind: 'ghost' }));
+        const markers = toneMarkers(tones, { named: true }).map(m => lit.has(T.mod(openStrings()[m.string] + m.fret)) ? m : Object.assign(m, { kind: 'ghost' }));
         neckSlot.replaceChildren(neck(markers, { onPress: pressPlayer(cap, describeNote(tones)), label: `${best.root} ${lowerName(best.scale.name)} under your chords` }));
       };
       drawNeck();
@@ -1018,6 +1033,22 @@
       : `The microphone did not start${why ? ` (${why})` : ''}.`;
   };
   GT.micError = micError;
+  // A choice of sound input, for a guitar plugged into a sound card. It shows only when the device has more than
+  // one input. fill() reads the inputs: call it when the page listens. A new choice is saved, then restart() runs.
+  function micPicker(restart) {
+    const pick = h('select', { 'aria-label': 'Sound input' });
+    const box = h('label', { class: 'mic-pick', hidden: true }, h('span', { class: 'small muted' }, 'Input'), pick);
+    pick.addEventListener('change', () => { GT.saveSettings({ micId: pick.value }); restart(); });
+    const fill = async () => {
+      let list = [];
+      try { list = await A.inputs(); } catch { /* no list: no choice */ }
+      const now = (list.find(d => d.on) || list.find(d => d.id === settings.micId) || list[0] || {}).id;
+      pick.replaceChildren(...list.map(d => h('option', { value: d.id, selected: d.id === now }, d.label)));
+      box.hidden = list.length < 2;
+    };
+    return { el: box, fill };
+  }
+  GT.micPicker = micPicker;
   const tuneView = {
     parse: () => ({}),
     link: () => 'tools/tune',
@@ -1053,7 +1084,17 @@
       const chips = h('div', { class: 'tuner-strings', role: 'group', 'aria-label': 'Strings of your tuning. Tap one to hear it.' },
         strings.map((m, s) => h('button', { type: 'button', class: 'tuner-string', dataset: { s }, 'aria-label': `${ordinal(s)} string, ${name(m)}. Play it.`, onclick: () => A.note(m, 0, 2.5) },
           h('small', null, String(6 - s)), h('b', null, T.PC_PLAIN[T.mod(m)]), h('span', { class: 'tuner-check', 'aria-hidden': 'true' }, '✓'))));
-      const box = h('div', { class: 'tuner' }, gauge, note, detail, live, meter, chips);
+      // Another input restarts the listening with the same reader.
+      let frameNow = null;
+      const input = micPicker(async () => {
+        const me = tuner;
+        if (!me || !frameNow) return;
+        try { if (await A.listen(frameNow) && tuner === me) { say('Listening. Play one string and let it ring.'); input.fill(); } }
+        catch (e) { if (tuner === me) start.click(); say(micError(e)); }
+      });
+      // What the tuner shows, and what you tap. They sit side by side on a wide screen and on a phone held sideways.
+      const act = h('div', { class: 'tuner-act' }, input.el, chips);
+      const box = h('div', { class: 'tuner' }, h('div', { class: 'tuner-read' }, gauge, note, detail, live, meter), act);
       let spoken = '';
       const tell = (key, text) => { if (key !== spoken) { spoken = key; live.textContent = text; } };
       const say = (text, key = text) => { detail.textContent = text; tell(key, text); };
@@ -1084,7 +1125,7 @@
           quiet = 0;
           last.push(f); if (last.length > 5) last.shift();
           const hz = last.slice().sort((a, b) => a - b)[last.length >> 1];
-          const exact = 69 + 12 * Math.log2(hz / 440), midi = Math.round(exact);
+          const exact = 69 + 12 * Math.log2(hz / GT.a4()), midi = Math.round(exact);
           // The nearest string of your tuning. Near a string, the needle shows how far you are from it.
           // Far from every string, it shows the nearest note, for a fretted note or another tuning.
           const s = strings.reduce((k, m, i) => Math.abs(exact - m) < Math.abs(exact - strings[k]) ? i : k, 0);
@@ -1103,8 +1144,10 @@
             near ? `${s}:${good ? 'in' : off < 0 ? 'low' : 'high'}` : `${midi}:${Math.abs(cents) <= 5}`);
         };
         try {
+          frameNow = frame;
           if (!await A.listen(frame) || tuner !== me) return;
           box.classList.add('is-on');
+          input.fill();
           say('Listening. Play one string and let it ring.');
         } catch (e) {
           if (tuner === me) tuner = null;
@@ -1113,11 +1156,11 @@
           say(micError(e));
         }
       } }, 'Start the tuner');
-      box.append(start);
+      act.append(start);
       return [
-        head(TUNE.title, `Tune to ${strings.map(m => T.PC_PLAIN[T.mod(m)]).join(' ')}, the tuning of Settings.`),
+        head(TUNE.title, `Tune to ${strings.map(m => T.PC_PLAIN[T.mod(m)]).join(' ')}, the tuning of Settings${GT.a4() === 440 ? '' : `, with A at ${GT.a4()} Hz`}.`),
         box,
-        h('p', { class: 'small muted lib-note' }, 'Tap a string to hear its note. The tuner uses the microphone only while it is on, and nothing leaves this device. A capo does not change it: tune the open strings, then put the capo on.')
+        h('p', { class: 'small muted lib-note' }, 'Tap a string to hear its note. The tuner uses the microphone only while it is on, and nothing leaves this device. With a sound card or another input, choose it in the Input list that shows while the tuner is on. A capo does not change the tuner: tune the open strings, then put the capo on.')
       ];
     }
   };
@@ -1175,7 +1218,7 @@
             if (!v) return null;
             const markers = v.frets.map((f, i) => {
               const t = tones.find(x => x.pc === T.mod(openStrings()[v.strings[i]] + f));
-              return { string: v.strings[i], fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: FB.degreeKind(t.label) };
+              return { string: v.strings[i], fret: f, label: lib.labels === 'degrees' ? t.label : t.name, kind: FB.degreeKind(t.label) };
             });
             const midis = v.frets.map((f, i) => openStrings()[v.strings[i]] + f);
             const low = Math.min(...v.frets), high = Math.max(...v.frets);
@@ -1269,7 +1312,7 @@
         const dots = shape ? shape.frets.map((f, s) => {
           if (f === null) return null;
           const t = chordTones.find(x => x.pc === T.mod(openStrings()[s] + f));
-          return { string: s, fret: f, label: lib.labels === 'notes' ? t.name : t.label, kind: FB.degreeKind(t.label) };
+          return { string: s, fret: f, label: lib.labels === 'degrees' ? t.label : t.name, kind: FB.degreeKind(t.label) };
         }).filter(Boolean) : [];
         panel.replaceChildren(
           h('div', { class: 'chord-panel-text' },
@@ -1304,7 +1347,7 @@
             circle, circle.readout || null,
             h('p', { class: 'circle-note' }, lib.circleMode === 'intervals'
               ? `Each step clockwise is a perfect fifth, so the intervals from ${key} keep their places: P5 beside the key, TT at the bottom. Tap an interval to add its note, and tap it again to take it away. Three or more make the shape of a chord. Play plays them all again, and Clear starts over from ${key}. Tap a note name to make it the 1, or hold it to hear it.`
-              : 'Tap a key to turn the circle to it. Touch and hold a key, or right-click it, to hear its chord. The colored cells at the top are the seven chords of the key.')),
+              : 'Tap a key to turn the circle to it, and hold it to hear its chord. The colored cells are the seven chords of the key.')),
           h('div', { class: 'keys-main' },
             h('div', { class: 'lib-section' }, h('h2', null, 'Chords in the key'), strip, panel),
             h('div', { class: 'lib-section' }, h('h2', null, 'Outside the key'),
@@ -1575,7 +1618,7 @@
       let places = state.places.slice(), showAll = false;
       const tuning = openStrings();
       // Labels of this page: note names, degrees in the chord that was found, or intervals from the first note you tapped.
-      const mode = ['notes', 'degrees', 'intervals'].includes(lib.nameLabels) ? lib.nameLabels : lib.labels;
+      const mode = ['notes', 'degrees', 'intervals'].includes(lib.nameLabels) ? lib.nameLabels : lib.labels === 'degrees' ? 'degrees' : 'notes';
       const neckSlot = h('div'), result = h('div', { class: 'named', 'aria-live': 'polite' });
       const sorted = () => places.map(([s, f]) => ({ string: s, fret: f, midi: tuning[s] + f })).sort((a, b) => a.midi - b.midi);
       const row = (href, name, text, tag) => h('a', { class: 'found', href: '#/' + href }, h('span', { class: 'found-text' }, h('b', null, name), text ? h('small', null, text) : null), tag ? h('span', null, tag) : null);
@@ -1640,14 +1683,14 @@
         if (at >= 0) places.splice(at, 1); else { places.push([s, f]); A.note(midi, 0, 0, 0.55); }
         showAll = false;
         const href = nameView.link({ places });
-        history.replaceState(null, '', '#/' + href);
+        history.replaceState(history.state, '', '#/' + href);
         saveLib({ last: Object.assign({}, lib.last, { name: { href, title: LOOKUP.title } }) });
         draw();
         const again = neckSlot.querySelector(`.fb-pos[data-string="${s}"][data-fret="${f}"]`);
         if (again) again.focus({ preventScroll: true });
       }
       const play = h('button', { type: 'button', class: 'btn', onclick: () => A.notes(sorted().map(n => n.midi), 'strum') }, '▶ Play');
-      const clear = h('button', { type: 'button', class: 'btn', onclick: () => { places = []; history.replaceState(null, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
+      const clear = h('button', { type: 'button', class: 'btn', onclick: () => { places = []; history.replaceState(history.state, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
       draw();
       return [
         head(LOOKUP.title, 'Tap notes on the neck. The page names the chord, and the scales that hold the notes.', [play, clear]),
@@ -1764,6 +1807,8 @@
     title: s => s.part === 'count' ? s.lesson.name : s.pattern.name,
     render(state) {
       const partCtl = ctl('Show', GT.segmented('Rhythm page', [['strum', 'Strumming'], ['count', 'Counting']], state.part, v => GT.go(rhythmView.link(rhythmView.parse([v])), true)), 'ctl-plain');
+      // The switch between the two parts sits above the title, so it stays in its place when the title changes height.
+      const parts = h('div', { class: 'rhythm-parts' }, partCtl);
       // A tempo for both parts. It is the tempo of the play-along loops too.
       const out = h('output', null, `${tempo()} bpm`);
       const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); out.textContent = `${v} bpm`; };
@@ -1773,8 +1818,9 @@
       if (state.part === 'count') {
         const lesson = state.lesson;
         return [
+          parts,
           head(lesson.name, 'Counting rhythm'),
-          controls(partCtl,
+          controls(
             ctl('Lesson', h('div', { class: 'lesson-chips', role: 'group', 'aria-label': 'Lesson' }, R.LESSONS.map(l => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(l === lesson), onclick: () => GT.go(rhythmView.link({ part: 'count', lesson: l }), true) }, LESSON_SHORT[l.id]))), 'ctl-wide ctl-plain'),
             ctl('Tempo', tempoRow(), 'ctl-plain')),
           // The text and the bars stay together: a phone held sideways shows them first, as it shows a neck.
@@ -1797,12 +1843,15 @@
       strum.now = p;
       if (strum.resume) { strum.resume = false; if (A.startRhythm(strumLoop(false)) !== null) strum.on = true; }
       const playing = () => strum.on && A.rhythmRunning;
-      const toggle = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => {
+      // Two buttons, one at the top and one beside the tempo, far down the page on a phone. They show the same state.
+      const flip = () => {
         if (playing()) { A.stopRhythm(); strum.on = false; }
         else { A.silence(); stopBacking(); strum.on = A.startRhythm(strumLoop(true)) !== null; }
-        toggle.textContent = playing() ? '■ Stop' : '▶ Play';
+        for (const b of [toggle, toggle2]) b.textContent = playing() ? '■ Stop' : '▶ Play';
         if (!playing()) { grid.light(-1); notes.light(-1); }
-      } }, playing() ? '■ Stop' : '▶ Play');
+      };
+      const toggle = h('button', { type: 'button', class: 'btn btn-primary', onclick: flip }, playing() ? '■ Stop' : '▶ Play');
+      const toggle2 = h('button', { type: 'button', class: 'btn btn-primary strum-play2', onclick: flip }, playing() ? '■ Stop' : '▶ Play');
       const open = pattern => { strum.resume = playing(); GT.go(rhythmView.link({ part: 'strum', pattern }), true); };
       const pick = id => open(id === 'custom' ? customOf() : R.patternById(id));
       // A tap on a cell puts the picked stroke there. An edit of a ready pattern makes a new pattern of yours.
@@ -1857,8 +1906,9 @@
       const notes = R.notation(R.parse(asBar.bar), p.sig, { sig: true, count: true, label: `${p.name} in notes: ${asBar.bar}` });
       notes.lightSlot = i => { let k = i; while (k >= 0 && asBar.at[k] === undefined) k--; notes.light(k >= 0 ? asBar.at[k] : -1); };
       return [
+        parts,
         head(p.name, `Strumming in ${p.sig.join('/')}, ${p.sub === 4 ? 'sixteenths' : p.sub === 3 && R.compound(p.sig) ? 'eighths in two groups of three' : p.sub === 3 ? 'triplets' : 'eighths'}`, toggle),
-        controls(partCtl,
+        controls(
           ctl('Pattern', typePick('Pattern', STRUM_QUICK, STRUM_GROUPS, p.id, pick), 'ctl-wide ctl-plain'),
           mineCtl,
           p.mine ? ctl('Grid', h('div', { class: 'row strum-chords-pick' },
@@ -1870,7 +1920,7 @@
         h('div', { class: 'strum-stage' }, toolRow, grid, h('div', { class: 'strum-notes' }, notes),
           h('div', { class: 'strum-chords' }, list.map(name => h('b', { class: 'strum-chord' }, name)))),
         // The loop: chords, tempo and sound, under the grid.
-        section('Play along', null, controls(
+        section('Play along', null, h('div', { class: 'row' }, toggle2), controls(
           ctl('Chords', h('div', { class: 'strum-chords-edit' },
             h('div', { class: 'strum-chord-grid' }, [0, 1, 2, 3].map(chordSelect)),
             h('div', { class: 'strum-prog' }, progSelect, GT.segmented('Bars for each chord', [[1, '1 bar'], [2, '2 bars']], strumBars(), v => { saveLib({ strumBars: v }); rerender(); }))), 'ctl-wide ctl-plain'),
@@ -2079,7 +2129,7 @@
   }
 
   function render(main, parts) {
-    if (parts[0] === 'tune' || parts[0] === 'play') { history.replaceState(null, '', `#/tools/${parts[0]}`); GT.render(); return; }
+    if (parts[0] === 'tune' || parts[0] === 'play') { history.replaceState(history.state, '', `#/tools/${parts[0]}`); GT.render(); return; }
     main.replaceChildren();
     // The microphone is on only while the tuner is on the screen.
     stopTuner();

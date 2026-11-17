@@ -74,10 +74,10 @@
       const med = P.median(s.times);
       const recentMiss = (s.recent || []).slice(-3).includes(0);
       const kind = recentMiss || !med ? 'wrong' : med <= 2500 ? 'correct' : 'slow';
-      return { string, fret, kind, label: T.PC_PLAIN[T.mod(GT.tuning()[string] + fret)], title: `${secs(med)}, ${pct(s.ok, s.n)} right` };
+      return { string, fret, kind, label: T.PC_PLAIN[T.mod(GT.openStrings()[string] + fret)], title: `${secs(med)}, ${pct(s.ok, s.n)} right` };
     });
     const box = h('div', { class: 'neck' });
-    GT.fretboard.render(box, { from: 0, to: 15, tuning: GT.tuning(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true, label: 'Note speed map' });
+    GT.fretboard.render(box, { from: 0, to: 15, tuning: GT.openStrings(), capo: GT.capo(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, turn: true, label: 'Note speed map' });
     return h('section', { class: 'lib-section' }, h('h2', null, 'Note names: speed map'),
       h('p', null, 'Green: under 2.5 seconds. Yellow: slower. Red: missed in the last three answers. Positions you have not practiced stay empty.'), box);
   }
@@ -134,8 +134,17 @@
     })) : null;
     const capo = h('select', { 'aria-label': 'Capo' }, Array.from({ length: 10 }, (_, k) => h('option', { value: k, selected: k === (settings.capo || 0) }, k ? `Fret ${k}` : 'No capo')));
     capo.addEventListener('change', () => set({ capo: Number(capo.value) }));
+    const pitch = h('select', { 'aria-label': 'Pitch of A' }, [432, 435, 438, 440, 441, 442, 443, 444, 446].map(v => h('option', { value: v, selected: v === GT.a4() }, `${v} Hz`)));
+    pitch.addEventListener('change', () => { set({ a4: Number(pitch.value) }); A.note(69, 0, 1.2); });
     const preview = h('div', { class: 'neck' });
-    GT.fretboard.render(preview, { from: 0, to: 7, tuning: GT.tuning(), leftHanded: settings.leftHanded, orientation: settings.orientation, markers: [{ string: 1, fret: 3, kind: 'root', label: 'C' }, { string: 2, fret: 2, kind: 'third', label: 'E' }, { string: 4, fret: 1, kind: 'root', label: 'C' }], label: 'Preview' });
+    // The shape of an open G chord, on all six strings, with the notes it gives in your tuning and at your capo.
+    // The lowest note is the square.
+    const open = GT.openStrings(), low = open[0] + 3;
+    const shape = [[0, 3], [1, 2], [2, 0], [3, 0], [4, 0], [5, 3]].map(([string, fret]) => {
+      const semi = T.mod(open[string] + fret - low);
+      return { string, fret, kind: semi === 0 ? 'root' : semi === 3 || semi === 4 ? 'third' : semi === 7 ? 'fifth' : 'other', label: T.PC_PLAIN[T.mod(open[string] + fret)] };
+    });
+    GT.fretboard.render(preview, { from: 0, to: 7, tuning: open, capo: GT.capo(), leftHanded: settings.leftHanded, orientation: settings.orientation, markers: shape, label: 'Preview' });
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
     main.append(h('div', { class: 'settings' },
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Settings'), h('p', null, 'Saved in this browser. They apply to the library and to every drill.'))),
@@ -150,12 +159,14 @@
         D.field('Tuning', tuning),
         custom,
         D.field('Capo', capo),
-        h('p', { class: 'small muted' }, 'With a capo, the Library counts the frets from the capo, and the chords keep the names of their sound. The drills ignore the capo.'),
-        preview),
+        preview,
+        h('p', { class: 'small muted' }, 'With a capo, the open strings sound at the capo, in the Library and in the drills. The colored bar on a neck is the capo, and the fret numbers still count from the nut. Chords keep the names of their sound. The tuner and the CAGED drill ignore the capo.')),
       block('Sound',
         D.field('Sound', GT.segmented('Sound', [[false, 'On'], [true, 'Off']], !!settings.muted, v => set({ muted: v }))),
         D.field('Voice', GT.segmented('Voice', [['pluck', 'Plucked string'], ['soft', 'Soft tone']], settings.voice, v => { set({ voice: v }); A.notes([48, 52, 55, 60], 'strum'); })),
         D.field('Volume', volume),
+        D.field('Pitch of A', pitch),
+        h('p', { class: 'small muted' }, 'The pitch that the tuner, the listening drill and the sounds of the site take for the note A. Most music uses 440 Hz. Slow down does not change the pitch of a song.'),
         h('div', null, h('button', { type: 'button', class: 'btn', disabled: !!settings.muted, onclick: () => A.notes([40, 47, 52, 56, 59, 64], 'strum') }, '▶ Test sound'))),
       block('Practice',
         D.field('Daily goal', GT.segmented('Daily goal', [[5, '5 min'], [10, '10 min'], [15, '15 min'], [20, '20 min']], settings.goal || 10, v => set({ goal: v }))),

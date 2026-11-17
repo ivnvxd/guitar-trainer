@@ -27,7 +27,7 @@
   }
   // The guitar position closest to the root for the second note.
   function guitarPlace(midi, near) {
-    const t = GT.tuning();
+    const t = GT.openStrings();
     let best = null;
     for (let s = 0; s < 6; s++) {
       const f = midi - t[s];
@@ -37,7 +37,7 @@
     }
     return best;
   }
-  const where = p => `${FB.ordinal(6 - p.string)} string, ${p.fret === 0 ? 'open' : 'fret ' + p.fret}`;
+  const where = p => `${FB.ordinal(6 - p.string)} string, ${p.fret === 0 ? (GT.capo() ? 'at the capo' : 'open') : 'fret ' + (p.fret + GT.capo())}`;
   const songFor = (semi, dir) => dir === 'harmonic' ? null : (T.INTERVAL_SONGS[semi] || {})[dir] || null;
   // Your answer, then the right one, on the same first note.
   function compareIntervals(q, chosenSemi, times = 1) {
@@ -82,7 +82,7 @@
       const q = { semi, dir, root: rootMidi, target: dir === 'down' ? rootMidi - semi : rootMidi + semi, mode: c.mode };
       if (c.mode === 'guitar') {
         // Place the first note so that the second one is on the same part of the neck.
-        const t = GT.tuning();
+        const t = GT.openStrings();
         for (let tries = 0; tries < 40; tries++) {
           const string = randInt(0, 4), fret = q.root - t[string];
           if (fret < 0 || fret > 12) { q.root = dir === 'down' ? randInt(55, 69) : randInt(45, 60); q.target = dir === 'down' ? q.root - semi : q.root + semi; continue; }
@@ -153,7 +153,7 @@
       const place2 = q.mode === 'guitar' && correct ? null : guitarPlace(q.target, place1);
       const markers = [{ string: place1.string, fret: place1.fret, kind: 'root', label: a }];
       if (q.mode === 'guitar') {
-        const t = GT.tuning();
+        const t = GT.openStrings();
         if (!correct) {
           for (let s = 0; s < 6; s++) { const f = q.target - t[s]; if (f >= q.from && f <= q.to && !(s === place1.string && f === place1.fret)) markers.push({ string: s, fret: f, kind: 'correct', label: b }); }
           const given = Number(v);
@@ -331,62 +331,75 @@
 
   // ---------- progressions ----------
   const NUMERAL_STAGES = [['I', 'IV', 'V'], ['vi'], ['ii'], ['iii']];
-  const NUMERAL_DEGREE = { I: 0, ii: 1, iii: 2, IV: 3, V: 4, vi: 5 };
+  // The chords of the drill, by the step of the scale they stand on. Your set holds the names of the major key.
+  // In a minor key each one stands for the chord in the same place of the list: i, iv and v first, then ♭VI,
+  // ♭VII and ♭III. The names are those of the Keys page.
+  const NUMERAL_DEGREE = { I: 0, ii: 1, iii: 2, IV: 3, V: 4, vi: 5, i: 0, '♭III': 2, iv: 3, v: 4, '♭VI': 5, '♭VII': 6 };
+  const MAJOR_NUMERALS = ['I', 'ii', 'iii', 'IV', 'V', 'vi'];
+  const IN_MINOR = { I: 'i', ii: '♭VII', iii: '♭III', IV: 'iv', V: 'v', vi: '♭VI' };
+  const numeralIn = (n, c) => c.key === 'minor' ? IN_MINOR[n] : n;
+  const modeOf = numerals => numerals[0] === 'i' ? 'minor' : 'major';
+  // The name of a key: a minor key is spelled as on the circle of fifths (C♯ minor, not D♭ minor).
+  const keyName = (keyPc, mode) => mode === 'minor' ? T.CIRCLE.find(e => T.pcOf(e.minor) === keyPc).minor : KEY_NAMES[keyPc];
   function progressionChords(keyPc, numerals) {
-    const major = T.scaleById('major').toneList;
+    const scale = T.scaleById(modeOf(numerals)).toneList;
     let v = null;
     return numerals.map(n => {
       const d = NUMERAL_DEGREE[n];
-      const pcs = [0, 2, 4].map(k => T.mod(keyPc + major[(d + k) % 7].semi));
+      const pcs = [0, 2, 4].map(k => T.mod(keyPc + scale[(d + k) % 7].semi));
       v = T.voiceLead(pcs, v, 52, 72);
       return [A.bass(pcs[0])].concat(v);
     });
   }
+  const listed = k => k === 2 ? '2 and 3' : '2, 3 and 4';
   D.add({
     id: 'ear-progressions', track: 'ear',
     title: 'Progressions by ear',
-    blurb: 'Four chords in a key. The first is I. Name the other three.',
+    blurb: 'Three or four chords in a key. The first is the chord of the key. Name the others.',
     hint: 'Follow the bass note, and feel whether each chord moves away from home or back.',
     help: [
-      'Four chords play in a major key. The first chord is always I. Name chords 2, 3 and 4 with the buttons or the number keys, in order. Backspace removes the last one.',
+      'Four chords play in a key, or three if you choose that in Options. The first chord is always the chord of the key: I in a major key, i in a minor key. Name the other chords with the buttons or the number keys, in order. Backspace removes the last one.',
       'Start with I, IV and V. Then vi, ii and iii join. The key changes every question.',
+      'Options have minor keys and a shorter question of three chords. A minor key starts with i, iv and v. Then ♭VI, ♭VII and ♭III join.',
       'Tip: V pulls back to I. IV sounds open, a step away from home. vi sounds like a sad relative of I.'
     ],
-    defaults: { auto: true, set: ['I', 'IV', 'V'] },
+    defaults: { auto: true, set: ['I', 'IV', 'V'], key: 'major', count: 4 },
     stages: NUMERAL_STAGES,
     fastMs: 12000,
     advanceMs: 1600,
-    numerals(c) { return Object.keys(NUMERAL_DEGREE).filter(n => c.set.includes(n)); },
+    numerals(c) { return MAJOR_NUMERALS.filter(n => c.set.includes(n)).map(n => numeralIn(n, c)); },
     pool(c) {
-      const nums = this.numerals(c), out = [];
-      const walk = (seq) => { if (seq.length === 4) { out.push(seq.join('-')); return; } for (const n of nums) if (n !== seq[seq.length - 1]) walk(seq.concat(n)); };
-      walk(['I']);
+      const nums = this.numerals(c), out = [], count = c.count === 3 ? 3 : 4;
+      const walk = (seq) => { if (seq.length === count) { out.push(seq.join('-')); return; } for (const n of nums) if (n !== seq[seq.length - 1]) walk(seq.concat(n)); };
+      walk([numeralIn('I', c)]);
       return out;
     },
-    unlockText(added) { return `New chords added: ${added.join(', ')}.`; },
+    unlockText(added, c) { return `New chords added: ${added.map(n => c ? numeralIn(n, c) : n).join(', ')}.`; },
     itemName: item => item.replace(/-/g, ' '),
     make(item) {
       const keyPc = randInt(0, 11);
-      const numerals = item.split('-');
-      return { keyPc, numerals, chords: progressionChords(keyPc, numerals), entered: [] };
+      const numerals = item.split('-'), mode = modeOf(numerals);
+      return { keyPc, mode, numerals, chords: progressionChords(keyPc, numerals), entered: [] };
     },
     render(q, ui) {
-      ui.title('Name chords 2, 3 and 4');
-      ui.sub(`Key of ${KEY_NAMES[q.keyPc]} major. The first chord is I.`);
+      const rest = q.numerals.length - 1, first = q.numerals[0];
+      const inKey = T.diatonic(keyName(q.keyPc, q.mode), q.mode);
+      ui.title(`Name chords ${listed(rest)}`);
+      ui.sub(`Key of ${keyName(q.keyPc, q.mode)} ${q.mode}. The first chord is ${first}.`);
       ui.actions([['▶ Replay', () => ui.play(), 'R']]);
       ui.noChoices();
       const slots = h('div', { class: 'chips slots' });
       const nums = this.numerals(ui.config);
-      const drawSlots = () => slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', 'aria-current': String(i === q.entered.length + 1) }, i === 0 ? 'I' : (q.entered[i - 1] || '?'))));
+      const drawSlots = () => slots.replaceChildren(...q.numerals.map((n, i) => h('span', { class: 'chip', 'aria-current': String(i === q.entered.length + 1) }, i === 0 ? first : (q.entered[i - 1] || '?'))));
       const add = n => {
-        if (q.done || q.entered.length >= 3) return;
+        if (q.done || q.entered.length >= rest) return;
         q.entered.push(n); drawSlots();
-        if (q.entered.length === 3) { q.done = true; ui.submit(['I'].concat(q.entered).join('-')); }
+        if (q.entered.length === rest) { q.done = true; ui.submit([first].concat(q.entered).join('-')); }
       };
       q.add = add;
       q.back = () => { if (!q.done) { q.entered.pop(); drawSlots(); } };
       drawSlots();
-      const tiles = h('div', { class: 'answers' }, nums.map((n, i) => h('button', { type: 'button', class: 'answer', onclick: () => add(n) }, h('b', null, n), h('span', null, T.diatonic(KEY_NAMES[q.keyPc])[NUMERAL_DEGREE[n]].name), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
+      const tiles = h('div', { class: 'answers' }, nums.map((n, i) => h('button', { type: 'button', class: 'answer', onclick: () => add(n) }, h('b', null, n), h('span', null, inKey[NUMERAL_DEGREE[n]].name), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
       ui.board.replaceChildren(slots, tiles,
         h('button', { type: 'button', class: 'btn', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
       ui.even(tiles);
@@ -400,7 +413,8 @@
     play(q) { if (!q) return 0; return A.chordSequence(q.chords, 96, 2); },
     check: (q, v) => v === q.numerals.join('-'),
     feedback(q, v, correct, ui) {
-      const chordNames = q.numerals.map(n => T.diatonic(KEY_NAMES[q.keyPc])[NUMERAL_DEGREE[n]].name);
+      const inKey = T.diatonic(keyName(q.keyPc, q.mode), q.mode);
+      const chordNames = q.numerals.map(n => inKey[NUMERAL_DEGREE[n]].name);
       const given = String(v).split('-');
       ui.board.querySelectorAll('.answer').forEach(b => { b.disabled = true; });
       const slots = ui.board.querySelector('.chips');
@@ -412,8 +426,10 @@
     },
     options(c, set) {
       return h('div', { class: 'opts' },
-        D.pickset('Chords', Object.keys(NUMERAL_DEGREE).map(n => ({ value: n, main: n })), c.set, v => set({ set: v.includes('I') ? v : ['I'].concat(v) }), 2),
-        D.autoRow(this, c, set, 'chords'));
+        D.field('Key', GT.segmented('Key', [['major', 'Major'], ['minor', 'Minor']], c.key === 'minor' ? 'minor' : 'major', v => set({ key: v }))),
+        D.field('Length', GT.segmented('Length', [[3, '3 chords'], [4, '4 chords']], c.count === 3 ? 3 : 4, v => set({ count: v }))),
+        D.pickset('Chords', MAJOR_NUMERALS.map(n => ({ value: n, main: numeralIn(n, c) })), c.set, v => set({ set: v.includes('I') ? v : ['I'].concat(v) }), 2),
+        D.autoRow(this, c, set, 'chords', n => numeralIn(n, c)));
     }
   });
 })(window);

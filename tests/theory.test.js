@@ -373,4 +373,35 @@ for (const rate of [48000, 44100]) for (const hz of [82.41, 110, 146.83, 196, 24
 }
 eq(T.pitchOf(new Float32Array(4096), 48000), null, 'silence has no pitch');
 
+// Fingers of a scale position
+{
+  const row = (map, notes) => [0, 1, 2, 3, 4, 5].map(s => notes.filter(n => n.string === s).sort((a, b) => a.fret - b.fret).map(n => map.get(`${n.string}:${n.fret}`) || 0).join('')).join(' ');
+  const box = (root, id, low) => T.boxes(root, T.scaleById(id), T.STANDARD, 15).find(p => p.low === low);
+  let p = box('A', 'minor-pentatonic', 5);
+  eq(row(T.scaleFingers(p.notes), p.notes), '14 13 13 13 14 14', 'A minor pentatonic, frets 5 to 8: one finger for each fret');
+  p = box('A', 'minor-pentatonic', 0);
+  eq(row(T.scaleFingers(p.notes), p.notes), '03 03 02 02 13 03', 'open position: the finger has the number of the fret, an open string has none');
+  p = box('A', 'blues', 5);
+  eq(row(T.scaleFingers(p.notes), p.notes), '14 123 13 134 14 14', 'A blues, frets 5 to 8');
+  // Three notes on a string: 1 and 4 at the ends, the middle finger by the gap.
+  const nps = [{ string: 0, fret: 3 }, { string: 0, fret: 5 }, { string: 0, fret: 7 }, { string: 1, fret: 3 }, { string: 1, fret: 5 }, { string: 1, fret: 7 }, { string: 2, fret: 4 }, { string: 2, fret: 5 }, { string: 2, fret: 7 }, { string: 3, fret: 4 }, { string: 3, fret: 6 }, { string: 3, fret: 7 }];
+  eq(row(T.scaleFingers(nps, true), nps), '124 124 124 134  ', 'three notes on a string');
+  // Every box of every scale: a finger for each fretted note, 1 to 4, never the same finger twice on one string, or no numbers at all.
+  let sure = 0, unsure = 0;
+  for (const sc of T.SCALES) for (const r of T.ROOTS) for (const three of [false, true]) {
+    if (three && sc.toneList.length !== 7) continue;
+    for (const pos of (three ? T.positions : T.boxes)(r, sc, T.STANDARD, 15)) {
+      const map = T.scaleFingers(pos.notes, three);
+      if (!map) { unsure++; continue; }
+      sure++;
+      for (const n of pos.notes) {
+        const f = map.get(`${n.string}:${n.fret}`);
+        if (n.fret === 0) ok(f === undefined, 'an open string has no finger'); else ok(f >= 1 && f <= 4, `${r} ${sc.id} position ${pos.index}: finger ${f} at fret ${n.fret}`);
+      }
+      for (let s = 0; s < 6; s++) { const used = pos.notes.filter(n => n.string === s && n.fret > 0).map(n => map.get(`${n.string}:${n.fret}`)); eq(new Set(used).size, used.length, `${r} ${sc.id} position ${pos.index}: one finger for each note of string ${s}`); }
+    }
+  }
+  ok(sure > unsure * 3, `most positions have fingers (${sure} with, ${unsure} without)`);
+}
+
 console.log(`theory: ${checks} checks passed`);

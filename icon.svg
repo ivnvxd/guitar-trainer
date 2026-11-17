@@ -2,13 +2,13 @@
   <!-- An open C chord as a chord chart: the nut on top, the low E string on the left. The two C notes are squares, as roots are on the neck. -->
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#94e2d5"/>
-      <stop offset=".55" stop-color="#b4befe"/>
-      <stop offset="1" stop-color="#cba6f7"/>
+      <stop offset="0" stop-color="#ffc84f"/>
+      <stop offset=".55" stop-color="#ff8f3d"/>
+      <stop offset="1" stop-color="#ff6b3d"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="112" fill="url(#g)"/>
-  <g stroke="#11111b" stroke-linecap="round">
+  <g stroke="#1c1005" stroke-linecap="round">
     <path d="M104 132H408" stroke-width="24"/>
     <path d="M108 226H404M108 320H404M108 414H404" stroke-width="8" opacity=".45"/>
     <g opacity=".65">
@@ -20,7 +20,7 @@
       <path d="M396 132V414" stroke-width="6"/>
     </g>
   </g>
-  <g fill="#11111b">
+  <g fill="#1c1005">
     <rect x="138" y="333" width="68" height="68" rx="19"/>
     <circle cx="228" cy="273" r="35"/>
     <rect x="306" y="145" width="68" height="68" rx="19"/>

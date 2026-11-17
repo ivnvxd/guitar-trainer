@@ -40,12 +40,13 @@
     help: [
       'Mixed questions about the circle of fifths: the V and IV of a key, the relative minor, the number of sharps or flats, and the key that has a given signature.',
       'V is one step clockwise, IV one step counterclockwise. Each step clockwise adds a sharp or removes a flat. The relative minor is three semitones below.',
+      'Options let you choose the keys, for example the keys with up to two sharps or flats first.',
       'The Library has the circle under Keys.'
     ],
-    defaults: { types: ['V', 'IV', 'rel', 'sig', 'from'] },
+    defaults: { types: ['V', 'IV', 'rel', 'sig', 'from'], keys: MAJORS.slice() },
     fastMs: 3500,
     autoPlay: false,
-    pool: c => c.types.flatMap(t => MAJORS.map(k => `${t}:${k}`)),
+    pool: c => c.types.flatMap(t => MAJORS.filter(k => c.keys.includes(k)).map(k => `${t}:${k}`)),
     itemName: item => { const [t, k] = item.split(':'); return FACTS[t].ask(k).replace('?', ''); },
     make(item) { const [type, key] = item.split(':'); return { type, key, answer: FACTS[type].answer(key) }; },
     render(q, ui) {
@@ -60,7 +61,9 @@
       return { text: ex, actions: [['Open on the circle', () => GT.go(`library/keys/${GT.rootSlug(q.key)}/major`)]] };
     },
     options(c, set) {
-      return D.pickset('Questions', Object.entries(FACTS).map(([id, f]) => ({ value: id, main: f.name })), c.types, v => set({ types: v }));
+      return h('div', { class: 'opts' },
+        D.pickset('Questions', Object.entries(FACTS).map(([id, f]) => ({ value: id, main: f.name })), c.types, v => set({ types: v })),
+        D.pickset('Keys', MAJORS.map(k => ({ value: k, main: k, sub: sigText(entryOf(k).count) })), c.keys, v => set({ keys: v })));
     }
   });
 
@@ -73,12 +76,13 @@
     hint: 'The quality follows the number: ii, iii and vi are minor in a major key.',
     help: [
       'You see a key and a chord number. Choose the root of that chord. The quality is fixed by the number, so the answer shows it too.',
-      'In major keys: I, IV and V are major. ii, iii and vi are minor. vii° is diminished. Minor keys are off by default. Turn them on in Options.'
+      'In major keys: I, IV and V are major. ii, iii and vi are minor. vii° is diminished. Minor keys are off by default. Turn them on in Options. You can also choose the keys there: a key brings its relative minor.'
     ],
-    defaults: { modes: ['major'], degrees: [1, 2, 3, 4, 5, 6, 7] },
+    defaults: { modes: ['major'], degrees: [1, 2, 3, 4, 5, 6, 7], keys: MAJORS.slice() },
     fastMs: 3500,
     autoPlay: false,
-    pool: c => c.modes.flatMap(m => (m === 'major' ? MAJORS : MINORS).flatMap(k => c.degrees.map(d => `${m}:${k}:${d}`))),
+    // A chosen key brings its relative minor: C brings A minor.
+    pool: c => c.modes.flatMap(m => T.CIRCLE.filter(e => c.keys.includes(e.major)).map(e => m === 'major' ? e.major : e.minor).flatMap(k => c.degrees.map(d => `${m}:${k}:${d}`))),
     itemName: item => { const [m, k, d] = item.split(':'); return `${ROMANS[m][d - 1]} in ${k}${m === 'minor' ? 'm' : ''}`; },
     make(item) {
       const [mode, key, d] = item.split(':');
@@ -103,7 +107,8 @@
     },
     options(c, set) {
       return h('div', { class: 'opts' },
-        D.pickset('Keys', [{ value: 'major', main: 'Major keys' }, { value: 'minor', main: 'Minor keys' }], c.modes, v => set({ modes: v })),
+        D.pickset('Major or minor', [{ value: 'major', main: 'Major keys' }, { value: 'minor', main: 'Minor keys' }], c.modes, v => set({ modes: v })),
+        D.pickset('Keys, each with its relative minor', T.CIRCLE.map(e => ({ value: e.major, main: e.major, sub: `/ ${e.minor}m` })), c.keys, v => set({ keys: v })),
         D.pickset('Chord numbers', [1, 2, 3, 4, 5, 6, 7].map(d => ({ value: d, main: ROMANS.major[d - 1], sub: `/ ${ROMANS.minor[d - 1]}` })), c.degrees, v => set({ degrees: v })));
     }
   });
