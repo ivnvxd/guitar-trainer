@@ -34,11 +34,14 @@
     exportAll() {
       const data = {};
       for (const k of store.keys()) data[k] = store.get(k);
+      // The key of a download service is a secret: it does not go into a file.
+      if (data.settings) delete data.settings.dlKey;
       return { app: 'guitar-trainer', version: 1, saved: new Date().toISOString(), data };
     },
     importAll(json) {
       if (!json || json.app !== 'guitar-trainer' || typeof json.data !== 'object') throw new Error('This file is not a progress file from this site.');
-      for (const [k, v] of Object.entries(json.data)) store.set(k, v);
+      const key = (store.get('settings', {}) || {}).dlKey;
+      for (const [k, v] of Object.entries(json.data)) store.set(k, k === 'settings' && key ? Object.assign({}, v, { dlKey: key }) : v);
     }
   };
 

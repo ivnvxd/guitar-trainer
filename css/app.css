@@ -1287,10 +1287,18 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-source { display: grid; gap: 10px; }
 /* With a song open, the box to open another one folds into one button. */
 .player-fold > summary { display: none; }
-.player-fold.is-folded > summary { display: inline-flex; list-style: none; cursor: pointer; }
-.player-fold > summary::-webkit-details-marker { display: none; }
-.player-fold.is-folded { margin-top: 12px; }
-.player-fold.is-folded[open] > summary { margin-bottom: 4px; }
+/* With a song open, the title of the page goes and the box to open a song is behind the "Other song" button. */
+.player-page.has-song > .lib-title { display: none; }
+.player-page.has-song > .player-now { margin-top: 12px; }
+.player-fold.is-folded > .controls { margin-top: 4px; }
+.player-recent { display: grid; gap: 6px; }
+.player-recent:empty { display: none; }
+.player-recent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.player-recent-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; max-height: 260px; overflow-y: auto; }
+.player-recent-list li { display: flex; gap: 6px; align-items: center; }
+.player-recent-list .player-mark { justify-content: space-between; }
+.player-recent-list .player-mark b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-recent-list .player-mark-t { flex: none; font-size: 13px; font-weight: 400; }
 .player-fold.is-folded:not([open]) + .player-say:empty { min-height: 0; margin: 0; }
 /* The dock while Play is off the screen. */
 .player-dock { padding: 6px; gap: 6px; }
@@ -1299,19 +1307,43 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-blocked { display: grid; gap: 12px; justify-items: start; }
 .player-blocked p { margin: 0; }
 .player-open { gap: 8px 10px; align-items: center; }
-.player-link { flex: 1 1 220px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
+.player-link { flex: 1 1 140px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
 .player-rec-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .player-rec-list li { display: flex; gap: 4px; }
 .player-say { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
-.player-now { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 6px 0 8px; font-size: 16px; }
+.player-now { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; font-size: 16px; }
+.player-now:empty { display: none; }
+.player-now .player-name { flex: 1 1 0; }
+.player-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; margin: 12px 0 0; }
+.player-tabs + .player-controls { margin-top: 8px; }
+.player-tap { min-width: 96px; min-height: 48px; }
 .player-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-media { display: grid; gap: 10px; }
 .player-yt iframe { display: block; width: 100%; height: auto; max-height: 60vh; aspect-ratio: 16 / 9; border: 0; border-radius: var(--radius-sm); }
 .player-video { display: block; width: 100%; max-height: 50vh; border-radius: var(--radius-sm); background: #000; }
-.player-wave { display: block; width: 100%; height: 76px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid transparent; touch-action: pan-y; cursor: pointer;
-  --wave: var(--line-strong); --wave-played: var(--accent); --wave-loop: var(--accent-soft-2); --wave-mark: var(--seventh); --wave-head: var(--text); }
+/* The waveform and, under it, the strip with the whole song. The colors of both drawings are set here. */
+.player-wave, .player-over { display: block; width: 100%; border-radius: var(--radius-sm); background: var(--surface); touch-action: pan-y; cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  --wave-wave: var(--line-hover); --wave-played: var(--accent); --wave-loop: var(--accent-soft-2); --wave-mark: var(--seventh); --wave-head: var(--text);
+  --wave-edge: var(--accent); --wave-ink: var(--accent-ink); --wave-text: var(--muted); --wave-box: color-mix(in srgb, var(--surface) 68%, transparent); }
+.player-wave { height: 138px; }
+.player-zoom { display: flex; align-items: center; gap: 6px; }
+.player-over { flex: 1 1 0; min-width: 0; height: 36px; }
+.player-zoom .btn { min-height: 36px; font-size: 16px; }
+.player-zoom .btn-icon { width: 36px; }
+.player-fit { min-width: 56px; padding: 6px 10px; font-size: 14px; }
+/* The notes at the playhead: twelve cells, one for each note name, so the row never changes its width. */
+.player-live { display: grid; gap: 8px; }
+.player-live > p { margin: 0; }
+.player-pcs { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+.player-pc { display: grid; place-items: center; min-width: 0; height: 32px; border-radius: 8px; background: var(--surface); color: var(--faint); font-size: 13px; font-weight: 600; }
+.player-pc.is-on { background: var(--accent); background: color-mix(in srgb, var(--accent) calc(var(--s, 1) * 100%), var(--surface-2)); color: var(--accent-ink); }
+.player-pc.is-bass { box-shadow: inset 0 0 0 2px var(--text); }
+.player-live-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; }
+.player-chord { font-size: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-chord b { font-weight: 700; }
+.player-neck { margin: 0; }
 .player-seek { width: 100%; accent-color: var(--accent); }
-.player-transport { gap: 8px; align-items: center; margin: 10px 0 12px; }
+.player-transport { gap: 8px; align-items: center; margin: 4px 0; }
 .player-play { min-width: 104px; }
 .player-time { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 14px; }
 .player-controls { display: grid; gap: 14px; }
@@ -1320,15 +1352,29 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-field input[type="range"] { flex: 1 1 150px; min-width: 0; accent-color: var(--accent); }
 .player-rate { min-width: 3.4em; font-weight: 700; font-variant-numeric: tabular-nums; }
 .player-chips { gap: 6px; }
-.player-cents { display: flex; align-items: center; gap: 8px; flex: 1 1 100%; font-size: 13px; color: var(--muted); }
-.player-cents span { min-width: 5.5em; font-variant-numeric: tabular-nums; }
-.player-marks { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.player-key { min-width: 7.5em; text-align: center; }
+/* The loop: each end has its time between a minus and a plus. */
+.player-edges { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.player-edge { display: flex; gap: 3px; }
+.player-edge-set { min-width: 96px; padding: 8px 10px; font-variant-numeric: tabular-nums; }
+.player-loop .player-chips .btn-icon { font-size: 15px; }
+.player-gap { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line-strong); }
+.player-hint { flex: 1 1 100%; margin: 0; }
+.player-reset { justify-content: flex-end; }
+.player-marks { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1 1 100%; }
+.player-marks .player-mark b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-marks li { display: flex; gap: 6px; align-items: center; }
 .player-mark { flex: 1; justify-content: flex-start; gap: 10px; min-width: 0; }
 .player-mark-t { color: var(--muted); font-variant-numeric: tabular-nums; }
-.player-notes .neck { margin-top: 8px; }
-@media (max-width: 560px) { .player-label { flex-basis: 100%; } }
-@media (max-width: 380px) { .player-filter { display: grid; grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) {
+  .player-label { flex-basis: 100%; }
+  .player-wave { height: 110px; }
+  .player-tabs { margin-top: 6px; }
+  /* Both ends of the loop on one line of a phone. */
+  .player-edges { gap: 8px; flex-wrap: nowrap; }
+  .player-edge .btn-icon { width: 34px; }
+  .player-edge-set { min-width: 82px; padding: 8px 6px; }
+}
 
 /* The Tools tab: three cards in a row. */
 .tool-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }

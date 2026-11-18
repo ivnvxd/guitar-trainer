@@ -1,7 +1,7 @@
 {
   "id": "./",
   "name": "Guitar Trainer",
-  "short_name": "Guitar",
+  "short_name": "Guitar Trainer",
   "description": "Guitar theory on the neck: notes, intervals, scales, chords, triads and keys, with ear training and fretboard drills.",
   "start_url": "./",
   "scope": "./",

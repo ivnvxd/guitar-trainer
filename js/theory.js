@@ -914,6 +914,35 @@
     return out;
   }
 
+  // How strong each of the twelve note names is in a short stretch of a recording, over all octaves from 70 Hz to
+  // 2000 Hz. Unlike notesAt it does not choose notes, so a loud voice or bass does not hide the chord under it.
+  function chroma(samples, rate) {
+    const out = new Float64Array(12);
+    let n = 1;
+    while (n * 2 <= Math.min(samples.length, 16384)) n *= 2;
+    if (n < 2048) return out;
+    const re = new Float64Array(n), im = new Float64Array(n);
+    for (let i = 0; i < n; i++) re[i] = samples[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)));
+    fft(re, im);
+    for (let k = Math.ceil(70 * n / rate); k < 2000 * n / rate && k < n / 2; k++) {
+      // A bin between two notes counts for neither. The square root keeps one loud note from ruling the sum.
+      const m = 69 + 12 * Math.log2(k * rate / n / 440), near = Math.round(m);
+      if (Math.abs(m - near) <= 0.35) out[mod(near)] += Math.sqrt(Math.hypot(re[k], im[k]));
+    }
+    return out;
+  }
+  // The major or minor chord that fits a chroma best: { root, minor, fit }, where fit is 0 to 1. null for silence.
+  function triadFrom(c) {
+    let all = 0, best = null;
+    for (let i = 0; i < 12; i++) all += c[i] * c[i];
+    if (!(all > 0)) return null;
+    for (let root = 0; root < 12; root++) for (const third of [4, 3]) {
+      const fit = (c[root] + c[(root + third) % 12] + c[(root + 7) % 12]) / Math.sqrt(3 * all);
+      if (!best || fit > best.fit) best = { root, minor: third === 3, fit };
+    }
+    return best;
+  }
+
   // Close voicing of chord tones near the previous chord, for smooth progressions (MIDI numbers).
   function voiceLead(pcs, prev, low = 52, high = 72) {
     const options = [];
@@ -936,7 +965,7 @@
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, outsideChords, keyOf, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes, SEQUENCES, sequence,
-    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, scaleFingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, scaleChords, parentMajor, modeInKey, voiceLead,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, scaleFingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, chroma, triadFrom, scaleChords, parentMajor, modeInKey, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };

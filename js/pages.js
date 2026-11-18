@@ -116,7 +116,7 @@
       file, status);
   }
 
-  function settingsPage(main) {
+  function settingsPage(main, rest) {
     const redraw = () => GT.render();
     // A change redraws the page. Keep the place on it.
     const set = patch => { const y = root.scrollY; GT.saveSettings(patch); redraw(); root.scrollTo(0, y); };
@@ -145,6 +145,12 @@
       return { string, fret, kind: semi === 0 ? 'root' : semi === 3 || semi === 4 ? 'third' : semi === 7 ? 'fifth' : 'other', label: T.PC_PLAIN[T.mod(open[string] + fret)] };
     });
     GT.fretboard.render(preview, { from: 0, to: 7, tuning: open, capo: GT.capo(), leftHanded: settings.leftHanded, orientation: settings.orientation, markers: shape, label: 'Preview' });
+    // The download service of Slow down is for the owner of a server, not for every visitor: its block shows at the
+    // address #settings/service, and after that for as long as an address or a key is set.
+    const service = (rest && rest[0] === 'service') || !!settings.dlUrl || !!settings.dlKey;
+    // No redraw: the fields keep their focus while you type.
+    const dlUrl = h('input', { type: 'url', class: 'player-link', value: settings.dlUrl || '', placeholder: 'https://…', 'aria-label': 'Address of the download service', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onchange: e => GT.saveSettings({ dlUrl: e.target.value.trim() }) });
+    const dlKey = h('input', { type: 'password', class: 'player-link', value: settings.dlKey || '', 'aria-label': 'Key of the download service', autocomplete: 'off', onchange: e => GT.saveSettings({ dlKey: e.target.value.trim() }) });
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
     main.append(h('div', { class: 'settings' },
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Settings'), h('p', null, 'Saved in this browser. They apply to the library and to every drill.'))),
@@ -173,8 +179,15 @@
         D.field('After a right answer', GT.segmented('After a right answer', [[true, 'Go on by itself'], [false, 'Wait for me']], settings.autoAdvance !== false, v => set({ autoAdvance: v }))),
         D.field('Count-in', GT.segmented('Count-in', [[true, 'One bar'], [false, 'Off']], settings.countIn !== false, v => set({ countIn: v }))),
         h('p', { class: 'small muted' }, 'One bar of clicks before a strumming pattern or a rhythm starts. Read mode of Tap in time always counts in: you need the tempo before the first note.')),
+      service && block('Download service',
+        h('p', { class: 'small muted' }, 'Optional, for Slow down. A YouTube video has only YouTube\'s own speeds. If you run the download service of this site on your own server, enter its address and key here. Slow down then gets a Download button, and a downloaded song gets every tool. The address and the key stay in this browser. The server gets the link of each video you download.'),
+        D.field('Address', dlUrl),
+        D.field('Key', dlKey),
+        h('p', { class: 'small muted' }, h('a', { href: `${REPO}/tree/main/server`, target: '_blank', rel: 'noopener' }, 'How to set up the service'))),
       block('About',
-        h('p', { class: 'muted' }, 'Everything runs in your browser. Nothing is sent anywhere, except that YouTube sees which video you open in Slow down. The sound is made by the browser, so the site works offline after the first visit.'),
+        h('p', { class: 'muted' }, service
+          ? 'Everything runs in your browser. Nothing is sent anywhere, with two exceptions in Slow down: YouTube sees which video you open, and a download service that you set above gets the link of each video you download. The sound is made by the browser, so the site works offline after the first visit.'
+          : 'Everything runs in your browser. Nothing is sent anywhere, except that YouTube sees which video you open in Slow down. The sound is made by the browser, so the site works offline after the first visit.'),
         h('p', { class: 'muted' }, 'Found a wrong note or a bug, or have an idea? Report it on GitHub. The code of the site is there too.'),
         h('div', { class: 'row about-links' },
           h('a', { class: 'btn', href: `${REPO}/issues/new`, target: '_blank', rel: 'noopener' }, 'Report a problem'),

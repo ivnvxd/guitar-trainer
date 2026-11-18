@@ -404,4 +404,14 @@ eq(T.pitchOf(new Float32Array(4096), 48000), null, 'silence has no pitch');
   ok(sure > unsure * 3, `most positions have fingers (${sure} with, ${unsure} without)`);
 }
 
+// The chord guess along a song: the pitch classes of a stretch of sound, and the triad that fits them best.
+{
+  const rate = 22050, tone = (midis, extra = []) => { const x = new Float32Array(8192); for (let i = 0; i < x.length; i++) { let v = 0; for (const m of midis) for (let k = 1; k <= 3; k++) v += Math.sin(2 * Math.PI * 440 * Math.pow(2, (m - 69) / 12) * k * i / rate) / (k * k); for (const [m, amp] of extra) v += amp * Math.sin(2 * Math.PI * 440 * Math.pow(2, (m - 69) / 12) * i / rate); x[i] = v * 0.1; } return x; };
+  const guess = x => { const c = T.triadFrom(T.chroma(x, rate)); return c && T.PC_PLAIN[c.root] + (c.minor ? 'm' : ''); };
+  assert.strictEqual(guess(tone([40, 47, 52, 56, 59, 64])), 'E', 'an open E chord reads as E'); checks++;
+  assert.strictEqual(guess(tone([45, 52, 57, 60, 64])), 'Am', 'an open A minor chord reads as Am'); checks++;
+  assert.strictEqual(guess(tone([43, 47, 50, 55, 59, 67], [[31, 3]])), 'G', 'a loud bass note under a G chord still reads as G'); checks++;
+  assert.strictEqual(T.triadFrom(T.chroma(new Float32Array(8192), rate)), null, 'silence has no chord'); checks++;
+}
+
 console.log(`theory: ${checks} checks passed`);

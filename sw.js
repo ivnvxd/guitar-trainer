@@ -5,7 +5,7 @@ const FILES = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest',
   'fonts/geist.woff2', 'fonts/literata-names.woff2', 'icon-maskable-512.png',
   'js/theory.js', 'js/rhythm.js', 'js/audio.js', 'js/fretboard.js', 'js/core.js', 'js/progress.js', 'js/library.js',
-  'js/player.js', 'js/vendor/signalsmith-stretch.js',
+  'js/player.js', 'js/drumcut.js', 'js/vendor/signalsmith-stretch.js',
   'js/train.js', 'js/drills-ear.js', 'js/drills-neck.js', 'js/drills-keys.js', 'js/drills-rhythm.js', 'js/tools.js', 'js/pages.js', 'js/app.js'
 ];
 self.addEventListener('install', event => {

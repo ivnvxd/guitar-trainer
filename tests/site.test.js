@@ -15,6 +15,6 @@ const files = sw.match(/const FILES = \[([\s\S]*?)\];/)[1];
 for (const [, src] of read('index.html').matchAll(/<script src="([^"]+)"/g)) { assert.ok(files.includes(`'${src}'`), `${src} is not in FILES of sw.js`); checks++; }
 
 // Files that a page loads later are in the offline cache too.
-for (const later of ['js/vendor/signalsmith-stretch.js', 'icon-maskable-512.png']) { assert.ok(files.includes(`'${later}'`), `${later} is not in FILES of sw.js`); checks++; }
+for (const later of ['js/vendor/signalsmith-stretch.js', 'js/drumcut.js', 'icon-maskable-512.png']) { assert.ok(files.includes(`'${later}'`), `${later} is not in FILES of sw.js`); checks++; }
 
 console.log(`site: ${checks} checks passed`);
