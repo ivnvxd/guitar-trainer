@@ -20,6 +20,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SITE_PORT = int(os.environ.get('GT_SITE_PORT', '8000'))
 KEY_FILE = os.path.join(HERE, 'local.key')
+# The top-level names of the site, as the publish command of the site copies them. '.' is the start page.
+PUBLIC = {'.', 'index.html', 'css', 'fonts', 'js', 'icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png',
+          'manifest.webmanifest', 'sw.js'}
 
 if not os.environ.get('GT_KEY'):
     if not os.path.exists(KEY_FILE):
@@ -35,9 +38,10 @@ import ytdl  # noqa: E402
 
 class Site(SimpleHTTPRequestHandler):
     def send_head(self):
-        # Only the files of the site: not this folder, which holds the key, and no hidden file such as .git.
+        # Only the files of the site, by name. Everything else gets 404: this folder, which holds the key, hidden
+        # files such as .git, and the same names in other letter case, which a Mac or Windows disk also opens.
         parts = os.path.relpath(os.path.realpath(self.translate_path(self.path)), os.path.realpath(ROOT)).split(os.sep)
-        if parts[0] in ('..', 'server') or any(part.startswith('.') and part != '.' for part in parts):
+        if parts[0] not in PUBLIC or any(part.startswith('.') for part in parts[1:]):
             self.send_error(404)
             return None
         return super().send_head()
