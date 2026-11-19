@@ -199,6 +199,8 @@
       block('Practice',
         D.field('Daily goal', GT.segmented('Daily goal', [[5, '5 min'], [10, '10 min'], [15, '15 min'], [20, '20 min']], settings.goal || 10, v => set({ goal: v }))),
         D.field('After a right answer', GT.segmented('After a right answer', [[true, 'Go on by itself'], [false, 'Wait for me']], settings.autoAdvance !== false, v => set({ autoAdvance: v }))),
+        D.field('Page after an answer', GT.segmented('Page after an answer', [[false, 'Stays'], [true, 'Moves to the answer']], settings.answerMove === true, v => set({ answerMove: v }))),
+        h('p', { class: 'small muted' }, 'Stays: the result and the Next button show under the answer buttons, and you scroll down for the picture of the answer. Moves: the page goes down to the whole answer, and comes back at the next question.'),
         D.field('Count-in', GT.segmented('Count-in', [[true, 'One bar'], [false, 'Off']], settings.countIn !== false, v => set({ countIn: v }))),
         h('p', { class: 'small muted' }, 'One bar of clicks before a strumming pattern or a rhythm starts. Read mode of Tap in time always counts in: you need the tempo before the first note.')),
       block('Download service',

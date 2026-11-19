@@ -1,6 +1,6 @@
 # Download service for Slow down
 
-Slow down can play a YouTube video only in YouTube's own frame, with six speeds and no other tools. This service gives the page the sound of a video as a file, so the song gets every tool. If you choose "With picture" beside the Download button, it also gives the picture, as a second small file without sound that the player shows in step with the sound. It is optional. The site works without it, and the public site has no such service.
+Slow down can play a YouTube video only in YouTube's own frame, with six speeds and no other tools. This service gives the page the sound of a video as a file, so the song gets every tool. If you choose "With picture" beside the Download button, it also gives the picture, as a second small file without sound. The player shows the picture in step with the sound. It is optional. The site works without it, and the public site has no such service.
 
 The service is one Python file with no packages to install. It runs `yt-dlp` on your computer or on your server, and it listens on that machine only (`127.0.0.1:8787`).
 
@@ -129,7 +129,7 @@ Run these commands as root on the server.
 
 7. On the site, open the address `https://guitar.ivnv.dev/#/settings/service`. In the "Download service" block of Settings, "Address and key" is then open. Enter the address (for example `https://ytdl.example.com`) and the key. They stay in that browser. In Slow down, a Download button now shows beside the YouTube link. Do this once in each browser that you use, for example on the phone and on the computer.
 
-8. Press "Test the connection" under the two fields. The test downloads nothing. It tells you which part is wrong: the address, the key, `GT_ORIGIN`, or a program that the server does not have.
+8. Press "Test the connection" under the two fields. The test downloads nothing. It tells you which part is wrong. This can be the address, the key, `GT_ORIGIN`, or a program that the server does not have.
 
 ### Update
 
@@ -152,12 +152,40 @@ The service reads these values from the environment. On a server they are in `/e
 | `GT_ORIGIN` | The address of the site that can ask. For more than one address, for example a preview of the site, put commas between them. | `https://guitar.ivnv.dev` |
 | `GT_PORT` | The port on the server. | `8787` |
 | `GT_YTDLP` | The `yt-dlp` program. | `yt-dlp` |
+| `GT_ARGS` | More options for `yt-dlp`, written as on a command line. See "YouTube asks to sign in". | none |
 
 A page on `http://localhost` can always ask, for tests.
 
+## YouTube asks to sign in
+
+A download can fail with the message "YouTube does not trust the address of the server". YouTube then answers `yt-dlp` with "Sign in to confirm you're not a bot". YouTube does this to some addresses, and the address of a server at a hosting company can be one of them. The service works, but YouTube does not let it in. There are three ways around it.
+
+1. Use a home connection. Start the service on your own computer with `python3 server/local.py`, as the first part of this file shows. To use it from a phone, the computer at home needs a public https address, for example through a tunnel. The way through a tunnel is not tested.
+
+2. Give `yt-dlp` the cookies of a YouTube account. The `yt-dlp` project warns that YouTube can ban such an account, for a time or for good. Use a spare account, not your own.
+
+   1. Open a private window in a browser and sign in to YouTube with the spare account.
+   2. In the same tab, open `https://www.youtube.com/robots.txt`.
+   3. Save the cookies of `youtube.com` to a file `cookies.txt` with a browser extension for cookies.
+   4. Close the private window, so that the browser does not change these cookies.
+   5. Copy the file to the server as `/var/cache/guitar-ytdl/cookies.txt`. `yt-dlp` writes to this file too, and the systemd unit lets the service write in this folder.
+   6. Add this line to `/etc/guitar-ytdl.env` and run `systemctl restart guitar-ytdl`.
+
+      ```
+      GT_ARGS=--cookies /var/cache/guitar-ytdl/cookies.txt
+      ```
+
+   These steps follow the `yt-dlp` wiki. They are not tested with this service on a server.
+
+3. Send `yt-dlp` through a connection that YouTube trusts, with a proxy.
+
+   ```
+   GT_ARGS=--proxy socks5://HOST:PORT
+   ```
+
 ## What the service keeps
 
-- The sound or the picture of a video is in a temporary folder until the page has taken it. The service then deletes the folder. It also deletes it after a failure, and after 10 minutes when the page did not take the file, for example because you closed the page. With the systemd unit of this folder, the temporary folder is private to the service.
+- The sound or the picture of a video is in a temporary folder until the page takes it. The service then deletes the folder. It also deletes the folder after a failure. If the page does not take the file, for example because you closed the page, the service deletes the folder after 10 minutes. With the systemd unit of this folder, the temporary folder is private to the service.
 - The log has one line for each request, with the time, the id of the video and the answer. It does not have the key or the address of the reader. On a server, `journalctl -u guitar-ytdl` shows it.
 - `yt-dlp` keeps its own small cache, in `/var/cache/guitar-ytdl` with the systemd unit. It holds no sound.
 - The downloaded song itself is in the browser that asked, with the recordings of Slow down. It stays there until you delete it in the list "Recordings and downloads". The list shows the size of each song and of all songs together. "Delete the downloads" deletes all downloaded songs at once.
@@ -166,10 +194,10 @@ A page on `http://localhost` can always ask, for tests.
 
 - One file at a time. The service waits up to 10 minutes for `yt-dlp`.
 - The page asks in short requests: one starts the download, one asks how far it is, and one takes the file. So a web server or Cloudflare in front of the service needs no long wait. Cloudflare cuts a request that gets no answer in about two minutes, and only its Enterprise plan can change that.
-- There is no limit on the length of a video. The browser keeps the sound of an open song in memory, about 20 MB for each minute, so a phone can fail on a very long video.
+- There is no limit on the length of a video. The browser keeps the sound of an open song in memory, about 20 MB for each minute. So a phone can fail on a very long video.
 - A live stream does not download.
 - The picture is 360 lines high at most, about 2.5 MB for each minute. The sound is about 1 MB for each minute.
 - Without `ffmpeg` on the server, `yt-dlp` sends the files as YouTube gives them. Chrome reads them. Safari is not tested with them. If Safari cannot open a download, install `ffmpeg` on the server: `yt-dlp` then repairs the sound file by itself.
 - Only a YouTube video id goes to `yt-dlp`. The service does not fetch other addresses.
 - YouTube changes often. If a download fails with an error from `yt-dlp`, update it with `yt-dlp -U`. The page shows the error.
-- YouTube can refuse the address of a server at any time. Then the service stops working, and the page still plays the video in YouTube's frame.
+- YouTube can refuse the address of a server at any time. Then a download fails, and the page still plays the video in YouTube's frame. See "YouTube asks to sign in".

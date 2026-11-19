@@ -26,12 +26,15 @@ Configuration, from the environment:
              Default: https://guitar.ivnv.dev
   GT_PORT    the port to listen on. Default: 8787
   GT_YTDLP   the yt-dlp program. Default: yt-dlp
+  GT_ARGS    more options for yt-dlp, as on a command line. For example a file of cookies, or a proxy, when
+             YouTube does not trust the address of the server: --cookies /var/cache/guitar-ytdl/cookies.txt
 """
 import hmac
 import json
 import os
 import re
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -44,6 +47,7 @@ KEY = os.environ.get('GT_KEY', '')
 ORIGINS = {o.strip().rstrip('/') for o in os.environ.get('GT_ORIGIN', 'https://guitar.ivnv.dev').split(',') if o.strip()}
 PORT = int(os.environ.get('GT_PORT', '8787'))
 YTDLP = os.environ.get('GT_YTDLP', 'yt-dlp')
+ARGS = shlex.split(os.environ.get('GT_ARGS', ''))
 # yt-dlp gets this long for one file.
 TIMEOUT = 600
 # A finished file waits this long for the page. Then the service deletes it.
@@ -84,6 +88,7 @@ def fetch(video, folder, form, percent=None):
         '--progress', '--newline', '--progress-template', 'download:GT-PART %(progress._percent_str)s',
         '--print', 'after_move:GT-TITLE %(title)s',
         '-o', os.path.join(folder, 'file.%(ext)s'),
+        *ARGS,
         f'https://www.youtube.com/watch?v={video}',
     ]
     title, late = '', []
@@ -120,6 +125,9 @@ def fetch(video, folder, form, percent=None):
     if code or not files:
         if errors and 'Requested format is not available' in errors[-1]:
             raise Refused(422, 'YouTube has no file of this kind for the video.')
+        if errors and 'Sign in to confirm' in errors[-1]:
+            raise Refused(FAILED, 'YouTube does not trust the address of the server: it asks yt-dlp to sign in. '
+                                  'The README of the service shows what you can do ("YouTube asks to sign in").')
         if errors:
             raise Refused(FAILED, f'yt-dlp on the server says: {errors[-1][:300]}')
         # The filter skips a video without an error.

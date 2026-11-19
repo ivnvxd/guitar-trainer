@@ -294,8 +294,8 @@
       for (const part of [title, sub, board, answers]) { part.classList.remove('q-new'); void part.offsetWidth; part.classList.add('q-new'); }
       updateStats();
       drawKeys();
-      // The result moved the page down, or you scrolled down to read it. The next question brings the page back to
-      // where you answered.
+      // You scrolled down to read the result, or the page moved down to it (a choice in Settings). The next
+      // question brings the page back to where you answered.
       if (session.backTo !== null && root.scrollY > session.backTo + 4) glide(session.backTo);
       session.backTo = null;
       // Drills without a sound question start the clock when the question shows.
@@ -361,24 +361,39 @@
             h('span', { class: 'result-verdict' }, verdict),
             fb.title ? h('b', { class: 'result-answer' }, fb.title) : null,
             fb.sub ? h('span', { class: 'result-sub' }, fb.sub) : null)),
+        // The buttons come right after the result, close to the answer buttons: they are on the screen without a
+        // move of the page. The text and the picture are under them.
+        h('div', { class: 'actions' }, (fb.actions || []).map(([label, fn]) => h('button', { type: 'button', class: 'btn', onclick: () => { stay(); fn(); } }, label)),
+          h('button', { type: 'button', class: 'btn btn-primary', onclick: next }, 'Next', h('span', { class: 'kbd' }, 'Space'))),
         fb.text ? h('p', { class: 'result-text' }, fb.text) : null,
         unlocked ? h('p', { class: 'result-new' }, icon('plus'), unlocked) : null,
         fb.visual ? h('div', { class: 'result-visual' }, fb.visual) : null,
-        h('div', { class: 'actions' }, (fb.actions || []).map(([label, fn]) => h('button', { type: 'button', class: 'btn', onclick: () => { stay(); fn(); } }, label)),
-          h('button', { type: 'button', class: 'btn btn-primary', onclick: next }, 'Next', h('span', { class: 'kbd' }, 'Space'))),
         timerBar].filter(Boolean));
       session.stay = stay;
       updateStats();
       session.backTo = root.scrollY;
-      // On a phone the feedback can sit below a tall neck or under the tab bar: bring it into view.
+      // The page stays where it is, unless Settings says that it moves to the answer. Then: on a phone the
+      // feedback can sit below a tall neck or under the tab bar, and the page brings it into view.
       const bar = document.querySelector('.topbar nav');
       const covered = bar && getComputedStyle(bar).position === 'fixed' ? bar.offsetHeight : 0;
-      if (feedback.getBoundingClientRect().bottom > root.innerHeight - covered) {
+      if (settings.answerMove === true && feedback.getBoundingClientRect().bottom > root.innerHeight - covered) {
         // The page keeps this height at the next question: without it the page would get shorter at once and
         // jump, in place of the calm move back up.
         promptBox.style.minHeight = Math.max(parseFloat(promptBox.style.minHeight) || 0, promptBox.offsetHeight) + 'px';
         const still = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
         feedback.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
+      } else if (settings.answerMove !== true) {
+        // Stays: when the Next button is off the screen, the page moves by the least that shows it, and it does
+        // not go back. So it moves at the first answer of a tall drill, and then no more. The question stays on
+        // the screen: the page never moves its top out.
+        const low = feedback.querySelector('.actions').getBoundingClientRect().bottom + 12 - (root.innerHeight - covered);
+        // A little more than needed, so a result of two lines at a later question fits too.
+        const by = Math.min(low + 24, promptBox.getBoundingClientRect().top - 8);
+        if (low > 0 && by > 0) {
+          promptBox.style.minHeight = Math.max(parseFloat(promptBox.style.minHeight) || 0, promptBox.offsetHeight) + 'px';
+          session.backTo = root.scrollY + by;
+          glide(by, true);
+        }
       }
       if (auto) advanceTimer = setTimeout(next, wait);
       else feedback.querySelector('.btn-primary').focus({ preventScroll: true });
