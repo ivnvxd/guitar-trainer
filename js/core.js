@@ -261,7 +261,7 @@
   // The version of the site: major.minor.patch. The first number goes up for a redesign, the middle one for new
   // features, the last one for fixes only. Give VERSION in sw.js the same version when you publish new files.
   // Each version has a release with its notes on GitHub, tagged v and the version.
-  GT.version = '2.2.0';
+  GT.version = '2.3.0';
   // A submenu row as in the Library: a round button to the start page of the section (or none), then its pages.
   // items: [{ href, text, current, apart }]. An item with apart: true stands after a thin line.
   // The chosen page scrolls to the middle of the row when the row is wider than the screen.
