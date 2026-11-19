@@ -259,7 +259,9 @@
     const r = base + T.mod(T.pcOf(rootName) - base);
     return chord.toneList.map(t => r + t.semi);
   };
-  const shapeMidis = frets => frets.map((f, s) => f === null ? null : openStrings()[s] + f).filter(m => m !== null);
+  // The notes of a shape with their places, and the large neck of a page: a strum lights each note as it sounds.
+  const shapePlaces = frets => frets.map((f, s) => f === null ? null : { string: s, fret: f, midi: openStrings()[s] + f }).filter(Boolean);
+  const mainNeck = () => document.querySelector('#main .lib-stage .neck');
   function playButton(text, fn) { return h('button', { type: 'button', class: 'btn', onclick: fn }, '▶ ', text); }
   // The places of a chord shape on the neck, and the five CAGED shapes as faint outlines behind another picture.
   const placesOf = sh => sh.frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
@@ -753,8 +755,9 @@
       if (withScale) markers = markers.concat(toneMarkers(others, { kind: 'ghost', small: true }));
       const scaleNote = withScale ? `The small faint notes are the other notes of ${r} ${lowerName(scale.name)}, the usual scale over ${T.chordName(r, chord)}.` : null;
       const loose = () => (bass ? [A.bass(bassPc)] : []).concat(chordMidis(r, chord));
-      const strum = () => A.notes(shape ? shapeMidis(shape.frets) : loose(), 'strum');
-      const arpeggio = () => A.notes(shape ? shapeMidis(shape.frets) : arp ? arp.notes.map(n => n.midi).sort((a, b) => a - b) : loose(), 'up', 0.28, 0.5);
+      // With a shape or an arpeggio position on the neck, each note lights as it sounds.
+      const strum = () => shape ? FB.sound(mainNeck, shapePlaces(shape.frets)) : A.notes(loose(), 'strum');
+      const arpeggio = () => shape || arp ? FB.sound(mainNeck, shape ? shapePlaces(shape.frets) : arp.notes.slice().sort((a, b) => a.midi - b.midi), 'up', 0.28, 0.5) : A.notes(loose(), 'up', 0.28, 0.5);
       // Short names for the buttons: "C" for the C shape, and "String 6" for the shape with its root on the 6th string.
       // A bare "5th" would read as a chord degree.
       const shortName = s => s.id.startsWith('root-') ? 'String ' + s.id.slice(5) : s.name.replace(' shape', '');
@@ -784,7 +787,7 @@
         // A card shows its shape on the neck and plays it, as the inversion cards on the Triads page do.
         const href = '#/' + chordsView.link(Object.assign({}, state, { shape: s.id }));
         return h('a', { class: 'card', href, style: 'text-decoration:none;color:inherit', 'aria-current': String(!!shape && shape.id === s.id),
-          onclick: e => { e.preventDefault(); GT.go(href, true); A.notes(shapeMidis(s.frets), 'strum'); requestAnimationFrame(() => bringIntoView(document.querySelector('#main .neck'))); } },
+          onclick: e => { e.preventDefault(); GT.go(href, true); FB.sound(mainNeck, shapePlaces(s.frets)); requestAnimationFrame(() => bringIntoView(document.querySelector('#main .neck'))); } },
           h('h3', null, title), h('p', null, sub || (s.low === 0 ? (capo() ? `At the capo, fret ${capo()}` : 'Open position') : `Frets ${s.low + capo()}–${s.high + capo()}`)),
           miniNeck(m, s.low, s.high, `${title} of ${chordsView.title(state)}`, mutedStrings, { links: [{ points: placesOf(s), cls: 'is-shape' }] }));
       };
@@ -1225,7 +1228,7 @@
             // A card shows its inversion on the neck and plays it. A second tap shows every inversion again.
             return h('button', { type: 'button', class: 'card', 'aria-pressed': String(picked === inversion), onclick: () => {
               GT.go(triadsView.link(Object.assign({}, state, { inv: picked === inversion ? null : inversion })), true);
-              A.notes(midis, 'strum');
+              FB.sound(mainNeck, v.frets.map((f, i) => ({ string: v.strings[i], fret: f, midi: midis[i] })));
             } },
               h('h3', null, T.INVERSIONS[inversion]), h('p', null, `${v.tones[0]} in the bass, frets ${low + capo()}–${high + capo()}`),
               miniNeck(markers, low, high, `${T.INVERSIONS[inversion]}`, null, { links: [{ points: markers.map(m => ({ string: m.string, fret: m.fret })), cls: 'is-shape' }] }));
@@ -1689,7 +1692,7 @@
         const again = neckSlot.querySelector(`.fb-pos[data-string="${s}"][data-fret="${f}"]`);
         if (again) again.focus({ preventScroll: true });
       }
-      const play = h('button', { type: 'button', class: 'btn', onclick: () => A.notes(sorted().map(n => n.midi), 'strum') }, '▶ Play');
+      const play = h('button', { type: 'button', class: 'btn', onclick: () => FB.sound(neckSlot, sorted()) }, '▶ Play');
       const clear = h('button', { type: 'button', class: 'btn', onclick: () => { places = []; history.replaceState(history.state, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
       draw();
       return [

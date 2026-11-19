@@ -1265,7 +1265,8 @@
           if (service()) rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes. Your download service can get the sound as a file, and the file gets every tool.'),
             btn('Download the sound', () => download(P.ytId)));
           else rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes, and the site cannot download it. ',
-            canRecord() ? 'You can record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can record a part of it, and the recording gets every tool.'),
+            canRecord() ? 'You can record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can record a part of it, and the recording gets every tool.',
+            ' With your own download service, a video gets every tool: see ', h('a', { href: '#/settings/service' }, 'Settings'), '.'),
             canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null);
         } else {
           u.rateIn = h('input', { type: 'range', min: 25, max: 150, step: 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) });

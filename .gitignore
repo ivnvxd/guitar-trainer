@@ -1,1 +1,3 @@
 .DS_Store
+server/local.key
+__pycache__/

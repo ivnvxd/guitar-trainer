@@ -34,14 +34,22 @@
     exportAll() {
       const data = {};
       for (const k of store.keys()) data[k] = store.get(k);
-      // The key of a download service is a secret: it does not go into a file.
-      if (data.settings) delete data.settings.dlKey;
+      // The download service belongs to this browser. Its address and its key do not go into a file.
+      if (data.settings) { delete data.settings.dlUrl; delete data.settings.dlKey; }
       return { app: 'guitar-trainer', version: 1, saved: new Date().toISOString(), data };
     },
     importAll(json) {
       if (!json || json.app !== 'guitar-trainer' || typeof json.data !== 'object') throw new Error('This file is not a progress file from this site.');
-      const key = (store.get('settings', {}) || {}).dlKey;
-      for (const [k, v] of Object.entries(json.data)) store.set(k, k === 'settings' && key ? Object.assign({}, v, { dlKey: key }) : v);
+      // A file never sets the download service: an address from a file would get the key of this browser.
+      const now = store.get('settings', {}) || {};
+      for (const [k, v] of Object.entries(json.data)) {
+        if (k !== 'settings' || !v || typeof v !== 'object') { store.set(k, v); continue; }
+        const next = Object.assign({}, v);
+        delete next.dlUrl; delete next.dlKey;
+        if (now.dlUrl) next.dlUrl = now.dlUrl;
+        if (now.dlKey) next.dlKey = now.dlKey;
+        store.set(k, next);
+      }
     }
   };
 

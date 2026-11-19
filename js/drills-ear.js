@@ -39,14 +39,22 @@
   }
   const where = p => `${FB.ordinal(6 - p.string)} string, ${p.fret === 0 ? (GT.capo() ? 'at the capo' : 'open') : 'fret ' + (p.fret + GT.capo())}`;
   const songFor = (semi, dir) => dir === 'harmonic' ? null : (T.INTERVAL_SONGS[semi] || {})[dir] || null;
+  // After the answer, the notes of the interval light up on the answer neck while they sound. q.lit is set with
+  // the answer, so no note lights while the question is open. second: the places of the second note, or none
+  // for a note that the neck does not show.
+  function lightInterval(q, second, dir = q.dir) {
+    if (!q.lit) return;
+    const at = dir === 'harmonic' ? 0 : 0.62;
+    FB.light(q.lit.scope, [Object.assign({ at: 0 }, q.lit.root)].concat((second || []).map(p => Object.assign({ at }, p))), 0.45);
+  }
   // Your answer, then the right one, on the same first note.
   function compareIntervals(q, chosenSemi, times = 1) {
     const other = q.dir === 'down' ? q.root - chosenSemi : q.root + chosenSemi;
     const gap = q.dir === 'harmonic' ? 1.5 : 1.8;
     A.silence();
     for (let k = 0; k < times; k++) {
-      A.later(() => playInterval(q.root, other, q.dir), 2 * gap * k * 1000);
-      A.later(() => playInterval(q.root, q.target, q.dir), (2 * k + 1) * gap * 1000);
+      A.later(() => { playInterval(q.root, other, q.dir); lightInterval(q, null); }, 2 * gap * k * 1000);
+      A.later(() => { playInterval(q.root, q.target, q.dir); lightInterval(q, q.lit && q.lit.targets); }, (2 * k + 1) * gap * 1000);
     }
     return 2 * gap * times;
   }
@@ -55,15 +63,16 @@
     id: 'ear-intervals', track: 'ear',
     title: 'Intervals by ear',
     blurb: 'Hear two notes and name the distance. Start with four intervals, the site adds the next ones when you are ready.',
-    hint: 'Listen, then choose. The starting note changes every time.',
+    hint: 'Listen, then choose.',
     help: [
       'Name it: you hear two notes and choose the interval. Sing it: you see an interval, hear the first note, and sing the second before you check. On the neck: you hear the interval and tap the second note on the guitar.',
       'Choose the intervals you practice in Options. Any set works as a start. With "Add intervals for me" on, the next group joins your set when you answer about 85 percent right. The order is: perfect 5th, major 3rd, octave and perfect 4th, then minor 3rd, major 2nd and minor 2nd, then the 6ths and the tritone, then the 7ths.',
       'Practice ascending first, then descending, then together. A right answer that takes more than 3 seconds still counts as not learned yet, so it comes back sooner. After a miss you hear your answer and the right one on the same note, and both intervals come back a few questions later.',
       'Hear all plays every interval of your set from the same first note, and lights each answer while it sounds. Use it when new intervals come in. After each answer, a song that starts with the interval helps you recall it.',
+      'The first note changes with every question. If the intervals are hard to tell apart, set First note to Stays in Options: then every interval of a session starts on the same note, so you compare only the second notes. Go back to Changes when the answers come easily.',
       'Ten minutes a day works better than one long session.'
     ],
-    defaults: { mode: 'identify', direction: 'up', auto: true, set: [7, 4, 12, 5] },
+    defaults: { mode: 'identify', direction: 'up', root: 'each', auto: true, set: [7, 4, 12, 5] },
     stages: INTERVAL_STAGES,
     // Singing and playing take longer than naming. Self-graded singing has no speed limit.
     fastMs: c => ({ identify: 3000, sing: 60000, guitar: 7000 })[c.mode] || 3000,
@@ -75,22 +84,26 @@
     },
     unlockText(added) { return `New intervals added: ${added.map(s => T.intervalBySemi(s).short).join(', ')}.`; },
     itemName(item) { const [s, d] = item.split(':'); return `${T.intervalBySemi(Number(s)).short} ${DIR_TEXT[d]}`; },
-    make(item, c) {
+    make(item, c, session) {
       const [s, dir] = item.split(':');
       const semi = Number(s);
-      const rootMidi = dir === 'down' ? randInt(55, 69) : randInt(47, 62);
+      // First note "Stays": one note for the whole session, from the range that fits up and down.
+      const kept = c.root === 'same';
+      if (kept && (session.count === 0 || session.rootMidi === undefined)) session.rootMidi = randInt(55, 62);
+      const rootMidi = kept ? session.rootMidi : dir === 'down' ? randInt(55, 69) : randInt(47, 62);
       const q = { semi, dir, root: rootMidi, target: dir === 'down' ? rootMidi - semi : rootMidi + semi, mode: c.mode };
       if (c.mode === 'guitar') {
         // Place the first note so that the second one is on the same part of the neck.
         const t = GT.openStrings();
+        // A kept first note tries its other strings first. It changes only if no string fits, in an unusual tuning.
+        const reroll = tries => { if (kept && tries < 30) return; q.root = dir === 'down' ? randInt(55, 69) : randInt(45, 60); q.target = dir === 'down' ? q.root - semi : q.root + semi; };
         for (let tries = 0; tries < 40; tries++) {
           const string = randInt(0, 4), fret = q.root - t[string];
-          if (fret < 0 || fret > 12) { q.root = dir === 'down' ? randInt(55, 69) : randInt(45, 60); q.target = dir === 'down' ? q.root - semi : q.root + semi; continue; }
+          if (fret < 0 || fret > 12) { reroll(tries); continue; }
           const from = Math.max(0, fret - 5), to = Math.min(15, fret + 6);
           const fits = t.some((m, k) => q.target - m >= from && q.target - m <= to && !(k === string && q.target - m === fret));
           if (fits || semi === 0) { Object.assign(q, { place: { string, fret }, from, to }); break; }
-          q.root = dir === 'down' ? randInt(55, 69) : randInt(45, 60);
-          q.target = dir === 'down' ? q.root - semi : q.root + semi;
+          reroll(tries);
         }
       }
       return q;
@@ -138,7 +151,10 @@
     play(q, what) {
       if (!q) return 0;
       if (q.mode === 'sing') { A.note(q.root, 0, 1.2); return 0; }
-      return playInterval(q.root, q.target, q.dir);
+      // The sound first: a new sound from a tap takes away the lights that wait.
+      const gap = playInterval(q.root, q.target, q.dir);
+      lightInterval(q, q.lit && q.lit.targets);
+      return gap;
     },
     check(q, v) {
       if (q.mode === 'sing') return v === 'yes';
@@ -159,11 +175,12 @@
           const given = Number(v);
           if (q.tapped) markers.push({ string: q.tapped.string, fret: q.tapped.fret, kind: 'wrong', label: name(given) });
           ui.board.replaceChildren(ui.neck(markers, { from: q.from, to: q.to, label: 'Answer', links: markers.filter(m => m.kind === 'correct').map(m => ({ points: [place1, m], cls: 'is-answer' })) }));
+          q.lit = { scope: ui.board, root: place1, targets: markers.filter(m => m.kind === 'correct') };
           const diff = Math.abs(given - q.root);
           const givenIv = diff <= 12 ? T.intervalBySemi(diff) : null;
           return {
             text: `You played ${name(given)}${givenIv ? `, ${an(givenIv.name.toLowerCase())} ${given >= q.root ? 'up' : 'down'}` : ''}. The ${iv.name.toLowerCase()} is ${b}, marked green.`,
-            actions: [['▶ Replay', () => this.play(q)], ['▶ Yours', () => playInterval(q.root, given, q.dir === 'harmonic' ? 'up' : q.dir)]]
+            actions: [['▶ Replay', () => this.play(q)], ['▶ Yours', () => { const dir = q.dir === 'harmonic' ? 'up' : q.dir; playInterval(q.root, given, dir); lightInterval(q, q.tapped ? [q.tapped] : null, dir); }]]
           };
         }
         return { text: `${iv.name}: ${a} to ${b}.` };
@@ -172,6 +189,7 @@
       const lo = Math.min(place1.fret, place2.fret), hi = Math.max(place1.fret, place2.fret);
       // The two notes on the neck, joined by a line, in the result box: the answers above stay where they are.
       const visual = ui.neck(markers, { from: Math.max(0, lo - 1), to: Math.min(15, Math.max(hi + 1, lo + 4)), turn: false, links: [{ points: [place1, place2], cls: 'is-answer' }], label: 'Where the interval is on the guitar' });
+      q.lit = { scope: visual, root: place1, targets: [place2] };
       const song = songFor(q.semi, q.dir);
       const frets = q.semi === 0 ? 'the same note' : `${q.semi} fret${q.semi > 1 ? 's' : ''} apart on one string`;
       const text = `${a} to ${b}: ${frets}. On the neck: ${where(place1)} to ${where(place2)}.${song ? ` Think of ${song}.` : ''}`;
@@ -193,6 +211,7 @@
       return h('div', { class: 'opts' },
         D.field('Mode', GT.segmented('Mode', [['identify', 'Name it'], ['sing', 'Sing it'], ['guitar', 'On the neck']], c.mode, v => set({ mode: v }))),
         D.field('Direction', GT.segmented('Direction', [['up', 'Up'], ['down', 'Down'], ['harmonic', 'Together'], ['mixed', 'Mixed']], c.direction, v => set({ direction: v }))),
+        D.field('First note', GT.segmented('First note', [['each', 'Changes'], ['same', 'Stays']], c.root === 'same' ? 'same' : 'each', v => set({ root: v }))),
         D.pickset('Intervals', T.INTERVALS.map(i => ({ value: i.semi, main: i.short, sub: i.name })), c.set, v => set({ set: v })),
         D.autoRow(this, c, set, 'intervals', s => T.intervalBySemi(s).short));
     }
@@ -305,7 +324,8 @@
       ui.actions([['▶ Replay', () => ui.play(), 'R'], ['▶ Arpeggio', () => A.notes(q.midis, 'up', 0.32, 0.9)]]);
       ui.choices(this.ids(ui.config).map(id => ({ value: id, main: T.chordById(id).name, sub: T.chordById(id).tones })));
     },
-    play(q) { if (q) A.notes(q.midis, 'together', 0, 1.6); return 0; },
+    // A slow strum from the low note up, as the chords of the Library: in one block of sound the notes merge.
+    play(q) { if (q) A.notes(q.midis, 'strum', 0, 1.8); return 0.25; },
     check: (q, v) => v === q.id,
     feedback(q, v, correct) {
       const c = T.chordById(q.id);
@@ -316,8 +336,8 @@
         actions: (correct ? [] : [['▶ Compare', () => {
           const mine = this.voicing(v, q.rootMidi, Math.min(q.inversion, T.chordById(v).toneList.length - 1));
           A.silence();
-          A.notes(mine, 'together', 0, 1.3);
-          A.later(() => A.notes(q.midis, 'together', 0, 1.3), 1600);
+          A.notes(mine, 'strum', 0, 1.5);
+          A.later(() => A.notes(q.midis, 'strum', 0, 1.5), 2000);
         }]]).concat([['▶ Arpeggio', () => A.notes(q.midis, 'up', 0.32, 0.9)]])
       };
     },

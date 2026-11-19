@@ -164,8 +164,11 @@
   function run(main, d) {
     const config = loadConfig(d);
     // only: the items of a review round, after "Practice the missed ones". length: its number of questions.
-    const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false, only: null, length: 0 };
+    const session = { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, started: 0, done: false, only: null, length: 0, backTo: null };
     let advanceTimer = null;
+    const glide = (top, by) => root[by ? 'scrollBy' : 'scrollTo']({ top, behavior: root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    // Bring the top of a box back on the screen, for example the question after the result moved the page down.
+    const showTop = box => { const top = box.getBoundingClientRect().top; if (top < 0) glide(top - 8, true); };
     // Practice time: the time since the last mark counts at each question, answer and exit. A gap counts at most a
     // minute, so a page left open does not fill the daily goal.
     let mark = performance.now();
@@ -175,18 +178,29 @@
     // The options open on request and start closed on every drill, so the question and its answers fit one screen.
     const optionsOpen = false;
     const settingsPanel = h('div', { class: 'settings-panel', id: 'drill-options', hidden: !optionsOpen });
-    const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options', onclick: () => {
-      settingsPanel.hidden = !settingsPanel.hidden;
-      settingsPanel.querySelectorAll('.pickset').forEach(even);
-      settingsBtn.setAttribute('aria-expanded', String(!settingsPanel.hidden));
-    } }, icon('sliders'), 'Options');
+    // The panel slides open and shut in a sixth of a second, so the question under it moves and does not jump.
+    // after: runs when the panel has its final state.
+    let sliding = null;
+    const showOptions = (open, after) => {
+      if (sliding) sliding.cancel();
+      settingsBtn.setAttribute('aria-expanded', String(open));
+      settingsPanel.hidden = false;
+      if (open) settingsPanel.querySelectorAll('.pickset').forEach(even);
+      const end = () => { sliding = null; settingsPanel.style.overflow = ''; settingsPanel.hidden = !open; if (after) after(); };
+      if (!settingsPanel.animate || (root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches)) return end();
+      const cs = getComputedStyle(settingsPanel);
+      const shut = { height: '0px', paddingTop: '0px', paddingBottom: '0px', marginBottom: '0px', opacity: 0 };
+      const full = { height: settingsPanel.offsetHeight + 'px', paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginBottom: cs.marginBottom, opacity: 1 };
+      settingsPanel.style.overflow = 'hidden';
+      sliding = settingsPanel.animate(open ? [shut, full] : [full, shut], { duration: 170, easing: 'ease-out' });
+      sliding.onfinish = end;
+    };
+    const settingsBtn = h('button', { type: 'button', class: 'btn', 'aria-expanded': String(optionsOpen), 'aria-controls': 'drill-options',
+      onclick: () => showOptions(settingsBtn.getAttribute('aria-expanded') !== 'true') }, icon('sliders'), 'Options');
     // Done, at the end of the options: close them and show the question. The page moves only when the top of the
     // question card is above the screen.
     const closeOptions = () => {
-      settingsPanel.hidden = true;
-      settingsBtn.setAttribute('aria-expanded', 'false');
-      const top = promptBox.getBoundingClientRect().top;
-      if (top < 0) root.scrollBy(0, top - 8);
+      showOptions(false, () => showTop(promptBox));
       settingsBtn.focus({ preventScroll: true });
     };
     const title = h('h2', { id: 'q-title' });
@@ -277,8 +291,13 @@
       sub.textContent = '';
       ui.startClock(0);
       d.render(session.q, ui);
+      for (const part of [title, sub, board, answers]) { part.classList.remove('q-new'); void part.offsetWidth; part.classList.add('q-new'); }
       updateStats();
       drawKeys();
+      // The result moved the page down, or you scrolled down to read it. The next question brings the page back to
+      // where you answered.
+      if (session.backTo !== null && root.scrollY > session.backTo + 4) glide(session.backTo);
+      session.backTo = null;
       // Drills without a sound question start the clock when the question shows.
       session.heard = d.autoPlay === false || !d.play;
       if (d.autoPlay !== false && d.play) {
@@ -350,12 +369,13 @@
         timerBar].filter(Boolean));
       session.stay = stay;
       updateStats();
+      session.backTo = root.scrollY;
       // On a phone the feedback can sit below a tall neck or under the tab bar: bring it into view.
       const bar = document.querySelector('.topbar nav');
       const covered = bar && getComputedStyle(bar).position === 'fixed' ? bar.offsetHeight : 0;
       if (feedback.getBoundingClientRect().bottom > root.innerHeight - covered) {
-        // The page keeps this height at the next question, so it moves once and then stays: without it the page
-        // would get shorter and jump back up after every answer.
+        // The page keeps this height at the next question: without it the page would get shorter at once and
+        // jump, in place of the calm move back up.
         promptBox.style.minHeight = Math.max(parseFloat(promptBox.style.minHeight) || 0, promptBox.offsetHeight) + 'px';
         const still = root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches;
         feedback.scrollIntoView({ block: 'nearest', behavior: still ? 'auto' : 'smooth' });
@@ -397,13 +417,16 @@
           missed.length ? h('button', { type: 'button', class: 'btn btn-primary btn-big', onclick: () => review(missed.map(([item]) => item)) }, 'Practice the missed ones') : null,
           h('button', { type: 'button', class: 'btn btn-big' + (missed.length ? '' : ' btn-primary'), onclick: restart }, missed.length ? 'New session' : 'Practice again'),
           h('a', { class: 'btn btn-big', href: `#/train/${d.track}` }, `Back to ${(TRACKS.find(t => t.id === d.track) || { short: 'Train' }).short}`))));
-      stage.querySelector('.btn-primary').focus();
+      stage.querySelector('.btn-primary').focus({ preventScroll: true });
+      showTop(stage);
     }
     function begin(only, length) {
       clearTimeout(advanceTimer);
-      Object.assign(session, { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false, only, length });
+      Object.assign(session, { count: 0, correct: 0, streak: 0, times: [], missed: {}, requeue: [], last: null, q: null, answered: false, done: false, only, length, backTo: null });
+      promptBox.style.minHeight = '';
       stage.replaceChildren(promptBox);
       next();
+      showTop(promptBox);
     }
     // A new session with the options of the drill. A change of the options comes here too, so a review round ends.
     function restart() { begin(null, 0); }

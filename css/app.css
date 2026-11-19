@@ -362,6 +362,9 @@ input[type="checkbox"] { accent-color: var(--accent); width: 18px; height: 18px;
 .fb-mini .fb-num { font-size: 14px; }
 .fb-mini .fb-mute { font-size: 19px; }
 .fb-flash .fb-dot { animation: flash .5s ease-out; }
+/* A note that sounds now: a short, small swell. */
+.fb-dot { transition: transform .1s ease-out, stroke-width .1s ease-out; }
+.fb-pos.is-lit .fb-dot { transform: scale(1.14); stroke: var(--live); stroke-width: 3; }
 /* A change of a choice in the Library: the notes and shapes of the new neck fade in, fast. */
 .lib-stage .fb-pos, .lib-stage .fb-regions, .lib-stage .fb-link, .lib-stage .fb-region-label { animation: note-in .12s ease-out; }
 @keyframes note-in { from { opacity: 0; } }
@@ -672,6 +675,8 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 /* Before an answer the box holds only a tip. After it, a result box. */
 .feedback { margin-top: 14px; min-height: 50px; }
 .feedback:not(.result) { padding: 4px 2px; color: var(--muted); }
+/* A new question comes in with a short fade. */
+.prompt-wrap .q-new { animation: note-in .12s ease-out; }
 .result { position: relative; overflow: hidden; display: grid; gap: 12px; padding: 16px 18px; border-radius: 18px; border: 1px solid transparent; background: var(--surface); animation: rise .22s ease-out; }
 .result.ok { border-color: var(--ok-edge); background: linear-gradient(180deg, var(--ok-soft), transparent 70%), var(--surface); }
 .result.bad { border-color: var(--bad-edge); background: linear-gradient(180deg, var(--bad-soft), transparent 70%), var(--surface); }
@@ -699,6 +704,9 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .drill-help summary { cursor: pointer; color: var(--text); font-weight: 600; }
 .drill-help[open] summary { margin-bottom: 8px; }
 .drill-help p + p { margin-top: 8px; }
+.settings-fold { margin-top: 0; }
+.settings-fold[open] summary { margin-bottom: 14px; }
+.fold-state { margin-left: 8px; font-weight: 400; color: var(--muted); }
 .settings-panel { margin: 0 0 14px; padding: 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid transparent; display: grid; gap: 14px; }
 .settings-panel[hidden] { display: none; }
 /* Drill options sit in rows: short controls side by side, long pick lists on their own line. */
@@ -722,7 +730,8 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 .pickset .muted { font-size: 13px; }
 .timer { height: 4px; border-radius: 2px; background: var(--surface-3); margin-top: 14px; overflow: hidden; }
 .timer i { display: block; height: 100%; width: 0; background: var(--accent); }
-.done-panel { text-align: center; padding: 36px 20px; }
+/* The end of a session comes in as the result card does. */
+.done-panel { text-align: center; padding: 36px 20px; animation: rise .25s ease-out; }
 .done-panel h2 { font-size: 28px; margin-bottom: 8px; }
 .done-panel .stats-row { display: flex; justify-content: center; gap: 30px; margin: 18px 0; flex-wrap: wrap; }
 .done-panel .stats-row b { display: block; font-size: 28px; letter-spacing: -.02em; }
@@ -1115,8 +1124,23 @@ a.card[aria-current="true"], button.card[aria-pressed="true"] { border-color: va
 }
 /* Play the note: what the microphone hears, under the question. */
 .listen { display: grid; gap: 10px; justify-items: center; padding: 12px 0 4px; }
-.listen-row { display: flex; align-items: center; gap: 12px; }
-.listen-note { font-size: 34px; line-height: 1; font-weight: 800; min-width: 2.6ch; text-align: center; font-variant-numeric: tabular-nums; }
+.listen-row { display: flex; align-items: center; gap: 20px; margin: 4px 0; }
+.listen-note { font-size: 56px; line-height: 1; font-weight: 800; min-width: 2.6ch; text-align: center; font-variant-numeric: tabular-nums; }
+/* The ring around the heard note. It takes no room of its own. */
+.listen-note { position: relative; }
+.listen-ring { position: absolute; left: -9px; top: -6px; width: calc(100% + 18px); height: calc(100% + 12px); overflow: visible; pointer-events: none; }
+.listen-ring rect { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 100; stroke-dashoffset: var(--open, 100); transition: stroke-dashoffset .09s linear; }
+/* The note to play, large enough to read from the guitar with the phone on a stand or a table. */
+.ask-note { display: grid; justify-items: center; gap: 4px; padding: 6px 0 2px; }
+.ask-note b { font-size: clamp(96px, 34vw, 168px); line-height: .95; font-weight: 800; letter-spacing: -.04em; }
+.ask-note span { font-size: clamp(28px, 9vw, 44px); line-height: 1.1; font-weight: 700; color: var(--muted); }
+.staff.staff-big { max-width: 400px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  .ask-note { display: flex; justify-content: center; align-items: baseline; gap: 20px; padding: 0; }
+  .ask-note b { font-size: 92px; }
+  .ask-note span { font-size: 34px; }
+  .listen-note { font-size: 44px; }
+}
 .listen-level { width: 90px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
 .listen-level i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .09s linear; }
 .listen-say { margin: 0; text-align: center; color: var(--muted); font-size: 14px; max-width: 40ch; min-height: 1.5em; }

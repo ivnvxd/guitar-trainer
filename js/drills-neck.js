@@ -257,13 +257,18 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
     if (rms > Math.max(0.012, ear.floor * 1.8)) { ear.fresh = true; ear.run = []; ear.floor = rms; }
     else ear.floor = Math.min(ear.floor, rms);
     const f = T.pitchOf(buf, rate);
-    if (!f) { ear.run = []; return; }
+    if (!f) { ear.run = []; v.hold(0); return; }
     const midi = Math.round(69 + 12 * Math.log2(f / GT.a4()));
     ear.run.push(midi);
     if (ear.run.length > 3) ear.run.shift();
     v.heard(midi);
-    if (ear.run.length < 3 || !ear.run.every(m => m === midi)) return;
     const q = ear.q;
+    // The ring around the heard note closes while the pitch holds: one third for each reading that agrees. It
+    // stays open for a note that cannot answer, such as one that still rings from the last question.
+    let same = 0;
+    for (let i = ear.run.length - 1; i >= 0 && ear.run[i] === midi; i--) same++;
+    v.hold(q && !q.over && performance.now() - ear.t0 >= 300 && (ear.fresh || midi !== ear.last) ? same / 3 : 0);
+    if (ear.run.length < 3 || !ear.run.every(m => m === midi)) return;
     // Between questions, and in the first 300 ms of one, a note is heard but is no answer. A new question then
     // waits for a new pluck or another pitch.
     if (!q || q.over || performance.now() - ear.t0 < 300) { ear.last = midi; ear.fresh = false; return; }
@@ -313,7 +318,10 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
       ui.noChoices();
       ui.actions([['Show me', () => ui.submit('skip')]]);
       // The panel under the question: what the microphone hears, and the octaves found so far.
-      const heard = h('b', { class: 'listen-note' }, '–');
+      const heardText = h('span', null, '–');
+      const ring = FB.el('svg', { class: 'listen-ring', 'aria-hidden': 'true' }, null);
+      FB.el('rect', { width: '100%', height: '100%', rx: 14, pathLength: 100 }, ring);
+      const heard = h('b', { class: 'listen-note' }, heardText, ring);
       const say = h('p', { class: 'listen-say', 'aria-live': 'polite' });
       const level = h('i');
       const octaves = q.mode === 'octaves' ? h('div', { class: 'listen-octaves', role: 'list', 'aria-label': 'Octaves to play' }) : null;
@@ -343,10 +351,14 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
         octaves, ear.on ? null : startBtn, say, input.el);
       // Back on the page after the microphone stopped: the button comes back.
       ear.restart = () => { startBtn.disabled = false; if (!startBtn.isConnected) panel.insertBefore(startBtn, say); };
-      ear.view = { level, say: t => { say.textContent = t; }, heard: m => { heard.textContent = octaveName(m); } };
+      ear.view = { level, say: t => { say.textContent = t; }, heard: m => { heardText.textContent = octaveName(m); }, hold: part => ring.style.setProperty('--open', String(100 - Math.round(part * 100))) };
       q.drawOctaves = drawOctaves;
       ear.q = q; ear.ui = ui; ear.t0 = performance.now(); ear.fresh = false; ear.run = [];
-      ui.board.replaceChildren(...[q.mode === 'staff' ? staff(q.midi) : null, panel].filter(Boolean));
+      // The note in large type: the phone lies away from you while your hands are on the guitar. The title says the same.
+      const ask = q.mode === 'staff' ? staff(q.midi) : h('div', { class: 'ask-note', 'aria-hidden': 'true' }, h('b', null, T.PC_PLAIN[q.pc]),
+        q.mode === 'string' ? h('span', null, `${ord(q.string)} string`) : q.mode === 'octaves' ? h('span', null, 'every octave') : null);
+      if (q.mode === 'staff') ask.classList.add('staff-big');
+      ui.board.replaceChildren(ask, panel);
       if (ear.on) { say.textContent = 'Listening.'; input.fill(); }
       else say.textContent = 'The page needs the microphone to hear you. It hears only while this drill is open, and nothing leaves this device.';
     },
@@ -520,9 +532,11 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
       });
       if (!correct) given.forEach((f, i) => { if (best.frets[i] !== f) markers.push({ string: q.set[i], fret: f, kind: 'wrong', label: T.PC_PLAIN[T.mod(GT.openStrings()[q.set[i]] + f)] }); });
       ui.board.replaceChildren(ui.neck(markers, { from: 0, to: 15, label: 'The triad shape' }));
-      const midis = best.frets.map((f, i) => GT.openStrings()[q.set[i]] + f);
-      A.notes(midis, 'strum');
-      return { hold: 1.2, text: `${T.INVERSIONS[q.inversion]}: ${best.tones.map(l => tones.find(t => t.label === l).name).join(' ')} from low to high, frets ${best.frets.map(f => f + GT.capo()).join('-')}.`, actions: [['▶ Hear it', () => A.notes(midis, 'strum')], ['Open in Library', () => GT.go(`library/triads/${q.quality}/${GT.rootSlug(q.rootName)}/${q.setId}`)]] };
+      // The answer is on the neck now, so each note of the strum lights as it sounds.
+      const places = best.frets.map((f, i) => ({ string: q.set[i], fret: f, midi: GT.openStrings()[q.set[i]] + f }));
+      const strum = () => FB.sound(ui.board, places);
+      strum();
+      return { hold: 1.2, text: `${T.INVERSIONS[q.inversion]}: ${best.tones.map(l => tones.find(t => t.label === l).name).join(' ')} from low to high, frets ${best.frets.map(f => f + GT.capo()).join('-')}.`, actions: [['▶ Hear it', strum], ['Open in Library', () => GT.go(`library/triads/${q.quality}/${GT.rootSlug(q.rootName)}/${q.setId}`)]] };
     },
     options(c, set) {
       return h('div', { class: 'opts' },
@@ -589,7 +603,8 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
         ui.title('Which CAGED shape?');
         ui.sub(`${q.rootName} ${q.quality}.`);
         const markers = q.shape.frets.map((f, i) => f === null ? null : (() => { const t = tones.find(x => x.pc === T.mod(T.STANDARD[i] + f)); return { string: i, fret: f, kind: FB.degreeKind(t.label), label: t.label }; })()).filter(Boolean);
-        ui.actions([['▶ Strum', () => A.notes(q.shape.frets.map((f, i) => f === null ? null : T.STANDARD[i] + f).filter(m => m !== null), 'strum')]]);
+        // The shape is on the neck from the start, so a light on its notes gives nothing away.
+        ui.actions([['▶ Strum', () => FB.sound(ui.board, q.shape.frets.map((f, i) => f === null ? null : { string: i, fret: f, midi: T.STANDARD[i] + f }).filter(Boolean))]]);
         const win = ui.narrow() ? { from: Math.max(0, q.shape.low - 1), to: Math.max(q.shape.low - 1, 0) + 5 } : { from: 0, to: 15 };
         q.win = win; q.markers = markers;
         // Lines join the notes, so the shape reads as one figure. The lane under the neck waits for the answer's letters.

@@ -215,6 +215,8 @@
         const p = xy(along(f), across(s));
         const g = el('g', { class: `fb-pos${m ? ' fb-' + (m.kind || 'tone') : ''}${m && m.dim ? ' fb-dim' : ''}${m && m.small ? ' fb-small' : ''}`, transform: `translate(${p.x} ${p.y})` }, svg);
         const midi = o.tuning[s] + f;
+        // The place of a marked note, so that a sound can light it (see light).
+        if (m) g.dataset.at = `${s}:${f}`;
         if (pressable) {
           g.setAttribute('role', 'button');
           g.setAttribute('tabindex', '-1');
@@ -351,5 +353,28 @@
     return 'other';
   }
 
-  GT.fretboard = { render, degreeKind, ordinal, el, isUpright, sideways };
+  // Light marked notes of a neck in time with a sound. steps: [{ string, fret, at }], with at in seconds from now.
+  // scope is the box of the neck, or a function that gives it: each note is looked up when its light starts,
+  // because a page can draw the neck again before that. GT.audio.silence() takes the lights away with the sound.
+  function light(scope, steps, hold = 0.34) {
+    const A = GT.audio;
+    if (A.muted) return;
+    for (const st of steps) A.later(() => {
+      const box = typeof scope === 'function' ? scope() : scope;
+      const g = box && box.querySelector(`.fb-pos[data-at="${st.string}:${st.fret}"]`);
+      if (!g) return;
+      const off = () => g.classList.remove('is-lit');
+      g.classList.add('is-lit');
+      A.later(off, hold * 1000, off);
+    }, st.at * 1000);
+  }
+  // Play notes that are marked on a neck, and light each one as it sounds. places: [{ string, fret, midi }] in the
+  // order they sound. The other values are those of GT.audio.notes.
+  function sound(scope, places, mode = 'strum', gap = 0.6, duration = 0) {
+    const A = GT.audio;
+    if (!A.notes(places.map(p => p.midi), mode, gap, duration)) return;
+    const each = A.spacing(mode, places.length, gap);
+    light(scope, places.map((p, i) => ({ string: p.string, fret: p.fret, at: i * each })), mode === 'strum' ? 0.3 : Math.max(0.2, Math.min(0.4, each)));
+  }
+  GT.fretboard = { render, degreeKind, ordinal, el, isUpright, sideways, light, sound };
 })(window);

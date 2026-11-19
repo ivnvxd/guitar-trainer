@@ -210,10 +210,12 @@
   // Notes one after another ("up", "down") or together ("together"); "strum" runs over the strings.
   // A strum is slow enough to hear each string, also on a phone speaker: about a third of a second for six strings.
   // Many strings get less gain each, so the limiter does not press the chord into one sound.
+  // The time from one note to the next, in seconds: a neck that lights the notes uses it too.
+  const spacing = (mode, count, gap = 0.6) => mode === 'together' ? 0 : mode === 'strum' ? Math.min(0.09, Math.max(0.065, 0.34 / count)) : gap;
   function notes(midis, mode = 'up', gap = 0.6, duration = 0) {
     if (!context()) return false;
     const list = mode === 'down' ? [...midis].reverse() : midis;
-    const each = mode === 'together' ? 0 : mode === 'strum' ? Math.min(0.09, Math.max(0.065, 0.34 / list.length)) : gap;
+    const each = spacing(mode, list.length, gap);
     const gainValue = mode === 'together' ? 0.38 : mode === 'strum' ? Math.min(0.4, 0.74 / Math.sqrt(list.length)) : 0.5;
     list.forEach((m, i) => note(m, i * each, duration, gainValue));
     return true;
@@ -582,7 +584,7 @@
     listen, stopListening, inputs, levelOf, startRhythm, stopRhythm, heardAt,
     get rhythmRunning() { return !!rhythm.o; },
     get listening() { return !!mic; },
-    note, notes, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
+    note, notes, spacing, bass, chordSequence, silence, later, startMetronome, stopMetronome, setTempo,
     startLoop, stopLoop, startDrone, stopDrone,
     setLoopTempo(bpm) { backing.bpm = bpm; },
     setDrums(v) { backing.drums = !!v; },
