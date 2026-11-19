@@ -581,25 +581,54 @@
   }
   const toSettings = () => h('a', { href: '#/settings/service' }, 'Settings of the service');
   const mb = bytes => bytes < 1048576 * 10 ? (bytes / 1048576).toFixed(1) : String(Math.round(bytes / 1048576));
-  // One file from the service: the sound, or the picture. The line shows how much of it is here.
+  // One file from the service: the sound, or the picture. The page asks in short requests: one starts the work
+  // on the server, one asks how far it is, and one takes the file. A request that waits in silence for the whole
+  // download is cut by a web server or by Cloudflare in front of the service.
   async function fetchFile(sv, kind, id) {
-    const what = kind === 'picture' ? 'picture' : 'sound';
-    let res;
-    try { res = await fetch(`${sv.url}/${kind}?v=${id}`, { headers: { Authorization: `Bearer ${sv.key}` } }); }
-    catch (e) {
-      // No answer that the page can read: the test finds out why.
+    const what = kind === 'picture' ? 'picture' : 'sound', auth = { headers: { Authorization: `Bearer ${sv.key}` } };
+    const wait = ms => new Promise(done => setTimeout(done, ms));
+    // No answer that the page can read: the test finds out why.
+    const lost = async cut => {
       sayStep('The download did not arrive. Testing the connection to the service…');
       const test = await checkService(sv);
-      if (test.ok) throw new Error(`The download service is there, but the ${what} of this video did not arrive. Something cut the wait: the web server in front of the service (it must wait 10 minutes, as the instructions show), or the connection. Try again.`);
+      if (test.ok) throw new Error(cut);
       // The address or the key is wrong: the message gets a link to them.
       throw Object.assign(new Error(test.text), { settings: true });
-    }
-    if (!res.ok) {
+    };
+    const refused = async res => {
       const told = await res.json().catch(() => ({}));
       if (res.status === 401) throw Object.assign(new Error('The download service refused the key.'), { settings: true });
-      // A copy of the service from before the picture has no such address.
-      if (res.status === 404 && kind === 'picture') throw new Error('The service is an older copy that cannot send a picture. Put the new server/ytdl.py on the server.');
       throw new Error(told.error || `The download service answered with error ${res.status}.`);
+    };
+    const again = `The download service is there, but the ${what} of this video did not arrive: the connection broke. Try again.`;
+    let res, from = `${sv.url}/${kind}?v=${id}`;
+    try { res = await ask(`${sv.url}/start?v=${id}&kind=${kind}`, auth, 30000); } catch (e) { await lost(again); }
+    if (res.ok) {
+      const job = (await res.json()).job, began = Date.now();
+      from = `${sv.url}/file?id=${job}`;
+      for (let missed = 0; ;) {
+        await wait(1500);
+        if (Date.now() - began > 15 * 60000) throw new Error(`The download service did not finish the ${what} in 15 minutes.`);
+        let at;
+        try { at = await ask(`${sv.url}/job?id=${job}`, auth, 15000); }
+        // One answer that did not come is not the end: the work goes on at the server.
+        catch (e) { if (++missed < 4) continue; await lost(again); }
+        missed = 0;
+        if (!at.ok) await refused(at);
+        const now = await at.json();
+        if (now.state === 'failed') throw new Error(now.error || 'The download did not work.');
+        if (now.state === 'done') break;
+        if (now.percent) sayStep(`Your download service gets the ${what}: ${Math.round(now.percent)}%…`);
+      }
+    } else if (res.status !== 404) await refused(res);
+    // 404: a copy of the service from before the short requests. It sends the file in one request that waits.
+    const old = !res.ok;
+    try { res = await fetch(from, auth); }
+    catch (e) { await lost(old ? `The download service is there, but the ${what} of this video did not arrive. The service is an older copy that makes the page wait in one long request, and a web server or Cloudflare in front of it cut the wait. Put the new server/ytdl.py on the server.` : again); }
+    if (!res.ok) {
+      // A copy of the service from before the picture has no such address.
+      if (res.status === 404 && old && kind === 'picture') throw new Error('The service is an older copy that cannot send a picture. Put the new server/ytdl.py on the server.');
+      await refused(res);
     }
     let title = '';
     try { title = decodeURIComponent(res.headers.get('X-Title') || ''); } catch (e) { /* a title that is not text */ }

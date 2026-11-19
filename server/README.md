@@ -4,7 +4,7 @@ Slow down can play a YouTube video only in YouTube's own frame, with six speeds 
 
 The service is one Python file with no packages to install. It runs `yt-dlp` on your computer or on your server, and it listens on that machine only (`127.0.0.1:8787`).
 
-The service keeps no files. It downloads the sound, or the picture, to a temporary folder, sends it to the page, and deletes the folder. The song is then kept in the browser that asked for it.
+The service keeps no files. It downloads the sound, or the picture, to a temporary folder, sends it to the page, and deletes the folder. A file that the page does not take goes after 10 minutes. The song is then kept in the browser that asked for it.
 
 The service answers only a request that has your key. Without the key it answers "The key is wrong" and does not start `yt-dlp`. Every visitor of the site sees the "Download service" block in Settings, but the block does nothing without the address and the key of a service.
 
@@ -123,7 +123,6 @@ Run these commands as root on the server.
    ```
    location /ytdl/ {
        proxy_pass http://127.0.0.1:8787/;
-       proxy_read_timeout 620s;
        proxy_buffering off;
    }
    ```
@@ -141,7 +140,7 @@ cp ytdl.py /opt/guitar-ytdl/
 systemctl restart guitar-ytdl
 ```
 
-An older copy still downloads. "Test the connection" tells you when the copy is older.
+An older copy still downloads, but in one request that waits for the whole file. A web server or Cloudflare in front of it can cut that wait, and the page then tells you to update. "Test the connection" tells you when the copy is from before the test.
 
 ## Configuration
 
@@ -158,14 +157,15 @@ A page on `http://localhost` can always ask, for tests.
 
 ## What the service keeps
 
-- The sound or the picture of a video is in a temporary folder while the service sends it. The service deletes the folder after each request, also after a failure. With the systemd unit of this folder, the temporary folder is private to the service.
+- The sound or the picture of a video is in a temporary folder until the page has taken it. The service then deletes the folder. It also deletes it after a failure, and after 10 minutes when the page did not take the file, for example because you closed the page. With the systemd unit of this folder, the temporary folder is private to the service.
 - The log has one line for each request, with the time, the id of the video and the answer. It does not have the key or the address of the reader. On a server, `journalctl -u guitar-ytdl` shows it.
 - `yt-dlp` keeps its own small cache, in `/var/cache/guitar-ytdl` with the systemd unit. It holds no sound.
 - The downloaded song itself is in the browser that asked, with the recordings of Slow down. It stays there until you delete it in the list "Recordings and downloads". The list shows the size of each song and of all songs together. "Delete the downloads" deletes all downloaded songs at once.
 
 ## Limits
 
-- One file at a time. The service waits up to 10 minutes for `yt-dlp`, and a web server in front of it must wait as long: the nginx example above has 620 seconds.
+- One file at a time. The service waits up to 10 minutes for `yt-dlp`.
+- The page asks in short requests: one starts the download, one asks how far it is, and one takes the file. So a web server or Cloudflare in front of the service needs no long wait. Cloudflare cuts a request that gets no answer in about two minutes, and only its Enterprise plan can change that.
 - There is no limit on the length of a video. The browser keeps the sound of an open song in memory, about 20 MB for each minute, so a phone can fail on a very long video.
 - A live stream does not download.
 - The picture is 360 lines high at most, about 2.5 MB for each minute. The sound is about 1 MB for each minute.
