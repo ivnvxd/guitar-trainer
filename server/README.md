@@ -1,10 +1,10 @@
 # Download service for Slow down
 
-Slow down can play a YouTube video only in YouTube's own frame, with six speeds and no other tools. This service gives the page the sound of a video as a file, so the song gets every tool. It is optional. The site works without it, and the public site has no such service.
+Slow down can play a YouTube video only in YouTube's own frame, with six speeds and no other tools. This service gives the page the sound of a video as a file, so the song gets every tool. If you choose "With picture" beside the Download button, it also gives the picture, as a second small file without sound that the player shows in step with the sound. It is optional. The site works without it, and the public site has no such service.
 
 The service is one Python file with no packages to install. It runs `yt-dlp` on your computer or on your server, and it listens on that machine only (`127.0.0.1:8787`).
 
-The service keeps no files. It downloads the sound to a temporary folder, sends it to the page, and deletes the folder. The song is then kept in the browser that asked for it.
+The service keeps no files. It downloads the sound, or the picture, to a temporary folder, sends it to the page, and deletes the folder. The song is then kept in the browser that asked for it.
 
 The service answers only a request that has your key. Without the key it answers "The key is wrong" and does not start `yt-dlp`. Every visitor of the site sees the "Download service" block in Settings, but the block does nothing without the address and the key of a service.
 
@@ -33,7 +33,7 @@ brew install yt-dlp deno
 
    The script starts the site at `http://localhost:8000` and the service at `http://localhost:8787`. Both answer this computer only. The script prints the address and the key of the service. It makes the key at the first start and keeps it in `server/local.key`.
 
-2. Open `http://localhost:8000/#/settings/service`. In the "Download service" block, open "Address and key", and enter the two values that the script printed. You do this once in each browser.
+2. Open `http://localhost:8000/#/settings/service`. In the "Download service" block, open "Address and key", and enter the two values that the script printed. You do this once in each browser. Then press "Test the connection": it tells you whether the service answers, takes the key and has its programs.
 
 3. In Slow down, a Download button now shows beside the YouTube link.
 
@@ -123,12 +123,25 @@ Run these commands as root on the server.
    ```
    location /ytdl/ {
        proxy_pass http://127.0.0.1:8787/;
-       proxy_read_timeout 200s;
+       proxy_read_timeout 620s;
        proxy_buffering off;
    }
    ```
 
 7. On the site, open the address `https://guitar.ivnv.dev/#/settings/service`. In the "Download service" block of Settings, "Address and key" is then open. Enter the address (for example `https://ytdl.example.com`) and the key. They stay in that browser. In Slow down, a Download button now shows beside the YouTube link. Do this once in each browser that you use, for example on the phone and on the computer.
+
+8. Press "Test the connection" under the two fields. The test downloads nothing. It tells you which part is wrong: the address, the key, `GT_ORIGIN`, or a program that the server does not have.
+
+### Update
+
+When the site gets a new version of the service, copy the new `ytdl.py` to the server and start the service again.
+
+```
+cp ytdl.py /opt/guitar-ytdl/
+systemctl restart guitar-ytdl
+```
+
+An older copy still downloads. "Test the connection" tells you when the copy is older.
 
 ## Configuration
 
@@ -143,9 +156,20 @@ The service reads these values from the environment. On a server they are in `/e
 
 A page on `http://localhost` can always ask, for tests.
 
+## What the service keeps
+
+- The sound or the picture of a video is in a temporary folder while the service sends it. The service deletes the folder after each request, also after a failure. With the systemd unit of this folder, the temporary folder is private to the service.
+- The log has one line for each request, with the time, the id of the video and the answer. It does not have the key or the address of the reader. On a server, `journalctl -u guitar-ytdl` shows it.
+- `yt-dlp` keeps its own small cache, in `/var/cache/guitar-ytdl` with the systemd unit. It holds no sound.
+- The downloaded song itself is in the browser that asked, with the recordings of Slow down. It stays there until you delete it in the list "Recordings and downloads". The list shows the size of each song and of all songs together. "Delete the downloads" deletes all downloaded songs at once.
+
 ## Limits
 
-- One video at a time, up to 10 minutes long, as the player takes.
+- One file at a time. The service waits up to 10 minutes for `yt-dlp`, and a web server in front of it must wait as long: the nginx example above has 620 seconds.
+- There is no limit on the length of a video. The browser keeps the sound of an open song in memory, about 20 MB for each minute, so a phone can fail on a very long video.
+- A live stream does not download.
+- The picture is 360 lines high at most, about 2.5 MB for each minute. The sound is about 1 MB for each minute.
+- Without `ffmpeg` on the server, `yt-dlp` sends the files as YouTube gives them. Chrome reads them. Safari is not tested with them. If Safari cannot open a download, install `ffmpeg` on the server: `yt-dlp` then repairs the sound file by itself.
 - Only a YouTube video id goes to `yt-dlp`. The service does not fetch other addresses.
 - YouTube changes often. If a download fails with an error from `yt-dlp`, update it with `yt-dlp -U`. The page shows the error.
 - YouTube can refuse the address of a server at any time. Then the service stops working, and the page still plays the video in YouTube's frame.

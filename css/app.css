@@ -1323,7 +1323,6 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-recent-list .player-mark { justify-content: space-between; }
 .player-recent-list .player-mark b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .player-recent-list .player-mark-t { flex: none; font-size: 13px; font-weight: 400; }
-.player-fold.is-folded:not([open]) + .player-say:empty { min-height: 0; margin: 0; }
 /* The dock while Play is off the screen. */
 .player-dock { padding: 6px; gap: 6px; }
 .player-dock-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2em; text-align: center; }
@@ -1332,9 +1331,20 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-blocked p { margin: 0; }
 .player-open { gap: 8px 10px; align-items: center; }
 .player-link { flex: 1 1 140px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
-.player-rec-list { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.player-rec-list li { display: flex; gap: 4px; }
-.player-say { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); }
+/* A line that says what the page does now, or what went wrong: in Slow down and under the test of the download
+   service in Settings. Busy has a ring that turns, a failure has the color of a wrong answer. */
+.say { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); scroll-margin: 76px 0 12px; overflow-wrap: anywhere; }
+.say[hidden] { display: none; }
+.say-text { flex: 1 1 200px; min-width: 0; }
+.say.is-bad { border-color: var(--bad-edge); background: var(--bad-soft); }
+.say.is-bad .say-text { font-weight: 600; }
+.say.is-ok { border-color: var(--ok-edge); background: var(--ok-soft); }
+.say-turn { flex: none; align-self: center; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: turn .8s linear infinite; }
+.say-time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.say a { flex: 1 0 100%; }
+.say-close { flex: none; align-self: flex-start; min-height: 32px; width: 32px; padding: 0; margin: -4px -6px -4px 0; }
+@keyframes turn { to { transform: rotate(360deg); } }
+.player-say { margin: 8px 0 10px; }
 .player-now { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 8px; font-size: 16px; }
 .player-now:empty { display: none; }
 .player-now .player-name { flex: 1 1 0; }

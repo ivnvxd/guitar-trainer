@@ -3,6 +3,13 @@
 
 The page asks GET /sound?v=<video id> with the header "Authorization: Bearer <key>". The service runs yt-dlp,
 and sends the m4a file back. It listens on this machine only: a web server with https stands in front of it.
+GET /picture?v=<video id> sends the picture of the video without its sound, as a small mp4 file. The page shows
+it in step with the sound.
+GET /check with the same header downloads nothing: it tells the page that the address and the key are right, and
+whether the server has the programs. "Test the connection" in the Settings of the site asks it.
+
+The file of a video is in a temporary folder while the service sends it, and the folder goes after each request.
+The service keeps nothing else. Its log has one line for each request, with the time and the id of the video.
 
 Configuration, from the environment:
   GT_KEY     the key that the page must send. The service does not start without it.
@@ -27,10 +34,12 @@ KEY = os.environ.get('GT_KEY', '')
 ORIGINS = {o.strip().rstrip('/') for o in os.environ.get('GT_ORIGIN', 'https://guitar.ivnv.dev').split(',') if o.strip()}
 PORT = int(os.environ.get('GT_PORT', '8787'))
 YTDLP = os.environ.get('GT_YTDLP', 'yt-dlp')
-# The player takes songs up to 10 minutes.
-MAX_SECONDS = 600
-# yt-dlp gets this long for one video.
-TIMEOUT = 180
+# yt-dlp gets this long for one file. A web server in front of the service must wait a little longer.
+TIMEOUT = 600
+# The sound: the m4a track in the language of the video, not a dubbed one.
+SOUND = '140/bestaudio[ext=m4a]'
+# The picture: no sound, 360 lines at most, in the form that every browser plays, and as one file.
+PICTURE = 'bestvideo[ext=mp4][vcodec^=avc1][height<=360][protocol^=http]'
 VIDEO_ID = re.compile(r'[A-Za-z0-9_-]{11}')
 LOCAL = re.compile(r'http://(localhost|127\.0\.0\.1)(:\d+)?')
 # One video at a time: a second request gets "busy".
@@ -43,14 +52,14 @@ class Refused(Exception):
         self.status, self.text = status, text
 
 
-def fetch(video, folder):
-    """Download the sound of a video into the folder. Give the path of the file and the title of the video."""
+def fetch(video, folder, form):
+    """Download the sound or the picture of a video into the folder. Give the path of the file and the title."""
     command = [
         YTDLP, '--no-playlist', '--no-progress', '--no-simulate',
-        '-f', '140/bestaudio[ext=m4a]',
-        '--match-filter', f'duration <= {MAX_SECONDS}',
+        '-f', form,
+        '--match-filter', '!is_live',
         '--print', 'after_move:%(title)s',
-        '-o', os.path.join(folder, 'sound.%(ext)s'),
+        '-o', os.path.join(folder, 'file.%(ext)s'),
         f'https://www.youtube.com/watch?v={video}',
     ]
     try:
@@ -62,12 +71,23 @@ def fetch(video, folder):
     files = [f for f in os.listdir(folder) if not f.endswith('.part')]
     if done.returncode or not files:
         errors = [line for line in done.stderr.splitlines() if line.startswith('ERROR')]
+        if errors and 'Requested format is not available' in errors[-1]:
+            raise Refused(422, 'YouTube has no file of this kind for the video.')
         if errors:
             raise Refused(502, f'yt-dlp on the server says: {errors[-1][:300]}')
         # The filter skips a video without an error.
-        raise Refused(422, 'The video is longer than 10 minutes, or it is a live stream.')
+        raise Refused(422, 'The video is a live stream. The service cannot download it.')
     title = (done.stdout.strip().splitlines() or [''])[-1]
     return os.path.join(folder, files[0]), title
+
+
+def version(program):
+    """The first line that a program prints for --version, or '' when the server does not have the program."""
+    try:
+        done = subprocess.run([program, '--version'], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return ''
+    return (done.stdout.strip().splitlines() or [''])[0][:60] if done.returncode == 0 else ''
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -84,7 +104,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Max-Age', '86400')
 
     def say(self, status, text):
-        body = json.dumps({'error': text}).encode()
+        self.tell(status, {'error': text})
+
+    def tell(self, status, data):
+        body = json.dumps(data).encode()
         self.send_response(status)
         self.cors()
         self.send_header('Content-Type', 'application/json')
@@ -100,11 +123,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         url = urlparse(self.path)
-        if url.path != '/sound':
+        if url.path not in ('/sound', '/picture', '/check'):
             return self.say(404, 'There is nothing at this address.')
         sent = self.headers.get('Authorization', '')
         if not hmac.compare_digest(sent.encode(), f'Bearer {KEY}'.encode()):
             return self.say(401, 'The key is wrong.')
+        if url.path == '/check':
+            # yt-dlp needs deno to read a YouTube page.
+            return self.tell(200, {'service': 'guitar-ytdl', 'ytdlp': version(YTDLP), 'deno': bool(shutil.which('deno'))})
         video = (parse_qs(url.query).get('v') or [''])[0]
         if not VIDEO_ID.fullmatch(video):
             return self.say(400, 'That is not a YouTube video id.')
@@ -112,10 +138,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.say(429, 'The server is busy with another video. Try again in a minute.')
         folder = tempfile.mkdtemp(prefix='guitar-ytdl-')
         try:
-            path, title = fetch(video, folder)
+            picture = url.path == '/picture'
+            path, title = fetch(video, folder, PICTURE if picture else SOUND)
             self.send_response(200)
             self.cors()
-            self.send_header('Content-Type', 'audio/mp4')
+            self.send_header('Content-Type', 'video/mp4' if picture else 'audio/mp4')
             self.send_header('Content-Length', str(os.path.getsize(path)))
             self.send_header('X-Title', quote(title))
             self.send_header('Cache-Control', 'no-store')

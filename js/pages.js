@@ -152,7 +152,26 @@
     const dlState = h('span', { class: 'fold-state' }, isSet() ? 'set' : 'not set');
     // No redraw: the fields keep their focus while you type.
     const dlSave = patch => { GT.saveSettings(patch); dlState.textContent = isSet() ? 'set' : 'not set'; };
-    const dlUrl = h('input', { type: 'url', class: 'player-link', value: settings.dlUrl || '', placeholder: 'http://localhost:8787 or https://…', 'aria-label': 'Address of the download service', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onchange: e => dlSave({ dlUrl: e.target.value.trim() }) });
+    // An address without http:// or https:// gets it: http for this computer, https for a server.
+    const dlAddress = v => v && !/^https?:\/\//i.test(v) ? (/^(localhost|127\.0\.0\.1)([:/]|$)/i.test(v) ? 'http://' : 'https://') + v : v;
+    // The test asks the service a question that downloads nothing, and says what is wrong when it fails.
+    const dlTold = h('p', { class: 'say', role: 'status', hidden: true });
+    const dlTell = (text, kind) => {
+      dlTold.hidden = false;
+      dlTold.className = `say is-${kind}`;
+      dlTold.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
+      dlTold.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, h('span', { class: 'say-text' }, text)].filter(Boolean));
+    };
+    const dlTest = h('button', { type: 'button', class: 'btn', onclick: async () => {
+      dlUrl.value = dlAddress(dlUrl.value.trim());
+      dlSave({ dlUrl: dlUrl.value, dlKey: dlKey.value.trim() });
+      dlTest.disabled = true;
+      dlTell('Testing the connection…', 'busy');
+      const test = await GT.player.checkService();
+      dlTest.disabled = false;
+      dlTell(test.text, test.ok && !test.old ? 'ok' : test.ok ? 'plain' : 'bad');
+    } }, 'Test the connection');
+    const dlUrl = h('input', { type: 'url', class: 'player-link', value: settings.dlUrl || '', placeholder: 'http://localhost:8787 or https://…', 'aria-label': 'Address of the download service', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onchange: e => { e.target.value = dlAddress(e.target.value.trim()); dlSave({ dlUrl: e.target.value }); } });
     const dlKey = h('input', { type: 'password', class: 'player-link', value: settings.dlKey || '', 'aria-label': 'Key of the download service', autocomplete: 'off', onchange: e => dlSave({ dlKey: e.target.value.trim() }) });
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
     main.append(h('div', { class: 'settings' },
@@ -190,6 +209,8 @@
           h('div', { style: 'display:grid;gap:16px' },
             D.field('Address', dlUrl),
             D.field('Key', dlKey),
+            h('div', null, dlTest),
+            dlTold,
             h('p', { class: 'small muted' }, 'Both stay in this browser, and a backup file does not hold them. The service gets the link of each video you download.')))),
       block('About',
         h('p', { class: 'muted' }, isSet()

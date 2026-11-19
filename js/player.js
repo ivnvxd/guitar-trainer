@@ -12,7 +12,6 @@
   const { h, store, settings } = GT;
 
   // Longer songs need too much memory on a phone: the sound of a 10-minute song is about 200 MB.
-  const MAX_SECONDS = 600;
   // A mono copy at a lower rate draws the waveform and feeds the note guess.
   const MONO_RATE = 22050;
   // The waveform keeps the loudest sample and the average of each block of the mono copy, for a view from far.
@@ -66,6 +65,7 @@
   }
 
   // ---------- recordings, kept in IndexedDB ----------
+  const NOT_KEPT = 'The browser did not keep this song: its storage is full, or it is a private window. The song is open now, but it is gone when you leave the page. Delete songs that you do not need in "Recordings and downloads".';
   function db() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('guitar-trainer', 1);
@@ -80,8 +80,9 @@
       return await new Promise((resolve, reject) => {
         const tx = base.transaction('recordings', op === 'list' ? 'readonly' : 'readwrite'), st = tx.objectStore('recordings');
         const req = op === 'list' ? st.getAll() : op === 'put' ? st.put(value) : op === 'get' ? st.get(value) : st.delete(value);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
+        // A write counts when the browser has kept it: a full store gives up after the request went well.
+        tx.oncomplete = () => resolve(op === 'delete' ? true : req.result);
+        tx.onerror = tx.onabort = () => reject(tx.error || req.error);
       });
     } catch (e) { return op === 'list' ? [] : null; }
   }
@@ -122,7 +123,7 @@
         P.drum = new AudioWorkletNode(c, 'gt-drum-cut', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
         P.drumRate = 0;
         route();
-      }).catch(() => { P.drumLoad = null; P.cut = Object.assign({}, P.cut, { drums: false }); say('The drum cut did not load. Check the connection and try again.'); draw(); });
+      }).catch(() => { P.drumLoad = null; P.cut = Object.assign({}, P.cut, { drums: false }); say('The drum cut did not load. Check the connection and try again.', 'bad'); draw(); });
     }
     return null;
   }
@@ -210,10 +211,11 @@
     P.top = top || 1;
   }
   // Decoded sound into the player: both channels go to the engine, and only the mono copy stays here.
-  const tooLong = seconds => `This song is ${fmt(seconds)} long. The player takes up to 10 minutes: cut the file shorter, or open a part of it.`;
+  // The sound of a song is in memory as a whole: about 20 MB for each minute. A long song can be too much for a
+  // device, and then the browser cannot make the sound.
+  const tooMuch = (name, seconds) => `The sound of ${name} did not fit in the memory of this device: it is ${fmt(seconds)} long, and each minute takes about 20 MB. Use a shorter part of it.`;
   // False when a later open started meanwhile: that one wins.
   async function loadDecoded(buf, name, key, media, my) {
-    if (buf.duration > MAX_SECONDS) throw new Error(tooLong(buf.duration));
     const node = await engine();
     if (my !== opening) return false;
     const chans = [0, buf.numberOfChannels > 1 ? 1 : 0].map(ch => buf.getChannelData(ch).slice());
@@ -233,6 +235,8 @@
       video.muted = true;
       // A video file with sound only (a .mov from a recorder, for example) has no picture to show.
       video.addEventListener('loadedmetadata', () => { if (!video.videoWidth && P.video === video) { P.video = null; drawMedia(); } });
+      // A picture that this browser cannot show: the song goes on with its sound.
+      video.addEventListener('error', () => { if (P.video !== video) return; P.video = null; drawMedia(); say('This browser cannot show the picture of this song. The sound works.'); });
       P.video = video;
     }
     route();
@@ -243,8 +247,9 @@
   const MAX_BYTES = 300 * 1024 * 1024;
   // Each open counts. When a later open starts while an earlier one still decodes, the earlier one gives up.
   let opening = 0;
-  // The length of a file from its header, before the page decodes it: a long mp3 is small as a file but large
-  // when decoded. NaN when the browser cannot tell.
+  // The length of a file from its header: a long mp3 is small as a file but large when decoded. NaN when the
+  // browser cannot tell. Over 20 minutes, a sound that the browser could not make was probably too long.
+  const LONG = 1200;
   function lengthOf(file) {
     return new Promise(resolve => {
       const url = URL.createObjectURL(file), m = document.createElement(/^video\//.test(file.type) ? 'video' : 'audio');
@@ -260,23 +265,24 @@
   async function openFile(file) {
     stop();
     const my = ++opening;
-    if (file.size > MAX_BYTES) { say(`${file.name} is ${Math.round(file.size / 1048576)} MB. The player takes files up to 300 MB: use the sound only (mp3 or m4a), or a shorter part.`); return; }
-    say(`Opening ${file.name}…`);
+    if (file.size > MAX_BYTES) { say(`${file.name} is ${Math.round(file.size / 1048576)} MB. The player takes files up to 300 MB: use the sound only (mp3 or m4a), or a shorter part.`, 'bad'); return; }
+    say(`Opening ${file.name}…`, 'busy');
     try {
       const c = A.context();
       if (!c) throw new Error('This browser cannot play sound.');
       if (c.state !== 'running') c.resume().catch(() => {});
-      const length = await lengthOf(file);
-      if (my !== opening) return;
-      if (isFinite(length) && length > MAX_SECONDS) throw new Error(tooLong(length));
       let buf;
-      try { buf = await c.decodeAudioData(await file.arrayBuffer()); } catch (e) { throw new Error(`This browser cannot read the sound of ${file.name}. Try an mp3, m4a, wav, mp4 or mov file.`); }
+      try { buf = await c.decodeAudioData(await file.arrayBuffer()); }
+      catch (e) {
+        const length = await lengthOf(file);
+        throw new Error(length > LONG ? tooMuch(file.name, length) : `This browser cannot read the sound of ${file.name}. Try an mp3, m4a, wav, mp4 or mov file.`);
+      }
       if (my !== opening) return;
       if (!await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null, my)) return;
       P.source = { file };
       say('');
       drawAll();
-    } catch (e) { if (my === opening) say(e.message || 'The file did not open.'); }
+    } catch (e) { if (my === opening) say(e.message || 'The file did not open.', 'bad'); }
   }
 
   // ---------- playing a file ----------
@@ -430,11 +436,11 @@
   // at: the second to start from, when you come back to the page.
   async function openYouTube(text, at = 0) {
     const id = ytIdOf(text);
-    if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…'); return; }
+    if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
     stop();
     const my = ++opening;
-    say('Opening the video…');
-    try { await loadYouTubeApi(); } catch (e) { if (my === opening) say(e.message); return; }
+    say('Opening the video…', 'busy');
+    try { await loadYouTubeApi(); } catch (e) { if (my === opening) say(e.message, 'bad'); return; }
     if (my !== opening) return;
     unloadYouTube();
     if (P.node) { try { await P.node.dropBuffers(); } catch (e) { /* none */ } }
@@ -486,11 +492,11 @@
     let stream;
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'exclude' });
-    } catch (e) { say('Recording did not start. Pick the tab with the video, and tick "Share tab audio".'); return; }
+    } catch (e) { say('Recording did not start. Pick the tab with the video, and tick "Share tab audio".', 'bad'); return; }
     const tracks = stream.getAudioTracks();
     if (!tracks.length) {
       stream.getTracks().forEach(t => t.stop());
-      say('The share had no sound. Share a browser tab, not a window or the screen, and tick "Share tab audio". Chrome and Edge can do this; Safari and Firefox cannot.');
+      say('The share had no sound. Share a browser tab, not a window or the screen, and tick "Share tab audio". Chrome and Edge can do this; Safari and Firefox cannot.', 'bad');
       return;
     }
     const chunks = [], rec = new MediaRecorder(new MediaStream(tracks));
@@ -501,12 +507,13 @@
       clearInterval(P.recTimer);
       P.rec = null;
       if (P.ui.recBtn) P.ui.recBtn.textContent = '● Record a part from a tab';
-      say('Opening the recording…');
+      say('Opening the recording…', 'busy');
       const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
       const id = `r${Date.now()}`, name = `Recording ${new Date().toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
-      await recordings('put', { id, name, blob, at: Date.now() });
+      const kept = await recordings('put', { id, name, blob, at: Date.now() });
       if (P.ui.refreshRecs) P.ui.refreshRecs();
       await openRecording({ id, name, blob });
+      if (!kept) say(NOT_KEPT);
     };
     stream.getTracks().forEach(t => t.addEventListener('ended', () => { if (rec.state === 'recording') rec.stop(); }));
     rec.start(1000);
@@ -518,14 +525,17 @@
   async function openRecording(r) {
     stop();
     const my = ++opening;
-    say(`Opening ${r.name}…`);
+    say(`Opening ${r.name}…`, 'busy');
     try {
       const c = A.context();
-      const buf = await c.decodeAudioData(await r.blob.arrayBuffer());
-      if (my !== opening || !await loadDecoded(buf, r.name, `rec:${r.id}`, null, my)) return;
+      let buf;
+      try { buf = await c.decodeAudioData(await r.blob.arrayBuffer()); }
+      catch (e) { throw new Error(`The browser could not make the sound of ${r.name}. A long song can be too much for the memory of this device: each minute takes about 20 MB.`); }
+      // A download can have the picture of the video as a second file, without sound.
+      if (my !== opening || !await loadDecoded(buf, r.name, `rec:${r.id}`, r.picture || null, my)) return;
       P.source = { rec: r };
       say('');
-    } catch (e) { if (my === opening) say(e.message || 'The recording did not open.'); }
+    } catch (e) { if (my === opening) say(e.message || 'The recording did not open.', 'bad'); }
     drawAll();
   }
 
@@ -533,33 +543,118 @@
   // The page cannot read the sound of a YouTube video. A service on your server can: it sends the sound as a file.
   // The file is kept with the recordings, so it gets every tool and opens again without the server.
   const service = () => { const s = GT.settings; return s.dlUrl && s.dlKey ? { url: String(s.dlUrl).trim().replace(/\/+$/, ''), key: String(s.dlKey).trim() } : null; };
+  // A request that gives up after a time: a wrong address can stay open for minutes.
+  function ask(url, options, ms) {
+    const end = new AbortController(), timer = setTimeout(() => end.abort(), ms);
+    return fetch(url, Object.assign({ signal: end.signal, cache: 'no-store' }, options)).finally(() => clearTimeout(timer));
+  }
+  // Test the service: is something at the address, does it take this site and the key, and does the server have
+  // its programs. It downloads nothing. The answer is { ok, text }, and the text says what to do.
+  // "Test the connection" in Settings asks this, and so does a download that failed.
+  async function checkService(sv = service()) {
+    if (!sv || !sv.url || !sv.key) return { ok: false, text: 'Enter the address and the key of the service first.' };
+    if (!/^https?:\/\/[^/]/i.test(sv.url)) return { ok: false, text: 'The address must start with http:// or https://, for example http://localhost:8787.' };
+    const own = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(sv.url), secure = location.protocol === 'https:';
+    if (secure && /^http:/i.test(sv.url) && !own) return { ok: false, text: 'This site is on https, and a browser does not let such a site ask an http address. Put the service behind a web server with https: the instructions show how.' };
+    let res;
+    try { res = await ask(`${sv.url}/check`, { headers: { Authorization: `Bearer ${sv.key}` } }, 10000); }
+    catch (e) {
+      if (e && e.name === 'AbortError') return { ok: false, text: 'The address did not answer in 10 seconds. Check the address, and make sure that the service runs.' };
+      // The page got nothing that it can read. A second request, without the key and without a look at the answer,
+      // tells "nothing is there" from "something is there, but it does not take this site".
+      let there = true;
+      try { await ask(`${sv.url}/check`, { mode: 'no-cors' }, 10000); } catch (e2) { there = false; }
+      if (there) return { ok: false, text: `Something answers at this address, but not to this site. On the server, make sure that the service runs, and that GT_ORIGIN has ${location.origin} in it. Then start the service again.` };
+      if (secure && own) return { ok: false, text: 'The service on this computer did not answer. Make sure that it runs. If it does: a browser can stop a site on https from reaching a program on your computer. Then start server/local.py and use the site at the address that it prints.' };
+      return { ok: false, text: `Nothing answers at this address. Check the address, and make sure that the service runs.${/^https:/i.test(sv.url) ? ' The web server in front of it needs a certificate that the browser trusts.' : ''}` };
+    }
+    const told = await res.json().catch(() => null);
+    if (res.status === 401) return { ok: false, text: 'The service answers, but it refuses the key. Copy the key again: it is the value of GT_KEY on the server, or the key that server/local.py prints.' };
+    if (res.ok && told && told.service === 'guitar-ytdl') {
+      if (!told.ytdlp) return { ok: false, text: 'The service answers and takes the key, but its server has no yt-dlp program. Install yt-dlp there: the instructions show how.' };
+      if (!told.deno) return { ok: false, text: `The service answers and takes the key, and it has yt-dlp ${told.ytdlp}. But its server has no deno program, and yt-dlp needs deno for YouTube. Install deno there.` };
+      return { ok: true, text: `The connection works. The service takes the key, and it has yt-dlp ${told.ytdlp}.` };
+    }
+    // A copy of the service from before this test: it has no /check, and it says so before it looks at the key.
+    if (res.status === 404 && told && told.error) return { ok: true, old: true, text: 'The service answers. It is an older copy, so this test cannot check the key or the programs. For the full test, put the new server/ytdl.py on the server and start the service again.' };
+    return { ok: false, text: `The address answers, but not as the download service (answer ${res.status}). Check the address. With a web server in front of the service, the address can need a path, such as https://example.com/ytdl.` };
+  }
+  const toSettings = () => h('a', { href: '#/settings/service' }, 'Settings of the service');
+  const mb = bytes => bytes < 1048576 * 10 ? (bytes / 1048576).toFixed(1) : String(Math.round(bytes / 1048576));
+  // One file from the service: the sound, or the picture. The line shows how much of it is here.
+  async function fetchFile(sv, kind, id) {
+    const what = kind === 'picture' ? 'picture' : 'sound';
+    let res;
+    try { res = await fetch(`${sv.url}/${kind}?v=${id}`, { headers: { Authorization: `Bearer ${sv.key}` } }); }
+    catch (e) {
+      // No answer that the page can read: the test finds out why.
+      sayStep('The download did not arrive. Testing the connection to the service…');
+      const test = await checkService(sv);
+      if (test.ok) throw new Error(`The download service is there, but the ${what} of this video did not arrive. Something cut the wait: the web server in front of the service (it must wait 10 minutes, as the instructions show), or the connection. Try again.`);
+      // The address or the key is wrong: the message gets a link to them.
+      throw Object.assign(new Error(test.text), { settings: true });
+    }
+    if (!res.ok) {
+      const told = await res.json().catch(() => ({}));
+      if (res.status === 401) throw Object.assign(new Error('The download service refused the key.'), { settings: true });
+      // A copy of the service from before the picture has no such address.
+      if (res.status === 404 && kind === 'picture') throw new Error('The service is an older copy that cannot send a picture. Put the new server/ytdl.py on the server.');
+      throw new Error(told.error || `The download service answered with error ${res.status}.`);
+    }
+    let title = '';
+    try { title = decodeURIComponent(res.headers.get('X-Title') || ''); } catch (e) { /* a title that is not text */ }
+    const type = kind === 'picture' ? 'video/mp4' : 'audio/mp4';
+    if (!res.body || !res.body.getReader) return { blob: await res.blob(), title };
+    // The file arrives in pieces.
+    const total = Number(res.headers.get('Content-Length')) || 0, pieces = [], reader = res.body.getReader();
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      pieces.push(value);
+      got += value.length;
+      sayStep(total ? `The ${what} arrives: ${mb(got)} of ${mb(total)} MB…` : `The ${what} arrives: ${mb(got)} MB…`);
+    }
+    return { blob: new Blob(pieces, { type }), title };
+  }
   async function download(text) {
     const id = ytIdOf(text), sv = service();
-    if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…'); return; }
+    if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
     if (!sv || P.loading) return;
     P.loading = true;
-    say('Downloading the sound of the video. This can take a minute…');
+    const picture = !!saved.picture;
+    // What the page says after the song is open: a picture that did not come, or a song that the browser did not keep.
+    let note = '';
     try {
-      let res;
-      try { res = await fetch(`${sv.url}/sound?v=${id}`, { headers: { Authorization: `Bearer ${sv.key}` } }); }
-      catch (e) { throw new Error('The download service did not answer. Check its address in Settings, and that it runs.'); }
-      if (!res.ok) {
-        const told = await res.json().catch(() => ({}));
-        throw new Error(res.status === 401 ? 'The download service refused the key. Check it in Settings.' : told.error || `The download service answered with error ${res.status}.`);
-      }
-      const blob = await res.blob();
-      let title = '';
-      try { title = decodeURIComponent(res.headers.get('X-Title') || ''); } catch (e) { /* a title that is not text */ }
-      const r = { id: `y${id}`, name: title || `YouTube video ${id}`, blob, at: Date.now() };
+      say('Your download service gets the sound of the video. A long video takes some minutes…', 'busy');
+      const sound = await fetchFile(sv, 'sound', id);
+      const r = { id: `y${id}`, name: sound.title || `YouTube video ${id}`, blob: sound.blob, at: Date.now() };
       // The parts and the loop that you set on the video go to the file: the times are the same.
       if (!saved.songs[`rec:${r.id}`] && saved.songs[`yt:${id}`]) { saved.songs[`rec:${r.id}`] = Object.assign(JSON.parse(JSON.stringify(saved.songs[`yt:${id}`])), { rate: 1, climb: 0, name: r.name }); save(); }
-      await recordings('put', r);
+      // The sound is kept first: when the picture fails, the song is still here.
+      const kept = await recordings('put', r);
+      if (!kept) note = NOT_KEPT;
+      if (picture) {
+        try {
+          say('Your download service gets the picture of the video. This takes longer than the sound…', 'busy');
+          r.picture = (await fetchFile(sv, 'picture', id)).blob;
+          // The sound is kept, and the picture did not fit: the song opens the next time without its picture.
+          if (!await recordings('put', r) && kept) note = 'The browser kept the sound, but not the picture: its storage is full. The picture shows now, but it is gone when you leave the page.';
+        } catch (e) { delete r.picture; if (kept) note = `The sound is here, but the picture is not. ${e.message}`; }
+      }
       if (P.ui.refreshRecs) P.ui.refreshRecs();
       P.loading = false;
       await openRecording(r);
-    } catch (e) { say(e.message || 'The download did not work.'); }
+      if (note && P.source && P.source.rec === r) say(note);
+    } catch (e) { say(e.message || 'The download did not work.', 'bad', e.settings ? toSettings() : null); }
     P.loading = false;
   }
+  // The sound alone, or the picture of the video too: one choice for every Download button.
+  const pictureChip = () => chip('With picture', saved.picture, () => {
+    saved.picture = !saved.picture;
+    save();
+    document.querySelectorAll('.player-pic').forEach(c => c.setAttribute('aria-pressed', String(!!saved.picture)));
+  }, 'Download the picture of the video too, in small size. The download is about four times as large and takes longer.', { class: 'chip chip-toggle player-pic' });
 
   // ---------- the notes at the playhead ----------
   // The notes in about a third of a second from a place in the song, as you hear them: in the key you chose.
@@ -759,7 +854,33 @@
   }
 
   // ---------- drawing ----------
-  function say(text) { if (P.ui.say) P.ui.say.textContent = text; }
+  // The line above the song: what the page does now, or what went wrong. kind 'busy': the page works, and the
+  // seconds count up, so you see that it goes on. kind 'bad': a failure, in the color of a wrong answer, and the
+  // page scrolls to it. more: a link or a button after the text.
+  let sayTimer = null;
+  function say(text, kind = '', more = null) {
+    const el = P.ui.say;
+    clearInterval(sayTimer);
+    if (!el) return;
+    el.hidden = !text;
+    el.className = `player-say say${kind ? ` is-${kind}` : ''}`;
+    el.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
+    const line = h('span', { class: 'say-text' }, text), time = h('span', { class: 'say-time' });
+    // A failure stays until you close it, or until the page has something new to say.
+    const close = kind === 'bad' ? h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close the message', onclick: () => say('') }, '×') : null;
+    el.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, line, kind === 'busy' ? time : null, close, more].filter(Boolean));
+    if (kind === 'busy') {
+      const began = Date.now();
+      // A step of the same work: the text changes, the seconds go on.
+      el.step = t => { line.textContent = t; };
+      sayTimer = setInterval(() => { if (!el.isConnected) { clearInterval(sayTimer); return; } const s = Math.round((Date.now() - began) / 1000); if (s >= 2) time.textContent = `${s} s`; }, 1000);
+    } else el.step = null;
+    if (kind === 'bad' && el.isConnected) el.scrollIntoView({ block: 'nearest' });
+  }
+  const sayStep = text => { if (P.ui.say && P.ui.say.step) P.ui.say.step(text); };
+  // A text of a part that the song moves: written only when it changes. A browser can lose a click on a button
+  // whose text was written again between the press and the release, and the song writes 20 times a second.
+  const put = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
   // The waveform shows a part of the song (the view). A tap jumps, a drag sets the loop, a drag on an end of the
   // loop moves that end. Two fingers, or the wheel with Ctrl, zoom. The strip under it shows the whole song with
   // the view as a box: a drag there moves the view.
@@ -790,8 +911,9 @@
     u.zoomIn.disabled = P.view.span <= Math.min(MIN_SPAN, P.duration) + 0.001;
     u.zoomOut.disabled = P.view.span >= P.duration - 0.001;
     const toLoop = hasLoop() && !showsLoop();
-    u.fit.textContent = toLoop ? 'Fit' : 'All';
-    u.fit.setAttribute('aria-label', toLoop ? 'Show the loop' : 'Show the whole song');
+    put(u.fit, toLoop ? 'Fit' : 'All');
+    const fitName = toLoop ? 'Show the loop' : 'Show the whole song';
+    if (u.fit.getAttribute('aria-label') !== fitName) u.fit.setAttribute('aria-label', fitName);
     u.fit.disabled = !toLoop && u.zoomOut.disabled;
   }
   // The colors of the drawing come from the style sheet. Reading them is slow, so the page reads them once a second.
@@ -1017,17 +1139,17 @@
   // Update the moving parts in place: time, playhead, the play button and the speed.
   function show() {
     const u = P.ui;
-    if (u.time) u.time.textContent = `${fmt(P.pos)} / ${fmt(P.duration)}`;
-    if (u.play) u.play.textContent = P.playing ? '❚❚ Pause' : '▶ Play';
+    put(u.time, `${fmt(P.pos)} / ${fmt(P.duration)}`);
+    put(u.play, P.playing ? '❚❚ Pause' : '▶ Play');
     if (u.dock && !u.dock.hidden) {
-      u.dockPlay.textContent = P.playing ? '❚❚ Pause' : '▶ Play';
-      u.dockTime.textContent = fmt(P.pos);
-      u.dockLoop.setAttribute('aria-pressed', String(!!P.loop));
+      put(u.dockPlay, P.playing ? '❚❚ Pause' : '▶ Play');
+      put(u.dockTime, fmt(P.pos));
+      if (u.dockLoop.getAttribute('aria-pressed') !== String(!!P.loop)) u.dockLoop.setAttribute('aria-pressed', String(!!P.loop));
     }
-    if (u.rateOut) u.rateOut.textContent = `${Math.round(P.rate * 100)}%`;
-    if (u.rateIn && document.activeElement !== u.rateIn) u.rateIn.value = Math.round(P.rate * 100);
-    if (u.seek && document.activeElement !== u.seek) { u.seek.max = Math.max(1, P.duration); u.seek.value = P.pos; }
-    if (u.hold) u.hold.setAttribute('aria-pressed', String(!!P.holding));
+    put(u.rateOut, `${Math.round(P.rate * 100)}%`);
+    if (u.rateIn && document.activeElement !== u.rateIn && !u.rateIn.held) u.rateIn.value = Math.round(P.rate * 100);
+    if (u.seek && document.activeElement !== u.seek && !u.seek.held) { u.seek.max = Math.max(1, P.duration); u.seek.value = P.pos; }
+    if (u.hold && u.hold.getAttribute('aria-pressed') !== String(!!P.holding)) u.hold.setAttribute('aria-pressed', String(!!P.holding));
     if (!!P.playing !== !!P.awake) { P.awake = !!P.playing; awake(P.awake); if (isFile() && navigator.mediaSession) navigator.mediaSession.playbackState = P.playing ? 'playing' : 'paused'; }
     paint();
   }
@@ -1049,6 +1171,17 @@
     [['play', play], ['pause', stop], ['seekbackward', () => seek(P.pos - 5)], ['seekforward', () => seek(P.pos + 5)], ['previoustrack', () => seek(hasLoop() ? P.a : 0)]]
       .forEach(([name, run]) => { try { ms.setActionHandler(name, on ? run : null); } catch (e) { /* this browser does not know the action */ } });
   }
+  // A slider under a finger or the mouse: the song does not move it then. Safari gives a slider no focus on a
+  // press, so the focus alone does not tell.
+  const grip = el => {
+    el.addEventListener('pointerdown', () => {
+      el.held = true;
+      const up = () => { el.held = false; root.removeEventListener('pointerup', up, true); root.removeEventListener('pointercancel', up, true); };
+      root.addEventListener('pointerup', up, true);
+      root.addEventListener('pointercancel', up, true);
+    });
+    return el;
+  };
   const chip = (text, on, onclick, title, extra = {}) => h('button', Object.assign({ type: 'button', class: 'chip chip-toggle', 'aria-pressed': String(!!on), title, onclick }, extra), text);
   const btn = (text, onclick, extra = {}) => h('button', Object.assign({ type: 'button', class: 'btn', onclick }, extra), text);
   const set = patch => {
@@ -1104,8 +1237,8 @@
   // The times on the A and B buttons, while a finger moves an end of the loop.
   function showEdges() {
     const u = P.ui;
-    if (u.edgeA) u.edgeA.textContent = P.a === null ? 'Set A' : `A ${fmt1(P.a)}`;
-    if (u.edgeB) u.edgeB.textContent = P.b === null ? 'Set B' : `B ${fmt1(P.b)}`;
+    put(u.edgeA, P.a === null ? 'Set A' : `A ${fmt1(P.a)}`);
+    put(u.edgeB, P.b === null ? 'Set B' : `B ${fmt1(P.b)}`);
   }
   // A and B: the loop changes at once, also while the song plays.
   function setA() {
@@ -1205,7 +1338,7 @@
       u.fit = btn('All', () => fit(), { class: 'btn player-fit' });
       parts.push(u.wave, h('div', { class: 'player-zoom' }, u.over, u.zoomOut, u.zoomIn, u.fit));
     } else if (P.kind === 'youtube') {
-      u.seek = h('input', { type: 'range', class: 'player-seek', min: 0, max: Math.max(1, P.duration), step: 0.1, value: P.pos, 'aria-label': 'Place in the video', oninput: e => seek(Number(e.target.value)) });
+      u.seek = grip(h('input', { type: 'range', class: 'player-seek', min: 0, max: Math.max(1, P.duration), step: 0.1, value: P.pos, 'aria-label': 'Place in the video', oninput: e => seek(Number(e.target.value)) }));
       parts.push(u.seek);
     }
     if (P.kind) {
@@ -1248,7 +1381,7 @@
       u.time = null;
       parts.push(h('div', { class: 'controls player-blocked' }, h('p', null, P.ytError),
         h('div', { class: 'row' }, h('a', { class: 'btn', href: `https://www.youtube.com/watch?v=${P.ytId}`, target: '_blank', rel: 'noopener' }, 'Open the video on YouTube'),
-          service() ? btn('Download its sound', () => download(P.ytId)) : null)));
+          service() ? btn('Download its sound', () => download(P.ytId)) : null, service() ? pictureChip() : null)));
     } else if (P.kind) {
       if (u.name) u.name.textContent = P.name;
       const tabs = [['loop', 'Loop'], ['speed', 'Speed']].concat(isFile() ? [['sound', 'Sound']] : [], [['parts', 'Parts']], isFile() ? [['bars', 'Bars']] : []);
@@ -1263,13 +1396,13 @@
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'),
             h('div', { class: 'row player-chips' }, P.ytRates.map(r => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.abs(P.rate - r) < 0.001), onclick: () => { setRate(r); draw(); } }, `${Math.round(r * 100)}%`)))));
           if (service()) rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes. Your download service can get the sound as a file, and the file gets every tool.'),
-            btn('Download the sound', () => download(P.ytId)));
+            h('div', { class: 'row player-open' }, btn('Download the sound', () => download(P.ytId)), pictureChip()));
           else rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes, and the site cannot download it. ',
             canRecord() ? 'You can record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can record a part of it, and the recording gets every tool.',
             ' With your own download service, a video gets every tool: see ', h('a', { href: '#/settings/service' }, 'Settings'), '.'),
             canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null);
         } else {
-          u.rateIn = h('input', { type: 'range', min: 25, max: 150, step: 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) });
+          u.rateIn = grip(h('input', { type: 'range', min: 25, max: 150, step: 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) }));
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'), u.rateIn, u.rateOut,
             h('div', { class: 'row player-chips' }, [50, 75, 100].map(v => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.round(P.rate * 100) === v), onclick: () => { setRate(v / 100); draw(); } }, `${v}%`)))));
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Key'),
@@ -1407,16 +1540,24 @@
         onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); openYouTube(link.value); } } });
       // A dock of an earlier drawing of the page goes.
       if (P.ui && P.ui.box) { watchTransport(null); if (P.ui.dock) P.ui.dock.remove(); }
-      P.ui = { box: h('div', { class: 'player' }), media: h('div', { class: 'player-media' }), now: h('div', { class: 'player-now' }), say: h('p', { class: 'player-say', role: 'status' }) };
+      P.ui = { box: h('div', { class: 'player' }), media: h('div', { class: 'player-media' }), now: h('div', { class: 'player-now' }), say: h('p', { class: 'player-say say', role: 'status', hidden: true }) };
       const recBtn = canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null;
       P.ui.recBtn = recBtn;
       P.ui.refreshRecs = () => refreshRecs();
       const recList = h('div', { class: 'player-recs' });
+      const size = r => r.blob.size + (r.picture ? r.picture.size : 0);
+      const drop = async list => { for (const r of list) { await recordings('delete', r.id); delete saved.songs[`rec:${r.id}`]; } save(); refreshRecs(); };
       const refreshRecs = () => recordings('list').then(list => {
         if (!list || !list.length) { recList.replaceChildren(); return; }
-        recList.replaceChildren(h('p', { class: 'small muted' }, 'Recordings and downloads'), h('ul', { class: 'player-rec-list' }, list.sort((x, y) => y.at - x.at).map(r => h('li', null,
-          btn(r.name, () => openRecording(r)),
-          btn('×', async () => { if (!root.confirm(`Delete ${r.name}?`)) return; await recordings('delete', r.id); delete saved.songs[`rec:${r.id}`]; save(); refreshRecs(); }, { 'aria-label': `Delete ${r.name}` })))));
+        // A download can come again from the service. A recording of a tab cannot, so the one button for many
+        // songs takes the downloads only.
+        const got = list.filter(r => r.id[0] === 'y'), all = list.reduce((sum, r) => sum + size(r), 0);
+        recList.replaceChildren(
+          h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, `Recordings and downloads, ${mb(all)} MB in this browser`),
+            got.length > 1 ? h('button', { type: 'button', class: 'chip', onclick: () => { if (root.confirm(`Delete the ${got.length} downloaded songs (${mb(got.reduce((sum, r) => sum + size(r), 0))} MB), with their loops and parts?${got.length < list.length ? ' Recordings stay.' : ''}`)) drop(got); } }, 'Delete the downloads') : null),
+          h('ul', { class: 'player-recent-list' }, list.sort((x, y) => y.at - x.at).map(r => h('li', null,
+            h('button', { type: 'button', class: 'btn player-mark', onclick: () => openRecording(r) }, h('b', null, r.name), h('span', { class: 'player-mark-t' }, `${r.picture ? 'with picture, ' : ''}${mb(size(r))} MB`)),
+            btn('×', () => { if (root.confirm(`Delete ${r.name}?`)) drop([r]); }, { 'aria-label': `Delete ${r.name}` })))));
       });
       refreshRecs();
       // The last songs: a video opens again with one tap. A file does not, because a browser cannot open a file by
@@ -1442,9 +1583,10 @@
       refreshRecent();
       const source = h('div', { class: 'controls player-source', role: 'group', 'aria-label': 'Open a song' },
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
-          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 10 minutes and 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
+          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
         h('div', { class: 'row player-open' }, link, btn('Open', () => openYouTube(link.value)),
-          service() ? btn('Download', () => download(link.value), { title: 'Get the sound of the video as a file from your download service. The file gets every tool.' }) : null),
+          service() ? btn('Download', () => download(link.value), { title: 'Get the sound of the video as a file from your download service. The file gets every tool.' }) : null,
+          service() ? pictureChip() : null),
         recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null,
         recList, recent);
       P.ui.fold = h('details', { class: 'player-fold' }, h('summary', null, 'Open a song'), source);
@@ -1452,7 +1594,7 @@
       // A file dropped anywhere on the page opens.
       const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); } },
         h('div', { class: 'lib-title' }, h('div', null, h('h1', null, 'Slow down'), h('p', { class: 'muted lib-sub' }, 'Learn a song by ear: slow it down without changing its pitch, loop a part, change its key.'))),
-        P.ui.now, P.ui.fold, P.ui.say, P.ui.media, P.ui.box);
+        P.ui.now, P.ui.say, P.ui.fold, P.ui.media, P.ui.box);
       P.ui.page = page;
       foldSource();
       // Back on the page: a YouTube video opens again (its frame went with the page), a file is still here.
@@ -1492,5 +1634,5 @@
   A.onVolume = () => { if (P.out) P.out.gain.value = A.volume; };
 
   // state: the player state, for checks in the browser.
-  GT.player = { view, leave, ytIdOf, state: () => P };
+  GT.player = { view, leave, ytIdOf, checkService, state: () => P };
 })(window);
