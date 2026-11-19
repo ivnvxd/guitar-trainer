@@ -1,6 +1,6 @@
 /* Offline cache. Change VERSION when you publish new files, so browsers fetch them again.
    It matches GT.version in js/core.js. */
-const VERSION = 'guitar-trainer-2.3.1';
+const VERSION = 'guitar-trainer-2.3.2';
 const FILES = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest',
   'fonts/geist.woff2', 'fonts/literata-names.woff2', 'icon-maskable-512.png',
