@@ -421,7 +421,7 @@
       drawSlots();
       const tiles = h('div', { class: 'answers' }, nums.map((n, i) => h('button', { type: 'button', class: 'answer', onclick: () => add(n) }, h('b', null, n), h('span', null, inKey[NUMERAL_DEGREE[n]].name), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[i]))));
       ui.board.replaceChildren(slots, tiles,
-        h('button', { type: 'button', class: 'btn', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
+        h('button', { type: 'button', class: 'btn btn-text', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
       ui.even(tiles);
     },
     onKey(e, q, ui) {

@@ -259,9 +259,9 @@
         c.mode === 'pulse' ? null : stagePick(c, set),
         c.mode === 'pulse' ? null : D.autoRow(this, c, set, 'rhythms', id => R.STAGES.find(s => s.id === id).name.toLowerCase()),
         D.field('Delay of this device', h('div', { class: 'row' },
-          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms less', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) - 10 }); set({}); } }, '−'),
+          h('span', { class: 'stepper' }, h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms less', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) - 10 }); set({}); } }, '−'),
           h('output', null, delay === undefined ? 'not measured' : `${delay} ms`),
-          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms more', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) + 10 }); set({}); } }, '+'),
+          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': '10 ms more', onclick: () => { GT.saveSettings({ tapOffset: (settings.tapOffset || 0) + 10 }); set({}); } }, '+')),
           h('button', { type: 'button', class: 'btn', onclick: () => { GT.saveSettings({ tapOffset: undefined }); set({}); } }, delay === undefined ? 'Measure' : 'Measure again'))));
     }
   });

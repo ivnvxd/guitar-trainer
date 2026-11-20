@@ -267,7 +267,7 @@
   const placesOf = sh => sh.frets.map((f, s) => f === null ? null : { string: s, fret: f }).filter(Boolean);
   const cagedBehind = (r, quality) => T.cagedMap(r, quality, lastFret(), openStrings()).map(sh => ({ points: placesOf(sh), label: sh.shape, cls: 'is-faint shape-' + sh.shape }));
   // A switch chip for a faint layer. It keeps the setting and draws the page again.
-  const layerChip = (key, text, label, title) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib[key]), 'aria-label': label, title, onclick: () => { saveLib({ [key]: !lib[key] }); rerender(); } }, text);
+  const layerChip = (key, text, label, title) => h('button', { type: 'button', class: 'chip chip-toggle', 'aria-pressed': String(!!lib[key]), 'aria-label': label, title, onclick: () => { saveLib({ [key]: !lib[key] }); rerender(); } }, text);
   function section(title, intro, ...content) {
     return h('section', { class: 'lib-section' }, h('h2', null, title), intro ? h('p', null, intro) : null, content);
   }
@@ -350,13 +350,13 @@
     const out = h('output', null, `${tempo()} bpm`);
     const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); A.setLoopTempo(v); out.textContent = `${v} bpm`; };
     // Drums go on and off while a loop plays.
-    const drums = h('button', { type: 'button', class: 'chip', 'aria-pressed': String(!!lib.drums), title: 'A drum beat under the loop', onclick: () => {
+    const drums = h('button', { type: 'button', class: 'chip chip-toggle', 'aria-pressed': String(!!lib.drums), title: 'A drum beat under the loop', onclick: () => {
       saveLib({ drums: !lib.drums }); A.setDrums(lib.drums);
       document.querySelectorAll('.tempo .chip').forEach(b => b.setAttribute('aria-pressed', String(!!lib.drums)));
     } }, 'Drums');
     return h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo of the backing' },
-      h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
-      h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+'), drums);
+      h('span', { class: 'stepper' }, h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+      h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+')), drums);
   }
   // Chords of a loop as MIDI numbers: the bass, then a close voicing that moves little from chord to chord.
   function loopMidis(chords) {
@@ -497,8 +497,8 @@
       GT.segmented('Sequence', T.SEQUENCES.map(x => [x.id, x.short]), kind, v => { A.stopRhythm(); saveLib({ seqKind: v }); rerender(); }, 'seq-pick'),
       h('div', { class: 'row seq-row' },
         h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo' },
-          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
-          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+')),
+          h('span', { class: 'stepper' }, h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+          h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+'))),
         h('div', { class: 'row seq-actions' }, play, clean)),
       h('p', { class: 'small muted' }, best ? `Your best clean tempo for ${name.toLowerCase()} here: ${best} bpm.` : `No clean tempo saved yet for ${name.toLowerCase()} here.`),
       h('pre', { class: 'tab', 'aria-label': `Position ${pos.index}, ${name.toLowerCase()}, as tab` }, tabOf(pos.notes, run, 12)));
@@ -941,7 +941,7 @@
       const out = [
         head(FIT.title, 'Add the chords of a song. The list shows the scales that hold every note of them.'),
         h('div', { class: 'controls fit-add', role: 'group', 'aria-label': 'Add a chord' }, addRoot, addType, add,
-          chords.length ? h('button', { type: 'button', class: 'btn', onclick: () => go([]) }, 'Clear') : null),
+          chords.length ? h('button', { type: 'button', class: 'btn btn-text', onclick: () => go([]) }, 'Clear') : null),
         chords.length ? list : h('div', null, h('p', { class: 'muted' }, 'No chords yet. Add them one by one, or start from an example:'), h('div', { class: 'chips fit-examples' }, examples))
       ];
       if (!chords.length) return out;
@@ -1501,7 +1501,7 @@
         m.forEach((x, i) => A.note(x, i * 0.42, 0, 0.5));
         if (m.length > 1) m.forEach((x, i) => A.note(x, m.length * 0.42 + 0.25 + i * 0.07, 1.6, Math.min(0.4, 0.74 / Math.sqrt(m.length))));
       };
-      const clearBtn = h('button', { type: 'button', class: 'btn', onclick: () => { picked.clear(); picked.add(0); draw(false); } }, 'Clear');
+      const clearBtn = h('button', { type: 'button', class: 'btn btn-text', onclick: () => { picked.clear(); picked.add(0); draw(false); } }, 'Clear');
       svg.readout = h('div', { class: 'iv-panel' }, h('p', { class: 'iv-readout', 'aria-live': 'polite' }, big, small),
         h('div', { class: 'row iv-actions' }, playButton('Play', playAll), clearBtn));
       // The shape is drawn in the middle, which is free in this view.
@@ -1674,7 +1674,7 @@
               scales.length ? h('div', { class: 'found-list' }, shown.map(x => row(scalesView.link({ scale: x.scale, root: x.root }), `${x.root} ${lowerName(x.scale.name)}`,
                 x.exact ? 'These are all its notes' : `${pcs.length} of its ${x.scale.toneList.length} notes`, x.onBass ? 'Starts on the lowest note' : null)))
                 : h('p', { class: 'muted' }, 'No scale of the Library holds all these notes.'),
-              scales.length > shown.length ? h('button', { type: 'button', class: 'btn', onclick: () => { showAll = true; draw(); } }, `Show ${scales.length - shown.length} more`) : null);
+              scales.length > shown.length ? h('button', { type: 'button', class: 'btn btn-text', onclick: () => { showAll = true; draw(); } }, `Show ${scales.length - shown.length} more`) : null);
           }
         }
         result.replaceChildren(...out.filter(Boolean));
@@ -1693,7 +1693,7 @@
         if (again) again.focus({ preventScroll: true });
       }
       const play = h('button', { type: 'button', class: 'btn', onclick: () => FB.sound(neckSlot, sorted()) }, '▶ Play');
-      const clear = h('button', { type: 'button', class: 'btn', onclick: () => { places = []; history.replaceState(history.state, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
+      const clear = h('button', { type: 'button', class: 'btn btn-text', onclick: () => { places = []; history.replaceState(history.state, '', '#/library/name'); saveLib({ last: Object.assign({}, lib.last, { name: null }) }); draw(); } }, 'Clear');
       draw();
       return [
         head(LOOKUP.title, 'Tap notes on the neck. The page names the chord, and the scales that hold the notes.', [play, clear]),
@@ -1816,8 +1816,8 @@
       const out = h('output', null, `${tempo()} bpm`);
       const change = by => { const v = Math.max(TEMPOS.min, Math.min(TEMPOS.max, tempo() + by)); saveLib({ tempo: v }); out.textContent = `${v} bpm`; };
       const tempoRow = extra => h('div', { class: 'tempo', role: 'group', 'aria-label': 'Tempo' },
-        h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
-        h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+'), extra);
+        h('span', { class: 'stepper' }, h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Slower', onclick: () => change(-TEMPOS.step) }, '−'), out,
+        h('button', { type: 'button', class: 'btn btn-icon', 'aria-label': 'Faster', onclick: () => change(TEMPOS.step) }, '+')), extra);
       if (state.part === 'count') {
         const lesson = state.lesson;
         return [
@@ -1875,11 +1875,11 @@
       const mineCtl = p.mine ? ctl('Yours', h('div', { class: 'row strum-mine' },
         h('select', { class: 'more is-on strum-select', 'aria-label': 'Your patterns', onchange: e => open(e.target.value === 'new' ? asPattern(newMine({ grid: p.grid })) : customOf(e.target.value)) },
           mineList().map(m => h('option', { value: m.id, selected: m.id === p.mine }, m.name)), h('option', { value: 'new' }, 'New pattern')),
-        h('button', { type: 'button', class: 'btn', onclick: () => {
+        h('button', { type: 'button', class: 'btn btn-text', onclick: () => {
           const name = (root.prompt('Name of the pattern', p.name) || '').trim();
           if (name) { saveMine(p.mine, { name: name.slice(0, 40) }); rerender(); }
         } }, 'Rename'),
-        h('button', { type: 'button', class: 'btn', onclick: () => {
+        h('button', { type: 'button', class: 'btn btn-text', onclick: () => {
           if (!root.confirm(`Delete ${p.name}?`)) return;
           saveLib({ strumMine: mineList().filter(m => m.id !== p.mine), strumMineAt: null });
           open(mineList().length ? customOf() : R.patternById('d-du-udu'));
@@ -1916,7 +1916,7 @@
           mineCtl,
           p.mine ? ctl('Grid', h('div', { class: 'row strum-chords-pick' },
             h('select', { class: 'more is-on strum-select', 'aria-label': 'Grid of your pattern', onchange: e => regrid(e.target.value) }, R.GRIDS.map(g => h('option', { value: g.id, selected: g.id === p.grid }, g.name))),
-            h('button', { type: 'button', class: 'btn', disabled: !/[^.]/.test(p.slots), onclick: () => { saveMine(p.mine, { slots: '.'.repeat(p.slots.length) }); rerender(); } }, 'Clear')), 'ctl-plain') : null),
+            h('button', { type: 'button', class: 'btn btn-text', disabled: !/[^.]/.test(p.slots), onclick: () => { saveMine(p.mine, { slots: '.'.repeat(p.slots.length) }); rerender(); } }, 'Clear')), 'ctl-plain') : null),
         // How to change the pattern, above the grid that you change.
         h('p', { class: 'small muted lib-note strum-howto' }, p.mine ? 'Pick a stroke, then tap a cell to put it there. Tap it again to take it out.'
           : 'To change this pattern, pick a stroke and tap a cell. The change becomes a new pattern of yours, and this one stays as it is.'),

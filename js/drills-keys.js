@@ -154,7 +154,7 @@
       draw();
       const tiles = h('div', { class: 'answers' }, names.map((n, pc) => h('button', { type: 'button', class: 'answer', onclick: () => add(pc) }, h('b', null, n), h('span', { class: 'kbd', 'aria-hidden': 'true' }, D.KEYS[pc]))));
       ui.board.replaceChildren(slots, tiles,
-        h('button', { type: 'button', class: 'btn', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
+        h('button', { type: 'button', class: 'btn btn-text', style: 'margin-top:10px', onclick: () => q.back() }, 'Undo', h('span', { class: 'kbd' }, '⌫')));
       ui.even(tiles);
     },
     onKey(e, q) {

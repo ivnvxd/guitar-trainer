@@ -1408,6 +1408,7 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 /* A choice with its name: the two stay on one line. */
 .player-pair { display: inline-flex; align-items: center; gap: 10px; }
 .player-pair .player-label { flex: none; min-width: 104px; }
+.player-pair.is-short .player-label { min-width: 52px; }
 .player-help { margin-top: 0; }
 .player-help p { margin: 0; }
 .player-help b { color: var(--text); font-weight: 600; }
@@ -1417,7 +1418,6 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-edge { display: flex; gap: 3px; }
 .player-edge-set { min-width: 96px; padding: 8px 10px; font-variant-numeric: tabular-nums; }
 .player-loop .player-chips .btn-icon { font-size: 15px; }
-.player-gap { width: 1px; align-self: stretch; margin: 4px 4px; background: var(--line-strong); }
 .player-hint { flex: 1 1 100%; margin: 0; }
 .player-reset { justify-content: flex-end; }
 .player-marks { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1 1 100%; }
@@ -1538,3 +1538,49 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .lib-title h1[data-big], .lib-title h1[data-name] { font-family: "Literata", var(--font); font-weight: 700; letter-spacing: -.015em; }
 /* A long scale name keeps the Play button beside it on a phone. */
 @media (max-width: 660px) { .lib-title h1[data-name] { font-size: 24px; } }
+
+/* ---------- The kinds of control ----------
+   Each kind of control has one look on every page, so its shape says what it does.
+   - The main action of a block is the peach button (.btn-primary).
+   - An action that plays, starts, opens or makes something is a grey box (.btn).
+   - An action that takes back or tidies (Undo, Clear, Rename, Reset) is text with a line under it (.btn-text).
+   - A switch is a round pill with a dot: hollow when off, peach when on (.chip-toggle).
+   - A choice of one is a track (.seg). With many options it is a row of chips, the chosen one in peach (.chip).
+   - A value with steps is one joined box (.stepper).
+   - The tabs of a panel are words with a peach line under the open one (.player-tabs).
+   The tap area of a touch screen is in ::after of these controls, so the marks here use ::before and borders. */
+.btn.btn-text { padding-inline: 6px; background: none; border-color: transparent; text-decoration: underline; text-decoration-color: var(--line-hover); text-decoration-thickness: 2px; text-underline-offset: 6px; }
+@media (hover: hover) { .btn.btn-text:hover:not(:disabled) { background: none; border-color: transparent; text-decoration-color: var(--accent); } }
+
+.chip.chip-toggle { padding-inline: 10px 14px; border-radius: 999px; border-color: var(--line-strong); background: none; color: var(--muted); font-weight: 600; }
+.chip.chip-toggle::before { content: ''; flex: none; width: 10px; height: 10px; margin: 0; border-radius: 50%; border: 2px solid var(--faint); }
+.chip.chip-toggle[aria-pressed="true"] { border-color: transparent; background: var(--surface-3); color: var(--text); }
+.chip.chip-toggle[aria-pressed="true"]::before { content: ''; margin: 0; border-color: var(--accent); background: var(--accent); }
+/* Under a neck the row is tight: the switches there are a little smaller, so the row stays one line on a small phone. */
+.neck-tools .chip.chip-toggle { gap: 5px; padding-inline: 8px 10px; }
+.neck-tools .chip.chip-toggle::before { width: 8px; height: 8px; }
+.tempo { flex-wrap: wrap; row-gap: 6px; }
+.tempo .stepper output { min-width: 62px; padding: 0 4px; }
+/* The smallest phones: every switch is a little tighter, and a named row of switches puts its name above them. */
+@media (max-width: 389px) {
+  .player-pair.is-short { flex-wrap: wrap; }
+  .player-pair.is-short .player-label { flex-basis: 100%; }
+}
+@media (max-width: 374px) {
+  .chip.chip-toggle, .neck-tools .chip.chip-toggle { gap: 4px; padding-inline: 7px 9px; }
+  .neck-tools { gap: 4px; }
+  .neck-tools .neck-turn { padding-inline: 7px; }
+  .tempo { gap: 3px; }
+}
+
+.stepper { display: inline-flex; align-items: stretch; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); }
+.stepper > .btn { border-width: 0; border-radius: 0; background: none; }
+.stepper > :first-child { border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px); }
+.stepper > :last-child { border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0; }
+.stepper > :not(:first-child) { border-left: 1px solid var(--line-strong); }
+.stepper > output { display: grid; place-items: center; padding: 0 10px; }
+.stepper > .btn:active:not(:disabled) { transform: none; }
+
+.seg.player-tabs { gap: 0; padding: 0; border-radius: 0; background: none; border-bottom: 1px solid var(--line-strong); }
+.seg.player-tabs button { min-height: 40px; margin-bottom: -1px; border-radius: 0; border-bottom: 3px solid transparent; background: none; }
+.seg.player-tabs button[aria-checked="true"] { background: none; border-bottom-color: var(--accent); color: var(--text); }

@@ -791,7 +791,7 @@
       b ? h('div', { class: 'player-field' },
         btn('Bar 1 here', () => setBeat({ first: P.pos }), { title: 'The first beat of a bar is where the song is now' }),
         chip('Snap', saved.snap, () => { saved.snap = !saved.snap; save(); GT.keepPlace(draw); }, 'The ends of a loop go to the nearest beat'),
-        btn('Clear', () => setBeat(null))) : null,
+        btn('Clear', () => setBeat(null), { class: 'btn btn-text' })) : null,
       h('p', { class: 'small muted player-hint' }, 'A trial. Play the song and tap Tap on each beat, and start on the first beat of a bar. Four taps make a beat, and more taps make it more exact. The waveform then shows the bars, and with Snap the ends of a loop go to the nearest beat.')
     ].filter(Boolean);
   }
@@ -1282,7 +1282,7 @@
       u.time = h('span', { class: 'player-time' });
       u.name = h('b', null, P.name);
       u.now.replaceChildren(h('span', { class: 'player-name' }, ...[u.name, P.kind === 'youtube' ? h('span', { class: 'muted small' }, ' on YouTube') : null].filter(Boolean)), u.time,
-        h('button', { type: 'button', class: 'chip', onclick: () => { u.fold.open = !u.fold.open; if (u.refreshRecent) u.refreshRecent(); if (u.fold.open) u.fold.scrollIntoView({ block: 'nearest' }); } }, 'Other song'));
+        h('button', { type: 'button', class: 'btn btn-text', onclick: () => { u.fold.open = !u.fold.open; if (u.refreshRecent) u.refreshRecent(); if (u.fold.open) u.fold.scrollIntoView({ block: 'nearest' }); } }, 'Other song'));
     } else u.now.replaceChildren();
     if (P.kind === 'youtube') { u.ytBox = h('div'); parts.push(h('div', { class: 'player-yt' }, u.ytBox)); }
     if (P.video) parts.push(h('div', { class: 'player-video-box' }, P.video));
@@ -1294,7 +1294,7 @@
       u.zoomOut = btn('−', () => zoom(2), { class: 'btn btn-icon', 'aria-label': 'Zoom out', title: 'Key −' });
       u.zoomIn = btn('+', () => zoom(0.5), { class: 'btn btn-icon', 'aria-label': 'Zoom in', title: 'Key +' });
       u.fit = btn('All', () => fit(), { class: 'btn player-fit' });
-      parts.push(u.wave, h('div', { class: 'player-zoom' }, u.over, u.zoomOut, u.zoomIn, u.fit));
+      parts.push(u.wave, h('div', { class: 'player-zoom' }, u.over, h('span', { class: 'stepper' }, u.zoomOut, u.zoomIn), u.fit));
     } else if (P.kind === 'youtube') {
       u.seek = grip(h('input', { type: 'range', class: 'player-seek', min: 0, max: Math.max(1, P.duration), step: 0.1, value: P.pos, 'aria-label': 'Place in the video', oninput: e => seek(Number(e.target.value)) }));
       parts.push(u.seek);
@@ -1361,7 +1361,7 @@
       const tab = tabs.some(t => t[0] === saved.tab) ? saved.tab : 'loop';
       parts.push(GT.segmented('Settings', tabs, tab, v => { saved.tab = v; save(); GT.keepPlace(draw); }, 'player-tabs'));
       const rows = [];
-      const resetRow = () => h('div', { class: 'player-field player-reset' }, btn('Reset the settings', reset, { disabled: !changed(), title: `${isFile() ? 'Speed, key, sound' : 'Speed'} and the settings of each pass go back to how a song starts. The loop and the parts stay.` }));
+      const resetRow = () => h('div', { class: 'player-field player-reset' }, btn('Reset the settings', reset, { class: 'btn btn-text', disabled: !changed(), title: `${isFile() ? 'Speed, key, sound' : 'Speed'} and the settings of each pass go back to how a song starts. The loop and the parts stay.` }));
       if (tab === 'speed') {
         u.rateOut = h('output', { class: 'player-rate' });
         if (P.kind === 'youtube') {
@@ -1377,9 +1377,9 @@
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'), u.rateIn, u.rateOut,
             h('div', { class: 'row player-chips' }, [50, 75, 100].map(v => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.round(P.rate * 100) === v), onclick: () => { setRate(v / 100); draw(); } }, `${v}%`)))));
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Key'),
-            btn('−1', () => set({ semis: Math.max(-12, P.semis - 1) }), { 'aria-label': 'Down a semitone' }),
+            h('span', { class: 'stepper' }, btn('−1', () => set({ semis: Math.max(-12, P.semis - 1) }), { 'aria-label': 'Down a semitone' }),
             h('output', { class: 'player-rate player-key' }, P.semis ? `${P.semis > 0 ? '+' : ''}${P.semis} semitone${Math.abs(P.semis) > 1 ? 's' : ''}` : 'As recorded'),
-            btn('+1', () => set({ semis: Math.min(12, P.semis + 1) }), { 'aria-label': 'Up a semitone' })));
+            btn('+1', () => set({ semis: Math.min(12, P.semis + 1) }), { 'aria-label': 'Up a semitone' }))));
         }
         rows.push(resetRow());
       }
@@ -1388,7 +1388,7 @@
         const edge = (k, letter, setHere) => {
           const here = btn('', setHere, { class: 'btn player-edge-set', title: `Key ${letter}: set ${letter} where the song is now` });
           u[k === 'a' ? 'edgeA' : 'edgeB'] = here;
-          return h('div', { class: 'player-edge' },
+          return h('div', { class: 'player-edge stepper' },
             btn('−', () => nudge(k, -0.1), { class: 'btn btn-icon', 'aria-label': `${letter} a tenth of a second earlier`, disabled: P[k] === null }), here,
             btn('+', () => nudge(k, 0.1), { class: 'btn btn-icon', 'aria-label': `${letter} a tenth of a second later`, disabled: P[k] === null }));
         };
@@ -1398,26 +1398,28 @@
           u.needA ? h('p', { class: 'small muted player-hint', role: 'status' }, 'Set A first, then play on and set B after it.') : null,
           h('div', { class: 'row player-chips' },
             chip('Repeat', P.loop, () => set({ loop: !P.loop }), 'Key L: the song goes back to A each time it gets to B'),
-            btn('◀', () => moveLoop(-1), { class: 'btn btn-icon', 'aria-label': 'Move the loop back by its length', disabled: !hasLoop() }),
-            btn('▶', () => moveLoop(1), { class: 'btn btn-icon', 'aria-label': 'Move the loop on by its length', disabled: !hasLoop() }),
-            btn('½', () => scaleLoop(0.5), { class: 'btn btn-icon', 'aria-label': 'Make the loop half as long', disabled: !hasLoop() }),
-            btn('×2', () => scaleLoop(2), { class: 'btn btn-icon', 'aria-label': 'Make the loop twice as long', disabled: !hasLoop() })),
+            h('span', { class: 'stepper' }, btn('◀', () => moveLoop(-1), { class: 'btn btn-icon', 'aria-label': 'Move the loop back by its length', disabled: !hasLoop() }),
+            btn('▶', () => moveLoop(1), { class: 'btn btn-icon', 'aria-label': 'Move the loop on by its length', disabled: !hasLoop() })),
+            h('span', { class: 'stepper' }, btn('½', () => scaleLoop(0.5), { class: 'btn btn-icon', 'aria-label': 'Make the loop half as long', disabled: !hasLoop() }),
+            btn('×2', () => scaleLoop(2), { class: 'btn btn-icon', 'aria-label': 'Make the loop twice as long', disabled: !hasLoop() }))),
           h('div', { class: 'row player-chips' },
-            btn('Undo', undoLoop, { disabled: !P.undo, title: 'The loop as it was before the last change' }),
             btn('Save the loop', saveLoop, { disabled: !hasLoop(), title: 'Keep this loop under a name, in Parts' }),
-            btn('Clear', () => { keepLoop(); set({ a: null, b: null, loop: false }); }, { disabled: P.a === null && P.b === null }))));
+            btn('Undo', undoLoop, { class: 'btn btn-text', disabled: !P.undo, title: 'The loop as it was before the last change' }),
+            btn('Clear', () => { keepLoop(); set({ a: null, b: null, loop: false }); }, { class: 'btn btn-text', disabled: P.a === null && P.b === null }))));
         const pair = (label, choice) => h('span', { class: 'player-pair' }, h('span', { class: 'player-label' }, label), choice);
         rows.push(h('div', { class: 'player-field' },
           pair('Between passes', GT.segmented('Pause before each pass', [[0, 'No pause'], [1, '1 s'], [2, '2 s']], P.gap, v => set({ gap: v }))),
           pair('Each pass', GT.segmented('Speed up each pass', P.kind === 'youtube' ? [[0, 'Same speed'], [1, 'Next speed']] : [[0, 'Same speed'], [2, '+2%'], [5, '+5%']], P.kind === 'youtube' ? (P.climb ? 1 : 0) : P.climb, v => set({ climb: v })))));
       }
       if (tab === 'sound') {
-        rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Cut'),
-          h('div', { class: 'row player-chips' },
+        // Two rows with their names: the cuts, and the bass made louder.
+        const named = (label, ...chips) => h('span', { class: 'player-pair is-short' }, h('span', { class: 'player-label' }, label), h('span', { class: 'row player-chips' }, chips));
+        rows.push(h('div', { class: 'player-field' },
+          named('Cut',
             chip('Bass', P.cut.bass, () => toggleCut('bass'), 'Take out the sound under 200 Hz'),
             chip('Drums', P.cut.drums, () => toggleCut('drums'), 'Take out short hits and keep notes that ring'),
-            chip('Voice', P.cut.voice && P.stereo, () => toggleCut('voice'), P.stereo ? 'Take out what is in the middle of the mix' : 'This file has the same sound left and right, so there is no middle to take out', { disabled: !P.stereo }),
-            h('span', { class: 'player-gap', 'aria-hidden': 'true' }),
+            chip('Voice', P.cut.voice && P.stereo, () => toggleCut('voice'), P.stereo ? 'Take out what is in the middle of the mix' : 'This file has the same sound left and right, so there is no middle to take out', { disabled: !P.stereo })),
+          named('Louder',
             chip('Bass up', P.boost, () => set({ boost: !P.boost, cut: Object.assign({}, P.cut, { bass: false }) }), 'Make the bass louder, to hear its line')),
           h('p', { class: 'small muted player-hint' }, 'Choose one or more. A cut makes a part quieter, it cannot take it out completely. Voice also takes out a guitar in the middle of the mix. The note row reads the sound after the Bass and Voice cuts.')));
         rows.push(resetRow());
@@ -1430,7 +1432,7 @@
         rows.push(P.markers.length ? h('ol', { class: 'player-marks' }, P.markers.map((m, i) => h('li', null,
           h('button', { type: 'button', class: 'btn player-mark', onclick: () => loopMarker(i), title: 'Loop this part' }, h('b', null, m.name),
             h('span', { class: 'player-mark-t' }, range(m) + (m.b && m.rate && m.rate !== 1 ? `, ${Math.round(m.rate * 100)}%` : ''))),
-          btn('Rename', () => { const name = (root.prompt('Name of the part', m.name) || '').trim(); if (name) { m.name = name.slice(0, 40); remember(); draw(); } }, { class: 'chip' }),
+          btn('Rename', () => { const name = (root.prompt('Name of the part', m.name) || '').trim(); if (name) { m.name = name.slice(0, 40); remember(); draw(); } }, { class: 'btn btn-text' }),
           btn('×', () => { P.markers = P.markers.filter((_, k) => k !== i); remember(); draw(); }, { 'aria-label': `Delete ${m.name}` }))))
           : h('p', { class: 'small muted player-hint' }, 'Mark the start of a part (intro, verse, solo), or save a loop under a name. A tap on a part loops it.'));
       }
@@ -1535,7 +1537,7 @@
         const got = list.filter(r => r.id[0] === 'y'), all = list.reduce((sum, r) => sum + size(r), 0);
         recList.replaceChildren(
           h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, `Recordings and downloads, ${mb(all)} MB in this browser`),
-            got.length > 1 ? h('button', { type: 'button', class: 'chip', onclick: () => { if (root.confirm(`Delete the ${got.length} downloaded songs (${mb(got.reduce((sum, r) => sum + size(r), 0))} MB), with their loops and parts?${got.length < list.length ? ' Recordings stay.' : ''}`)) drop(got); } }, 'Delete the downloads') : null),
+            got.length > 1 ? h('button', { type: 'button', class: 'btn btn-text', onclick: () => { if (root.confirm(`Delete the ${got.length} downloaded songs (${mb(got.reduce((sum, r) => sum + size(r), 0))} MB), with their loops and parts?${got.length < list.length ? ' Recordings stay.' : ''}`)) drop(got); } }, 'Delete the downloads') : null),
           h('ul', { class: 'player-recent-list' }, list.sort((x, y) => y.at - x.at).map(r => h('li', null,
             h('button', { type: 'button', class: 'btn player-mark', onclick: () => openRecording(r) }, h('b', null, r.name), h('span', { class: 'player-mark-t' }, `${r.picture ? 'with picture, ' : ''}${mb(size(r))} MB`)),
             btn('×', () => { if (root.confirm(`Delete ${r.name}?`)) drop([r]); }, { 'aria-label': `Delete ${r.name}` })))));
@@ -1550,7 +1552,7 @@
         if (!keys.length) { recent.replaceChildren(); return; }
         recent.replaceChildren(
           h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, 'Last songs'),
-            h('button', { type: 'button', class: 'chip', onclick: () => { if (root.confirm(`Remove all ${keys.length} songs from the list, with their loops and parts? Recordings stay.`)) forget(keys); } }, 'Clear the list')),
+            h('button', { type: 'button', class: 'btn btn-text', onclick: () => { if (root.confirm(`Remove all ${keys.length} songs from the list, with their loops and parts? Recordings stay.`)) forget(keys); } }, 'Clear the list')),
           h('ul', { class: 'player-recent-list' }, keys.map(k => {
             const s = saved.songs[k], video = k.startsWith('yt:'), n = (s.markers || []).length;
             const note = [video ? 'YouTube' : 'file: choose it again', n ? `${n} part${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ');
