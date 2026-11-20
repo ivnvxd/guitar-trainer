@@ -34,27 +34,19 @@
     exportAll() {
       const data = {};
       for (const k of store.keys()) data[k] = store.get(k);
-      // The download service belongs to this browser. Its address and its key do not go into a file.
-      if (data.settings) { delete data.settings.dlUrl; delete data.settings.dlKey; }
       return { app: 'guitar-trainer', version: 1, saved: new Date().toISOString(), data };
     },
     importAll(json) {
       if (!json || json.app !== 'guitar-trainer' || typeof json.data !== 'object') throw new Error('This file is not a progress file from this site.');
-      // A file never sets the download service: an address from a file would get the key of this browser.
-      const now = store.get('settings', {}) || {};
-      for (const [k, v] of Object.entries(json.data)) {
-        if (k !== 'settings' || !v || typeof v !== 'object') { store.set(k, v); continue; }
-        const next = Object.assign({}, v);
-        delete next.dlUrl; delete next.dlKey;
-        if (now.dlUrl) next.dlUrl = now.dlUrl;
-        if (now.dlKey) next.dlKey = now.dlKey;
-        store.set(k, next);
-      }
+      for (const [k, v] of Object.entries(json.data)) store.set(k, v);
     }
   };
 
   const DEFAULTS = { leftHanded: false, frets: 15, voice: 'pluck', volume: 0.8, muted: false, tuning: 'standard', customTuning: null, capo: 0, orientation: 'auto', theme: 'auto', micId: '', a4: 440 };
   const settings = Object.assign({}, DEFAULTS, store.get('settings', {}));
+  // Up to version 2.3 the settings could hold the address and the key of a download service. The site has no
+  // such service any more, so the two values go from this browser.
+  if ('dlUrl' in settings || 'dlKey' in settings) { delete settings.dlUrl; delete settings.dlKey; store.set('settings', settings); }
   function saveSettings(patch) {
     Object.assign(settings, patch);
     store.set('settings', settings);

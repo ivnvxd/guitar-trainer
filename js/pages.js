@@ -116,7 +116,7 @@
       file, status);
   }
 
-  function settingsPage(main, rest) {
+  function settingsPage(main) {
     const redraw = () => GT.render();
     // A change redraws the page. Keep the place on it.
     const set = patch => { const y = root.scrollY; GT.saveSettings(patch); redraw(); root.scrollTo(0, y); };
@@ -145,34 +145,6 @@
       return { string, fret, kind: semi === 0 ? 'root' : semi === 3 || semi === 4 ? 'third' : semi === 7 ? 'fifth' : 'other', label: T.PC_PLAIN[T.mod(open[string] + fret)] };
     });
     GT.fretboard.render(preview, { from: 0, to: 7, tuning: open, capo: GT.capo(), leftHanded: settings.leftHanded, orientation: settings.orientation, markers: shape, label: 'Preview' });
-    // The download service of Slow down is optional: you run it on your own computer or server. Every visitor sees
-    // the block, with its two fields in a fold. The address #settings/service opens the fold.
-    if (rest && rest[0] === 'service') serviceOpen = true;
-    const isSet = () => !!(GT.settings.dlUrl && GT.settings.dlKey);
-    const dlState = h('span', { class: 'fold-state' }, isSet() ? 'set' : 'not set');
-    // No redraw: the fields keep their focus while you type.
-    const dlSave = patch => { GT.saveSettings(patch); dlState.textContent = isSet() ? 'set' : 'not set'; };
-    // An address without http:// or https:// gets it: http for this computer, https for a server.
-    const dlAddress = v => v && !/^https?:\/\//i.test(v) ? (/^(localhost|127\.0\.0\.1)([:/]|$)/i.test(v) ? 'http://' : 'https://') + v : v;
-    // The test asks the service a question that downloads nothing, and says what is wrong when it fails.
-    const dlTold = h('p', { class: 'say', role: 'status', hidden: true });
-    const dlTell = (text, kind) => {
-      dlTold.hidden = false;
-      dlTold.className = `say is-${kind}`;
-      dlTold.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
-      dlTold.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, h('span', { class: 'say-text' }, text)].filter(Boolean));
-    };
-    const dlTest = h('button', { type: 'button', class: 'btn', onclick: async () => {
-      dlUrl.value = dlAddress(dlUrl.value.trim());
-      dlSave({ dlUrl: dlUrl.value, dlKey: dlKey.value.trim() });
-      dlTest.disabled = true;
-      dlTell('Testing the connection…', 'busy');
-      const test = await GT.player.checkService();
-      dlTest.disabled = false;
-      dlTell(test.text, test.ok && !test.old ? 'ok' : test.ok ? 'plain' : 'bad');
-    } }, 'Test the connection');
-    const dlUrl = h('input', { type: 'url', class: 'player-link', value: settings.dlUrl || '', placeholder: 'http://localhost:8787 or https://…', 'aria-label': 'Address of the download service', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onchange: e => { e.target.value = dlAddress(e.target.value.trim()); dlSave({ dlUrl: e.target.value }); } });
-    const dlKey = h('input', { type: 'password', class: 'player-link', value: settings.dlKey || '', 'aria-label': 'Key of the download service', autocomplete: 'off', onchange: e => dlSave({ dlKey: e.target.value.trim() }) });
     const block = (title, ...rows) => h('section', { class: 'lib-section' }, h('h2', null, title), h('div', { style: 'display:grid;gap:16px' }, rows));
     main.append(h('div', { class: 'settings' },
       h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Settings'), h('p', null, 'Saved in this browser. They apply to the library and to every drill.'))),
@@ -203,21 +175,8 @@
         h('p', { class: 'small muted' }, 'Stays: the result and the Next button show under the answer buttons, and you scroll down for the picture of the answer. Moves: the page goes down to the whole answer, and comes back at the next question.'),
         D.field('Count-in', GT.segmented('Count-in', [[true, 'One bar'], [false, 'Off']], settings.countIn !== false, v => set({ countIn: v }))),
         h('p', { class: 'small muted' }, 'One bar of clicks before a strumming pattern or a rhythm starts. Read mode of Tap in time always counts in: you need the tempo before the first note.')),
-      block('Download service',
-        h('p', { class: 'small muted' }, 'Optional, for Slow down. A YouTube video has only YouTube\'s own speeds, and this site cannot download it. If you run the small download service of this site on your own computer or server, Slow down gets a Download button, and a downloaded song gets every tool.'),
-        h('p', { class: 'small muted' }, h('a', { href: `${REPO}/tree/main/server#readme`, target: '_blank', rel: 'noopener' }, 'How to set up the service')),
-        h('details', { class: 'drill-help settings-fold', open: serviceOpen, ontoggle: e => { serviceOpen = e.target.open; } },
-          h('summary', null, 'Address and key', dlState),
-          h('div', { style: 'display:grid;gap:16px' },
-            D.field('Address', dlUrl),
-            D.field('Key', dlKey),
-            h('div', null, dlTest),
-            dlTold,
-            h('p', { class: 'small muted' }, 'Both stay in this browser, and a backup file does not hold them. The service gets the link of each video you download.')))),
       block('About',
-        h('p', { class: 'muted' }, isSet()
-          ? 'Everything runs in your browser. Nothing is sent anywhere, with two exceptions in Slow down: YouTube sees which video you open, and the download service that you set above gets the link of each video you download. The sound is made by the browser, so the site works offline after the first visit.'
-          : 'Everything runs in your browser. Nothing is sent anywhere, except that YouTube sees which video you open in Slow down. The sound is made by the browser, so the site works offline after the first visit.'),
+        h('p', { class: 'muted' }, 'Everything runs in your browser. Nothing is sent anywhere, except that YouTube sees which video you open in Slow down. The sound is made by the browser, so the site works offline after the first visit.'),
         h('p', { class: 'muted' }, 'Found a wrong note or a bug, or have an idea? Report it on GitHub. The code of the site is there too.'),
         h('div', { class: 'row about-links' },
           h('a', { class: 'btn', href: `${REPO}/issues/new`, target: '_blank', rel: 'noopener' }, 'Report a problem'),
@@ -225,8 +184,6 @@
         h('p', { class: 'small faint site-version' }, h('a', { href: `${REPO}/releases/tag/v${GT.version}`, target: '_blank', rel: 'noopener', title: 'What changed in this version' }, `Version ${GT.version}`)))));
   }
   const REPO = 'https://github.com/ivnvxd/guitar-trainer';
-  // The fold of the download service stays open while Settings redraws after a change.
-  let serviceOpen = false;
 
   GT.route('progress', { render: progressPage });
   GT.route('settings', { render: settingsPage });

@@ -17,4 +17,9 @@ for (const [, src] of read('index.html').matchAll(/<script src="([^"]+)"/g)) { a
 // Files that a page loads later are in the offline cache too.
 for (const later of ['js/vendor/signalsmith-stretch.js', 'js/drumcut.js', 'icon-maskable-512.png']) { assert.ok(files.includes(`'${later}'`), `${later} is not in FILES of sw.js`); checks++; }
 
+// The download command of Slow down never uses an account: it starts with the options that keep cookies out.
+const player = read('js/player.js');
+assert.ok(player.includes("'yt-dlp --ignore-config --no-cookies --no-cookies-from-browser'"), 'the yt-dlp command starts with the options that keep cookies out'); checks++;
+assert.ok(!/--cookies(-from-browser)?[ '=]/.test(player.replace(/--no-cookies(-from-browser)?/g, '')), 'no option gives yt-dlp cookies'); checks++;
+
 console.log(`site: ${checks} checks passed`);

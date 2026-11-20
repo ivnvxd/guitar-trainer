@@ -22,9 +22,19 @@ To publish the site, copy these files and folders to any static web host: `index
 
 Each release has a version, major.minor.patch. `VERSION` in `sw.js` and `GT.version` in `js/core.js` must hold the same version.
 
-## Download service
+## Download a YouTube video
 
-A YouTube video plays only in YouTube's own frame, with few tools. The optional service in `server/` gives Slow down the sound of a video as a file, and the picture if you want it. You run the service on your own computer or server. The public site has no such service. See [server/README.md](server/README.md).
+A YouTube video plays only in YouTube's own frame, with few tools, and a web page cannot download it. A file gets every tool. So Slow down has a Download button that shows one command for the video. You copy the command and run it in the Terminal of your computer. The file goes to your Downloads folder, and you drop it on the page.
+
+The command needs three programs: [yt-dlp](https://github.com/yt-dlp/yt-dlp), [deno](https://deno.com/) and [ffmpeg](https://ffmpeg.org/). On a Mac with [Homebrew](https://brew.sh/):
+
+```
+brew install yt-dlp deno ffmpeg
+```
+
+Under the command, the site has the steps of the first install for someone who does not know the Terminal.
+
+The command uses no YouTube account. Its options keep `yt-dlp` from the cookies of a browser. Nothing runs on a server. Downloading a video is against the terms of YouTube, so use it for yourself only.
 
 ## Tests
 

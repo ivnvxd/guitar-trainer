@@ -281,6 +281,7 @@
       if (!await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null, my)) return;
       P.source = { file };
       say('');
+      hideGet();
       drawAll();
     } catch (e) { if (my === opening) say(e.message || 'The file did not open.', 'bad'); }
   }
@@ -539,151 +540,79 @@
     drawAll();
   }
 
-  // ---------- the download service (your own server, set in Settings) ----------
-  // The page cannot read the sound of a YouTube video. A service on your server can: it sends the sound as a file.
-  // The file is kept with the recordings, so it gets every tool and opens again without the server.
-  const service = () => { const s = GT.settings; return s.dlUrl && s.dlKey ? { url: String(s.dlUrl).trim().replace(/\/+$/, ''), key: String(s.dlKey).trim() } : null; };
-  // A request that gives up after a time: a wrong address can stay open for minutes.
-  function ask(url, options, ms) {
-    const end = new AbortController(), timer = setTimeout(() => end.abort(), ms);
-    return fetch(url, Object.assign({ signal: end.signal, cache: 'no-store' }, options)).finally(() => clearTimeout(timer));
-  }
-  // Test the service: is something at the address, does it take this site and the key, and does the server have
-  // its programs. It downloads nothing. The answer is { ok, text }, and the text says what to do.
-  // "Test the connection" in Settings asks this, and so does a download that failed.
-  async function checkService(sv = service()) {
-    if (!sv || !sv.url || !sv.key) return { ok: false, text: 'Enter the address and the key of the service first.' };
-    if (!/^https?:\/\/[^/]/i.test(sv.url)) return { ok: false, text: 'The address must start with http:// or https://, for example http://localhost:8787.' };
-    const own = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(sv.url), secure = location.protocol === 'https:';
-    if (secure && /^http:/i.test(sv.url) && !own) return { ok: false, text: 'This site is on https, and a browser does not let such a site ask an http address. Put the service behind a web server with https: the instructions show how.' };
-    let res;
-    try { res = await ask(`${sv.url}/check`, { headers: { Authorization: `Bearer ${sv.key}` } }, 10000); }
-    catch (e) {
-      if (e && e.name === 'AbortError') return { ok: false, text: 'The address did not answer in 10 seconds. Check the address, and make sure that the service runs.' };
-      // The page got nothing that it can read. A second request, without the key and without a look at the answer,
-      // tells "nothing is there" from "something is there, but it does not take this site".
-      let there = true;
-      try { await ask(`${sv.url}/check`, { mode: 'no-cors' }, 10000); } catch (e2) { there = false; }
-      if (there) return { ok: false, text: `Something answers at this address, but not to this site. On the server, make sure that the service runs, and that GT_ORIGIN has ${location.origin} in it. Then start the service again.` };
-      if (secure && own) return { ok: false, text: 'The service on this computer did not answer. Make sure that it runs. If it does: a browser can stop a site on https from reaching a program on your computer. Then start server/local.py and use the site at the address that it prints.' };
-      return { ok: false, text: `Nothing answers at this address. Check the address, and make sure that the service runs.${/^https:/i.test(sv.url) ? ' The web server in front of it needs a certificate that the browser trusts.' : ''}` };
-    }
-    const told = await res.json().catch(() => null);
-    if (res.status === 401) return { ok: false, text: 'The service answers, but it refuses the key. Copy the key again: it is the value of GT_KEY on the server, or the key that server/local.py prints.' };
-    if (res.ok && told && told.service === 'guitar-ytdl') {
-      if (!told.ytdlp) return { ok: false, text: 'The service answers and takes the key, but its server has no yt-dlp program. Install yt-dlp there: the instructions show how.' };
-      if (!told.deno) return { ok: false, text: `The service answers and takes the key, and it has yt-dlp ${told.ytdlp}. But its server has no deno program, and yt-dlp needs deno for YouTube. Install deno there.` };
-      return { ok: true, text: `The connection works. The service takes the key, and it has yt-dlp ${told.ytdlp}.` };
-    }
-    // A copy of the service from before this test: it has no /check, and it says so before it looks at the key.
-    if (res.status === 404 && told && told.error) return { ok: true, old: true, text: 'The service answers. It is an older copy, so this test cannot check the key or the programs. For the full test, put the new server/ytdl.py on the server and start the service again.' };
-    return { ok: false, text: `The address answers, but not as the download service (answer ${res.status}). Check the address. With a web server in front of the service, the address can need a path, such as https://example.com/ytdl.` };
-  }
-  const toSettings = () => h('a', { href: '#/settings/service' }, 'Settings of the service');
+  // ---------- downloading a YouTube video: a command for your own computer ----------
+  // The page cannot read or download a YouTube video. The program yt-dlp on your computer can. So Download shows
+  // one command to copy. You run it in the Terminal, the file goes to your Downloads folder, and you drop it on
+  // this page. Nothing runs on a server.
+  // The command never uses an account: its first three options keep yt-dlp from the cookies of a browser, and from
+  // a config file on the computer that could ask for them.
+  // id: the 11 characters of a video, as ytIdOf gives them. Only the id goes into the command, never the text of
+  // the link field. With the picture, the command joins the picture and the sound into one mp4 file of 360 lines.
+  // The sound is "the best m4a", not format 140 by its number: a video with dubbed sound has only 140-0, 140-1…,
+  // and yt-dlp then takes the one in the language of the video.
+  const command = (id, picture) => [
+    'yt-dlp --ignore-config --no-cookies --no-cookies-from-browser',
+    picture ? "-f 'bestvideo[ext=mp4][vcodec^=avc1][height<=360][protocol^=http]+bestaudio[ext=m4a]' --merge-output-format mp4" : "-f '140/bestaudio[ext=m4a]'",
+    "-P ~/Downloads -o '%(title)s.%(ext)s'",
+    `'https://www.youtube.com/watch?v=${id}'`].join(' ');
+  const BREW = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
   const mb = bytes => bytes < 1048576 * 10 ? (bytes / 1048576).toFixed(1) : String(Math.round(bytes / 1048576));
-  // One file from the service: the sound, or the picture. The page asks in short requests: one starts the work
-  // on the server, one asks how far it is, and one takes the file. A request that waits in silence for the whole
-  // download is cut by a web server or by Cloudflare in front of the service.
-  async function fetchFile(sv, kind, id) {
-    const what = kind === 'picture' ? 'picture' : 'sound', auth = { headers: { Authorization: `Bearer ${sv.key}` } };
-    const wait = ms => new Promise(done => setTimeout(done, ms));
-    // No answer that the page can read: the test finds out why.
-    const lost = async cut => {
-      sayStep('The download did not arrive. Testing the connection to the service…');
-      const test = await checkService(sv);
-      if (test.ok) throw new Error(cut);
-      // The address or the key is wrong: the message gets a link to them.
-      throw Object.assign(new Error(test.text), { settings: true });
-    };
-    const refused = async res => {
-      const told = await res.json().catch(() => ({}));
-      if (res.status === 401) throw Object.assign(new Error('The download service refused the key.'), { settings: true });
-      throw new Error(told.error || `The download service answered with error ${res.status}.`);
-    };
-    const again = `The download service is there, but the ${what} of this video did not arrive: the connection broke. Try again.`;
-    let res, from = `${sv.url}/${kind}?v=${id}`;
-    try { res = await ask(`${sv.url}/start?v=${id}&kind=${kind}`, auth, 30000); } catch (e) { await lost(again); }
-    if (res.ok) {
-      const job = (await res.json()).job, began = Date.now();
-      from = `${sv.url}/file?id=${job}`;
-      for (let missed = 0; ;) {
-        await wait(1500);
-        if (Date.now() - began > 15 * 60000) throw new Error(`The download service did not finish the ${what} in 15 minutes.`);
-        let at;
-        try { at = await ask(`${sv.url}/job?id=${job}`, auth, 15000); }
-        // One answer that did not come is not the end: the work goes on at the server.
-        catch (e) { if (++missed < 4) continue; await lost(again); }
-        missed = 0;
-        if (!at.ok) await refused(at);
-        const now = await at.json();
-        if (now.state === 'failed') throw new Error(now.error || 'The download did not work.');
-        if (now.state === 'done') break;
-        if (now.percent) sayStep(`Your download service gets the ${what}: ${Math.round(now.percent)}%…`);
-      }
-    } else if (res.status !== 404) await refused(res);
-    // 404: a copy of the service from before the short requests. It sends the file in one request that waits.
-    const old = !res.ok;
-    try { res = await fetch(from, auth); }
-    catch (e) { await lost(old ? `The download service is there, but the ${what} of this video did not arrive. The service is an older copy that makes the page wait in one long request, and a web server or Cloudflare in front of it cut the wait. Put the new server/ytdl.py on the server.` : again); }
-    if (!res.ok) {
-      // A copy of the service from before the picture has no such address.
-      if (res.status === 404 && old && kind === 'picture') throw new Error('The service is an older copy that cannot send a picture. Put the new server/ytdl.py on the server.');
-      await refused(res);
-    }
-    let title = '';
-    try { title = decodeURIComponent(res.headers.get('X-Title') || ''); } catch (e) { /* a title that is not text */ }
-    const type = kind === 'picture' ? 'video/mp4' : 'audio/mp4';
-    if (!res.body || !res.body.getReader) return { blob: await res.blob(), title };
-    // The file arrives in pieces.
-    const total = Number(res.headers.get('Content-Length')) || 0, pieces = [], reader = res.body.getReader();
-    let got = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      pieces.push(value);
-      got += value.length;
-      sayStep(total ? `The ${what} arrives: ${mb(got)} of ${mb(total)} MB…` : `The ${what} arrives: ${mb(got)} MB…`);
-    }
-    return { blob: new Blob(pieces, { type }), title };
-  }
-  async function download(text) {
-    const id = ytIdOf(text), sv = service();
+  // A command with a button that copies it. You can also select the text by hand.
+  const copyable = text => {
+    const copy = btn('Copy', () => {
+      const told = ok => { copy.textContent = ok ? 'Copied' : 'Select the text and copy it'; setTimeout(() => { copy.textContent = 'Copy'; }, 2500); };
+      // Safari copies only inside the click itself, so nothing waits before this call.
+      try { navigator.clipboard.writeText(text).then(() => told(true), () => told(false)); } catch (e) { told(false); }
+    });
+    return h('div', { class: 'player-cmd' }, h('pre', null, h('code', null, text)), copy);
+  };
+  // The first install, for someone who has never used the Terminal.
+  const installSteps = open => h('details', { class: 'drill-help player-install', open },
+    h('summary', null, 'First time? Install the programs'),
+    h('p', null, 'You do this once. It takes about 10 minutes.'),
+    h('ol', null,
+      h('li', null, 'Open the Terminal app. Press Cmd+Space, type ', h('code', null, 'Terminal'), ', and press Enter. A window with text opens. You paste commands there and press Enter.'),
+      h('li', null, 'Install Homebrew, a program that installs other programs. Copy this line, paste it in the Terminal, and press Enter.', copyable(BREW),
+        h('p', null, 'It asks for the password of your Mac. The Terminal shows nothing while you type it. That is normal. Type it and press Enter.')),
+      h('li', null, 'When it ends, look for "Next steps" in the text. If it shows two lines there, copy each one, paste it, and press Enter.'),
+      h('li', null, 'Install the three programs.', copyable('brew install yt-dlp deno ffmpeg')),
+      h('li', null, 'Check the result.', copyable('yt-dlp --version'),
+        h('p', null, 'A date such as ', h('code', null, '2026.10.26'), ' means that all is ready. "command not found" means that step 3 is missing.'))),
+    h('p', null, 'If a download stops working later, YouTube changed something. Run ', h('code', null, 'brew upgrade yt-dlp'), '.'),
+    h('p', null, 'These steps are for a Mac. On Windows, install the programs with ', h('code', null, 'winget install yt-dlp.yt-dlp DenoLand.Deno Gyan.FFmpeg'), ' and run the command in PowerShell. On Linux, install yt-dlp, deno and ffmpeg with the package manager of your system. Windows and Linux are not tested.'));
+  // Download: the panel with the command for one video.
+  function showGet(text) {
+    const id = ytIdOf(text), el = P.ui.get;
     if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
-    if (!sv || P.loading) return;
-    P.loading = true;
-    const picture = !!saved.picture;
-    // What the page says after the song is open: a picture that did not come, or a song that the browser did not keep.
-    let note = '';
-    try {
-      say('Your download service gets the sound of the video. A long video takes some minutes…', 'busy');
-      const sound = await fetchFile(sv, 'sound', id);
-      const r = { id: `y${id}`, name: sound.title || `YouTube video ${id}`, blob: sound.blob, at: Date.now() };
-      // The parts and the loop that you set on the video go to the file: the times are the same.
-      if (!saved.songs[`rec:${r.id}`] && saved.songs[`yt:${id}`]) { saved.songs[`rec:${r.id}`] = Object.assign(JSON.parse(JSON.stringify(saved.songs[`yt:${id}`])), { rate: 1, climb: 0, name: r.name }); save(); }
-      // The sound is kept first: when the picture fails, the song is still here.
-      const kept = await recordings('put', r);
-      if (!kept) note = NOT_KEPT;
-      if (picture) {
-        try {
-          say('Your download service gets the picture of the video. This takes longer than the sound…', 'busy');
-          r.picture = (await fetchFile(sv, 'picture', id)).blob;
-          // The sound is kept, and the picture did not fit: the song opens the next time without its picture.
-          if (!await recordings('put', r) && kept) note = 'The browser kept the sound, but not the picture: its storage is full. The picture shows now, but it is gone when you leave the page.';
-        } catch (e) { delete r.picture; if (kept) note = `The sound is here, but the picture is not. ${e.message}`; }
-      }
-      if (P.ui.refreshRecs) P.ui.refreshRecs();
-      P.loading = false;
-      await openRecording(r);
-      if (note && P.source && P.source.rec === r) say(note);
-    } catch (e) { say(e.message || 'The download did not work.', 'bad', e.settings ? toSettings() : null); }
-    P.loading = false;
+    if (!el) return;
+    say('');
+    // The install steps stay open when the command changes, for example with the picture.
+    const open = !!el.querySelector('details[open]');
+    P.ui.getId = id;
+    el.hidden = false;
+    el.replaceChildren(
+      h('div', { class: 'player-get-head' }, h('b', null, 'Download with your computer'),
+        h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close', onclick: hideGet }, '×')),
+      h('p', { class: 'small muted' }, 'This site cannot download a YouTube video. A program on your computer can. The command runs on a computer, not on a phone, and it uses no YouTube account.'),
+      h('ol', { class: 'player-steps' },
+        h('li', null, 'Copy this command.', copyable(command(id, !!saved.picture))),
+        h('li', null, 'Paste it in the Terminal and press Enter. The file goes to your Downloads folder.'),
+        h('li', null, 'Drop the file on this page, or choose it. ', btn('Open a song file', () => P.ui.pick()))),
+      installSteps(open));
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  function hideGet() {
+    const el = P.ui.get;
+    if (el) { el.hidden = true; el.replaceChildren(); }
+    P.ui.getId = null;
   }
   // The sound alone, or the picture of the video too: one choice for every Download button.
   const pictureChip = () => chip('With picture', saved.picture, () => {
     saved.picture = !saved.picture;
     save();
     document.querySelectorAll('.player-pic').forEach(c => c.setAttribute('aria-pressed', String(!!saved.picture)));
-  }, 'Download the picture of the video too, in small size. The download is about four times as large and takes longer.', { class: 'chip chip-toggle player-pic' });
+    if (P.ui.getId) showGet(P.ui.getId);
+  }, 'Download the picture of the video too, in small size. The file is about four times as large.', { class: 'chip chip-toggle player-pic' });
 
   // ---------- the notes at the playhead ----------
   // The notes in about a third of a second from a place in the song, as you hear them: in the key you chose.
@@ -885,9 +814,9 @@
   // ---------- drawing ----------
   // The line above the song: what the page does now, or what went wrong. kind 'busy': the page works, and the
   // seconds count up, so you see that it goes on. kind 'bad': a failure, in the color of a wrong answer, and the
-  // page scrolls to it. more: a link or a button after the text.
+  // page scrolls to it.
   let sayTimer = null;
-  function say(text, kind = '', more = null) {
+  function say(text, kind = '') {
     const el = P.ui.say;
     clearInterval(sayTimer);
     if (!el) return;
@@ -897,16 +826,13 @@
     const line = h('span', { class: 'say-text' }, text), time = h('span', { class: 'say-time' });
     // A failure stays until you close it, or until the page has something new to say.
     const close = kind === 'bad' ? h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close the message', onclick: () => say('') }, '×') : null;
-    el.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, line, kind === 'busy' ? time : null, close, more].filter(Boolean));
+    el.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, line, kind === 'busy' ? time : null, close].filter(Boolean));
     if (kind === 'busy') {
       const began = Date.now();
-      // A step of the same work: the text changes, the seconds go on.
-      el.step = t => { line.textContent = t; };
       sayTimer = setInterval(() => { if (!el.isConnected) { clearInterval(sayTimer); return; } const s = Math.round((Date.now() - began) / 1000); if (s >= 2) time.textContent = `${s} s`; }, 1000);
-    } else el.step = null;
+    }
     if (kind === 'bad' && el.isConnected) el.scrollIntoView({ block: 'nearest' });
   }
-  const sayStep = text => { if (P.ui.say && P.ui.say.step) P.ui.say.step(text); };
   // A text of a part that the song moves: written only when it changes. A browser can lose a click on a button
   // whose text was written again between the press and the release, and the song writes 20 times a second.
   const put = (el, text) => { if (el && el.textContent !== text) el.textContent = text; };
@@ -1410,7 +1336,7 @@
       u.time = null;
       parts.push(h('div', { class: 'controls player-blocked' }, h('p', null, P.ytError),
         h('div', { class: 'row' }, h('a', { class: 'btn', href: `https://www.youtube.com/watch?v=${P.ytId}`, target: '_blank', rel: 'noopener' }, 'Open the video on YouTube'),
-          service() ? btn('Download its sound', () => download(P.ytId)) : null, service() ? pictureChip() : null)));
+          btn('Download', () => showGet(P.ytId)), pictureChip())));
     } else if (P.kind) {
       if (u.name) u.name.textContent = P.name;
       const tabs = [['loop', 'Loop'], ['speed', 'Speed']].concat(isFile() ? [['sound', 'Sound']] : [], [['parts', 'Parts']], isFile() ? [['bars', 'Bars']] : []);
@@ -1424,12 +1350,10 @@
           // YouTube plays only its own speeds, so each one is a button.
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'),
             h('div', { class: 'row player-chips' }, P.ytRates.map(r => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.abs(P.rate - r) < 0.001), onclick: () => { setRate(r); draw(); } }, `${Math.round(r * 100)}%`)))));
-          if (service()) rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes. Your download service can get the sound as a file, and the file gets every tool.'),
-            h('div', { class: 'row player-open' }, btn('Download the sound', () => download(P.ytId)), pictureChip()));
-          else rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes, and the site cannot download it. ',
-            canRecord() ? 'You can record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can record a part of it, and the recording gets every tool.',
-            ' With your own download service, a video gets every tool: see ', h('a', { href: '#/settings/service' }, 'Settings'), '.'),
-            canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null);
+          rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes. As a file, the song gets every tool: download it with a command on your computer. ',
+            canRecord() ? 'You can also record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can also record a part of it, and the recording gets every tool.'),
+            h('div', { class: 'row player-open' }, btn('Download', () => showGet(P.ytId)), pictureChip(),
+              canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null));
         } else {
           u.rateIn = grip(h('input', { type: 'range', min: 25, max: 150, step: 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) }));
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'), u.rateIn, u.rateOut,
@@ -1569,7 +1493,8 @@
         onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); openYouTube(link.value); } } });
       // A dock of an earlier drawing of the page goes.
       if (P.ui && P.ui.box) { watchTransport(null); if (P.ui.dock) P.ui.dock.remove(); }
-      P.ui = { box: h('div', { class: 'player' }), media: h('div', { class: 'player-media' }), now: h('div', { class: 'player-now' }), say: h('p', { class: 'player-say say', role: 'status', hidden: true }) };
+      P.ui = { box: h('div', { class: 'player' }), media: h('div', { class: 'player-media' }), now: h('div', { class: 'player-now' }), say: h('p', { class: 'player-say say', role: 'status', hidden: true }),
+        get: h('div', { class: 'controls player-get', role: 'region', 'aria-label': 'Download with your computer', hidden: true }), pick: () => file.click() };
       const recBtn = canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null;
       P.ui.recBtn = recBtn;
       P.ui.refreshRecs = () => refreshRecs();
@@ -1578,7 +1503,7 @@
       const drop = async list => { for (const r of list) { await recordings('delete', r.id); delete saved.songs[`rec:${r.id}`]; } save(); refreshRecs(); };
       const refreshRecs = () => recordings('list').then(list => {
         if (!list || !list.length) { recList.replaceChildren(); return; }
-        // A download can come again from the service. A recording of a tab cannot, so the one button for many
+        // A download can be made again with its command. A recording of a tab cannot, so the one button for many
         // songs takes the downloads only.
         const got = list.filter(r => r.id[0] === 'y'), all = list.reduce((sum, r) => sum + size(r), 0);
         recList.replaceChildren(
@@ -1614,8 +1539,8 @@
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
           h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
         h('div', { class: 'row player-open' }, link, btn('Open', () => openYouTube(link.value)),
-          service() ? btn('Download', () => download(link.value), { title: 'Get the sound of the video as a file from your download service. The file gets every tool.' }) : null,
-          service() ? pictureChip() : null),
+          btn('Download', () => showGet(link.value), { title: 'Get the video as a file, with a command that you run on your computer. The file gets every tool.' }),
+          pictureChip()),
         recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null,
         recList, recent);
       P.ui.fold = h('details', { class: 'player-fold' }, h('summary', null, 'Open a song'), source);
@@ -1623,7 +1548,7 @@
       // A file dropped anywhere on the page opens.
       const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); } },
         h('div', { class: 'lib-title' }, h('div', null, h('h1', null, 'Slow down'), h('p', { class: 'muted lib-sub' }, 'Learn a song by ear: slow it down without changing its pitch, loop a part, change its key.'))),
-        P.ui.now, P.ui.say, P.ui.fold, P.ui.media, P.ui.box);
+        P.ui.now, P.ui.say, P.ui.get, P.ui.fold, P.ui.media, P.ui.box);
       P.ui.page = page;
       foldSource();
       // Back on the page: a YouTube video opens again (its frame went with the page), a file is still here.
@@ -1663,5 +1588,5 @@
   A.onVolume = () => { if (P.out) P.out.gain.value = A.volume; };
 
   // state: the player state, for checks in the browser.
-  GT.player = { view, leave, ytIdOf, checkService, state: () => P };
+  GT.player = { view, leave, ytIdOf, command, state: () => P };
 })(window);
