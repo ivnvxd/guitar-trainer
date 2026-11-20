@@ -1327,7 +1327,7 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-blocked { display: grid; gap: 12px; justify-items: start; }
 .player-blocked p { margin: 0; }
 .player-open { gap: 8px 10px; align-items: center; }
-.player-link { flex: 1 1 140px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
+.player-link { flex: 1 1 260px; min-width: 0; min-height: 40px; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--text); font: inherit; }
 /* A line in Slow down that says what the page does now, or what went wrong. Busy has a ring that turns, a failure
    has the color of a wrong answer. */
 .say { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0; padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); scroll-margin: 76px 0 12px; overflow-wrap: anywhere; }
@@ -1341,15 +1341,23 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 @keyframes turn { to { transform: rotate(360deg); } }
 .player-say { margin: 8px 0 10px; }
 /* Download: the panel with the command for your computer, and the steps of the first install. */
-.player-get { display: grid; gap: 10px; margin: 0 0 10px; }
+.player-get { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; margin: 10px 0; scroll-margin: 76px 0 100px; }
+.player-get > .seg { justify-self: start; }
+/* In the box to open a song the panel is a part of that box. */
+.player-source > .player-get { margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line-strong); border-radius: 0; background: none; }
+.player-source > .player-get .say-close { margin-right: 0; }
+.player-on-computer { margin-top: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.player-on-computer > .seg { justify-self: start; }
+.player-on-computer > p { margin: 0; }
 .player-get[hidden] { display: none; }
 .player-get > p { margin: 0; }
 .player-get-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; font-size: 16px; }
-.player-get ol { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+.player-get ol { margin: 0; padding-left: 22px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .player-get li > p { margin: 8px 0 0; }
 .player-cmd { display: flex; align-items: flex-start; gap: 8px; margin-top: 8px; }
-.player-cmd pre { flex: 1 1 0; min-width: 0; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
+.player-cmd pre { flex: 1 1 0; min-width: 0; margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--text); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-x: auto; user-select: all; -webkit-user-select: all; }
 .player-cmd .btn { flex: none; }
+.player-cmd code span { white-space: nowrap; }
 .player-get code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .93em; overflow-wrap: anywhere; }
 .player-install { margin-top: 4px; }
 .player-install > ol { margin: 8px 0; }
@@ -1394,6 +1402,15 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-field input[type="range"] { flex: 1 1 150px; min-width: 0; accent-color: var(--accent); }
 .player-rate { min-width: 3.4em; font-weight: 700; font-variant-numeric: tabular-nums; }
 .player-chips { gap: 6px; }
+/* The speeds of a video: equal chips in one row, or in two equal rows when YouTube gives more than six. */
+.player-speeds { flex: 1 1 100%; display: grid; grid-template-columns: repeat(var(--n, 6), minmax(0, 72px)); gap: 6px; }
+.player-speeds .chip { justify-content: center; padding-inline: 4px; }
+/* A choice with its name: the two stay on one line. */
+.player-pair { display: inline-flex; align-items: center; gap: 10px; }
+.player-pair .player-label { flex: none; min-width: 104px; }
+.player-help { margin-top: 0; }
+.player-help p { margin: 0; }
+.player-help b { color: var(--text); font-weight: 600; }
 .player-key { min-width: 7.5em; text-align: center; }
 /* The loop: each end has its time between a minus and a plus. */
 .player-edges { display: flex; flex-wrap: wrap; gap: 8px 14px; }
@@ -1404,7 +1421,10 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-hint { flex: 1 1 100%; margin: 0; }
 .player-reset { justify-content: flex-end; }
 .player-marks { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; flex: 1 1 100%; }
-.player-marks .player-mark b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A part: its name, and its time under the name. */
+.player-marks .player-mark { flex-direction: column; align-items: flex-start; gap: 0; padding-block: 6px; text-align: left; }
+.player-marks .player-mark b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-marks .player-mark-t { font-size: 13px; font-weight: 400; }
 .player-marks li { display: flex; gap: 6px; align-items: center; }
 .player-mark { flex: 1; justify-content: flex-start; gap: 10px; min-width: 0; }
 .player-mark-t { color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -1413,10 +1433,19 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
   .player-wave { height: 110px; }
   .player-tabs { margin-top: 6px; }
   /* Both ends of the loop on one line of a phone. */
-  .player-edges { gap: 8px; flex-wrap: nowrap; }
-  .player-edge .btn-icon { width: 34px; }
-  .player-edge-set { min-width: 82px; padding: 8px 6px; }
+  .player-edges { gap: 8px; flex-wrap: nowrap; flex: 1 1 100%; }
+  .player-edge { flex: 1 1 0; min-width: 0; }
+  .player-edge .btn-icon { flex: none; width: 38px; }
+  .player-edge-set { flex: 1 1 0; min-width: 0; padding: 8px 2px; white-space: nowrap; }
 }
+/* Hold stays in the row of Play. The narrowest phones have no room for that, so the row breaks there. */
+@media (min-width: 340px) and (max-width: 560px) {
+  .player-transport { gap: 6px; flex-wrap: nowrap; }
+  .player-transport .btn:not(.btn-icon):not(.player-play) { padding-inline: 10px; white-space: nowrap; }
+  .player-transport .chip { white-space: nowrap; }
+  .player-play { flex: 1 1 0; min-width: 84px; }
+}
+@media (max-width: 339px) { .player-edge-set { font-size: 13px; } }
 
 /* The Tools tab: three cards in a row. */
 .tool-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }

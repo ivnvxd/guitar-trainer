@@ -24,7 +24,7 @@ Each release has a version, major.minor.patch. `VERSION` in `sw.js` and `GT.vers
 
 ## Download a YouTube video
 
-A YouTube video plays only in YouTube's own frame, with few tools, and a web page cannot download it. A file gets every tool. So Slow down has a Download button that shows one command for the video. You copy the command and run it in the Terminal of your computer. The file goes to your Downloads folder, and you drop it on the page.
+A YouTube video plays only in YouTube's own frame, with few tools, and a web page cannot download it. A file gets every tool. So Slow down has a button "Download as a file" that shows one command for the video. You copy the command and run it in the Terminal of your computer. The file goes to your Downloads folder, and you drop it on the page.
 
 The command needs three programs: [yt-dlp](https://github.com/yt-dlp/yt-dlp), [deno](https://deno.com/) and [ffmpeg](https://ffmpeg.org/). On a Mac with [Homebrew](https://brew.sh/):
 

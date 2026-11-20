@@ -281,7 +281,6 @@
       if (!await loadDecoded(buf, file.name, `file:${file.name}:${Math.round(buf.duration)}`, /^video\//.test(file.type) ? file : null, my)) return;
       P.source = { file };
       say('');
-      hideGet();
       drawAll();
     } catch (e) { if (my === opening) say(e.message || 'The file did not open.', 'bad'); }
   }
@@ -521,7 +520,7 @@
     P.rec = rec;
     if (P.ui.recBtn) P.ui.recBtn.textContent = '■ Stop recording';
     draw();
-    P.recTimer = setInterval(() => say(`Recording… ${fmt((Date.now() - started) / 1000)}. Play the part in the other tab, then come back and tap Stop recording.`), 500);
+    P.recTimer = setInterval(() => say(`Recording… ${fmt((Date.now() - started) / 1000)}. Play the part in the other tab, then come back and tap Stop recording.`, 'rec'), 500);
   }
   async function openRecording(r) {
     stop();
@@ -564,7 +563,8 @@
       // Safari copies only inside the click itself, so nothing waits before this call.
       try { navigator.clipboard.writeText(text).then(() => told(true), () => told(false)); } catch (e) { told(false); }
     });
-    return h('div', { class: 'player-cmd' }, h('pre', null, h('code', null, text)), copy);
+    // Each word is one piece, so a line of the command ends only at a space.
+    return h('div', { class: 'player-cmd' }, h('pre', null, h('code', null, text.split(' ').map((word, i) => [i ? ' ' : null, h('span', null, word)]))), copy);
   };
   // The first install, for someone who has never used the Terminal.
   const installSteps = open => h('details', { class: 'drill-help player-install', open },
@@ -581,39 +581,39 @@
     h('p', null, 'If a download stops working later, YouTube changed something. Run ', h('code', null, 'brew upgrade yt-dlp'), '.'),
     h('p', null, 'These steps are for a Mac. On Windows, install the programs with ', h('code', null, 'winget install yt-dlp.yt-dlp DenoLand.Deno Gyan.FFmpeg'), ' and run the command in PowerShell. On Linux, install yt-dlp, deno and ffmpeg with the package manager of your system. Windows and Linux are not tested.'));
   // Download: the panel with the command for one video.
-  function showGet(text) {
+  // where: 'box' puts the panel under the link in the box to open a song, 'tab' under the open tab. Without it the
+  // panel stays where it is.
+  function showGet(text, where) {
     const id = ytIdOf(text), el = P.ui.get;
     if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
     if (!el) return;
     say('');
-    // The install steps stay open when the command changes, for example with the picture.
-    const open = !!el.querySelector('details[open]');
-    P.ui.getId = id;
-    el.hidden = false;
-    el.replaceChildren(
-      h('div', { class: 'player-get-head' }, h('b', null, 'Download with your computer'),
-        h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close', onclick: hideGet }, '×')),
-      h('p', { class: 'small muted' }, 'This site cannot download a YouTube video. A program on your computer can. The command runs on a computer, not on a phone, and it uses no YouTube account.'),
+    // The folds stay open when the command changes with the choice of the picture.
+    const open = !!el.querySelector('.player-install[open]'), shown = !!el.querySelector('.player-on-computer[open]');
+    // A phone or a tablet cannot run the command: the note comes first there, and the steps wait in a fold.
+    const touch = root.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    const steps = [
+      GT.segmented('The file', [[0, 'Sound only'], [1, 'With picture']], saved.picture ? 1 : 0, v => { saved.picture = !!v; save(); showGet(id); }),
+      saved.picture ? h('p', { class: 'small muted' }, 'The picture comes in small size. The file is about four times as large.') : '',
       h('ol', { class: 'player-steps' },
         h('li', null, 'Copy this command.', copyable(command(id, !!saved.picture))),
         h('li', null, 'Paste it in the Terminal and press Enter. The file goes to your Downloads folder.'),
         h('li', null, 'Drop the file on this page, or choose it. ', btn('Open a song file', () => P.ui.pick()))),
-      installSteps(open));
+      installSteps(open)];
+    if (where) (where === 'box' ? P.ui.hint : P.ui.box).after(el);
+    el.hidden = false;
+    el.replaceChildren(
+      h('div', { class: 'player-get-head' }, h('b', null, 'Download with your computer'),
+        h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close', onclick: hideGet }, '×')),
+      h('p', { class: 'small muted' }, touch ? 'This works on a computer, not on a phone or a tablet. Open this site on your computer, paste the link of the video there and press "Download as a file".'
+        : 'This site cannot download a YouTube video. A program on your computer can. It uses no YouTube account.'),
+      ...(touch ? [h('details', { class: 'drill-help player-on-computer', open: shown }, h('summary', null, 'The steps on the computer'), steps)] : steps));
     el.scrollIntoView({ block: 'nearest' });
   }
   function hideGet() {
     const el = P.ui.get;
     if (el) { el.hidden = true; el.replaceChildren(); }
-    P.ui.getId = null;
   }
-  // The sound alone, or the picture of the video too: one choice for every Download button.
-  const pictureChip = () => chip('With picture', saved.picture, () => {
-    saved.picture = !saved.picture;
-    save();
-    document.querySelectorAll('.player-pic').forEach(c => c.setAttribute('aria-pressed', String(!!saved.picture)));
-    if (P.ui.getId) showGet(P.ui.getId);
-  }, 'Download the picture of the video too, in small size. The file is about four times as large.', { class: 'chip chip-toggle player-pic' });
-
   // ---------- the notes at the playhead ----------
   // The notes in about a third of a second from a place in the song, as you hear them: in the key you chose.
   function notesAt(pos) {
@@ -820,12 +820,14 @@
     const el = P.ui.say;
     clearInterval(sayTimer);
     if (!el) return;
+    // With a song open, the box to open another one stands under the player. A note for that box shows above it.
+    if (text) { const f = P.ui.fold; if (f && f.open && P.kind && f.isConnected) f.before(el); else if (P.ui.now && P.ui.now.isConnected) P.ui.now.after(el); }
     el.hidden = !text;
     el.className = `player-say say${kind ? ` is-${kind}` : ''}`;
     el.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
     const line = h('span', { class: 'say-text' }, text), time = h('span', { class: 'say-time' });
-    // A failure stays until you close it, or until the page has something new to say.
-    const close = kind === 'bad' ? h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close the message', onclick: () => say('') }, '×') : null;
+    // A note stays until you close it, or until the page has something new to say.
+    const close = kind === 'bad' || !kind ? h('button', { type: 'button', class: 'btn btn-icon say-close', 'aria-label': 'Close the message', onclick: () => say('') }, '×') : null;
     el.replaceChildren(...[kind === 'busy' ? h('span', { class: 'say-turn', 'aria-hidden': 'true' }) : null, line, kind === 'busy' ? time : null, close].filter(Boolean));
     if (kind === 'busy') {
       const began = Date.now();
@@ -1178,6 +1180,7 @@
     remember();
     if (P.playing && isFile()) schedule();
     if (P.playing && P.loop && jump !== undefined && jump !== null) seek(jump);
+    P.ui.needA = false;
     GT.keepPlace(draw);
   }
   // Undo: the loop as it was before the last change. Each path that changes the loop keeps it first.
@@ -1279,7 +1282,7 @@
       u.time = h('span', { class: 'player-time' });
       u.name = h('b', null, P.name);
       u.now.replaceChildren(h('span', { class: 'player-name' }, ...[u.name, P.kind === 'youtube' ? h('span', { class: 'muted small' }, ' on YouTube') : null].filter(Boolean)), u.time,
-        h('button', { type: 'button', class: 'chip', onclick: () => { u.fold.open = !u.fold.open; if (u.refreshRecent) u.refreshRecent(); } }, 'Other song'));
+        h('button', { type: 'button', class: 'chip', onclick: () => { u.fold.open = !u.fold.open; if (u.refreshRecent) u.refreshRecent(); if (u.fold.open) u.fold.scrollIntoView({ block: 'nearest' }); } }, 'Other song'));
     } else u.now.replaceChildren();
     if (P.kind === 'youtube') { u.ytBox = h('div'); parts.push(h('div', { class: 'player-yt' }, u.ytBox)); }
     if (P.video) parts.push(h('div', { class: 'player-video-box' }, P.video));
@@ -1324,6 +1327,21 @@
     // The canvas has its size only once the page is in the document.
     paint();
   }
+  // The words for the buttons above the tabs and on the open tab.
+  const helpLines = tab => [
+    isFile() ? ['Hold', 'The song stands still and the sound of that moment goes on, so you can find its notes on the guitar.'] : null,
+    isFile() ? ['The note row', 'The notes that sound now, and a chord after "Maybe". Both are a guess, and a full band often confuses it.'] : null,
+    tab === 'loop' ? ['− and +', 'Move that end of the loop by a tenth of a second.'] : null,
+    tab === 'loop' ? ['Repeat', 'The song goes back to A each time it gets to B.'] : null,
+    tab === 'loop' ? ['◀ and ▶', 'Move the loop back or on by its length.'] : null,
+    tab === 'loop' ? ['½ and ×2', 'Make the loop half or twice as long.'] : null,
+    tab === 'loop' ? ['Undo', 'The loop as it was before the last change.'] : null,
+    tab === 'loop' ? ['Save the loop', 'Keep the loop under a name, on the Parts tab.'] : null,
+    tab === 'loop' ? ['Each pass', 'A song that plays slower than 100% gets faster each time the loop starts again, up to 100%.'] : null,
+    tab === 'speed' || tab === 'sound' ? ['Reset the settings', `${isFile() ? 'Speed, key and sound' : 'The speed'} and the settings of each pass go back to how a song starts. The loop and the parts stay.`] : null,
+    tab === 'bars' ? ['Bar 1 here', 'The first beat of a bar is where the song is now.'] : null,
+    tab === 'bars' ? ['Snap', 'The ends of a loop go to the nearest beat.'] : null
+  ].filter(Boolean);
   // The panel: one group of settings at a time, so the waveform and the group you work with fit on one screen.
   function draw() {
     const box = P.ui.box;
@@ -1336,7 +1354,7 @@
       u.time = null;
       parts.push(h('div', { class: 'controls player-blocked' }, h('p', null, P.ytError),
         h('div', { class: 'row' }, h('a', { class: 'btn', href: `https://www.youtube.com/watch?v=${P.ytId}`, target: '_blank', rel: 'noopener' }, 'Open the video on YouTube'),
-          btn('Download', () => showGet(P.ytId)), pictureChip())));
+          btn('Download as a file', () => showGet(P.ytId, 'tab')))));
     } else if (P.kind) {
       if (u.name) u.name.textContent = P.name;
       const tabs = [['loop', 'Loop'], ['speed', 'Speed']].concat(isFile() ? [['sound', 'Sound']] : [], [['parts', 'Parts']], isFile() ? [['bars', 'Bars']] : []);
@@ -1349,11 +1367,11 @@
         if (P.kind === 'youtube') {
           // YouTube plays only its own speeds, so each one is a button.
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'),
-            h('div', { class: 'row player-chips' }, P.ytRates.map(r => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.abs(P.rate - r) < 0.001), onclick: () => { setRate(r); draw(); } }, `${Math.round(r * 100)}%`)))));
-          rows.push(h('p', { class: 'small muted player-hint' }, 'YouTube does not let other sites read or change its sound, so a video has its own speeds and no key change, cuts, waveform or notes. As a file, the song gets every tool: download it with a command on your computer. ',
-            canRecord() ? 'You can also record a part of it: open the video in another tab, share that tab with its sound, and the recording gets every tool.' : 'On a computer with Chrome or Edge you can also record a part of it, and the recording gets every tool.'),
-            h('div', { class: 'row player-open' }, btn('Download', () => showGet(P.ytId)), pictureChip(),
-              canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null));
+            h('div', { class: 'player-speeds', style: `--n:${P.ytRates.length > 6 ? Math.ceil(P.ytRates.length / 2) : P.ytRates.length}` }, P.ytRates.map(r => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(Math.abs(P.rate - r) < 0.001), onclick: () => { setRate(r); draw(); } }, `${Math.round(r * 100)}%`)))));
+          rows.push(h('div', { class: 'player-field' }, btn('Download as a file', () => showGet(P.ytId, 'tab')),
+            canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null,
+            h('p', { class: 'small muted player-hint' }, 'YouTube gives a video only these speeds, and no key change, cuts, waveform or notes. As a file, the song gets every tool. ',
+              canRecord() ? 'A recording of a part gets them too: open the video in another tab and share that tab with its sound.' : 'On a computer with Chrome or Edge you can also record a part of it, and the recording gets every tool.')));
         } else {
           u.rateIn = grip(h('input', { type: 'range', min: 25, max: 150, step: 1, value: Math.round(P.rate * 100), 'aria-label': 'Speed in percent', oninput: e => setRate(Number(e.target.value) / 100) }));
           rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Speed'), u.rateIn, u.rateOut,
@@ -1375,20 +1393,23 @@
             btn('+', () => nudge(k, 0.1), { class: 'btn btn-icon', 'aria-label': `${letter} a tenth of a second later`, disabled: P[k] === null }));
         };
         rows.push(h('div', { class: 'player-field player-loop' },
-          h('div', { class: 'player-edges' }, edge('a', 'A', setA), edge('b', 'B', () => { if (!setB()) say('Set A first, then play on and set B after it.'); })),
+          h('div', { class: 'player-edges' }, edge('a', 'A', setA), edge('b', 'B', () => { if (!setB()) { u.needA = true; GT.keepPlace(draw); } })),
+          // The hint stands under the two ends, so they do not move when it comes and goes.
+          u.needA ? h('p', { class: 'small muted player-hint', role: 'status' }, 'Set A first, then play on and set B after it.') : null,
           h('div', { class: 'row player-chips' },
-            chip('Loop', P.loop, () => set({ loop: !P.loop }), 'Key L'),
+            chip('Repeat', P.loop, () => set({ loop: !P.loop }), 'Key L: the song goes back to A each time it gets to B'),
             btn('◀', () => moveLoop(-1), { class: 'btn btn-icon', 'aria-label': 'Move the loop back by its length', disabled: !hasLoop() }),
             btn('▶', () => moveLoop(1), { class: 'btn btn-icon', 'aria-label': 'Move the loop on by its length', disabled: !hasLoop() }),
             btn('½', () => scaleLoop(0.5), { class: 'btn btn-icon', 'aria-label': 'Make the loop half as long', disabled: !hasLoop() }),
             btn('×2', () => scaleLoop(2), { class: 'btn btn-icon', 'aria-label': 'Make the loop twice as long', disabled: !hasLoop() })),
           h('div', { class: 'row player-chips' },
             btn('Undo', undoLoop, { disabled: !P.undo, title: 'The loop as it was before the last change' }),
-            btn('Save', saveLoop, { disabled: !hasLoop(), title: 'Keep this loop under a name, in Parts' }),
+            btn('Save the loop', saveLoop, { disabled: !hasLoop(), title: 'Keep this loop under a name, in Parts' }),
             btn('Clear', () => { keepLoop(); set({ a: null, b: null, loop: false }); }, { disabled: P.a === null && P.b === null }))));
+        const pair = (label, choice) => h('span', { class: 'player-pair' }, h('span', { class: 'player-label' }, label), choice);
         rows.push(h('div', { class: 'player-field' },
-          GT.segmented('Pause before each pass', [[0, 'No pause'], [1, 'Pause 1 s'], [2, '2 s']], P.gap, v => set({ gap: v })),
-          GT.segmented('Speed up each pass', P.kind === 'youtube' ? [[0, 'Same speed'], [1, 'Next speed each pass']] : [[0, 'Same speed'], [2, '+2%'], [5, '+5%']], P.kind === 'youtube' ? (P.climb ? 1 : 0) : P.climb, v => set({ climb: v }))));
+          pair('Between passes', GT.segmented('Pause before each pass', [[0, 'No pause'], [1, '1 s'], [2, '2 s']], P.gap, v => set({ gap: v }))),
+          pair('Each pass', GT.segmented('Speed up each pass', P.kind === 'youtube' ? [[0, 'Same speed'], [1, 'Next speed']] : [[0, 'Same speed'], [2, '+2%'], [5, '+5%']], P.kind === 'youtube' ? (P.climb ? 1 : 0) : P.climb, v => set({ climb: v })))));
       }
       if (tab === 'sound') {
         rows.push(h('div', { class: 'player-field' }, h('span', { class: 'player-label' }, 'Cut'),
@@ -1407,15 +1428,19 @@
           btn('+ Mark here', addMarker, { title: 'Key M: a part starts where the song is now' }),
           btn('+ Save the loop', saveLoop, { disabled: !hasLoop(), title: 'Keep the loop from A to B under a name' })));
         rows.push(P.markers.length ? h('ol', { class: 'player-marks' }, P.markers.map((m, i) => h('li', null,
-          h('button', { type: 'button', class: 'btn player-mark', onclick: () => loopMarker(i), title: 'Loop this part' }, h('span', { class: 'player-mark-t' }, range(m)), h('b', null, m.name),
-            m.b && m.rate && m.rate !== 1 ? h('span', { class: 'player-mark-t' }, `${Math.round(m.rate * 100)}%`) : null),
-          btn('Rename', () => { const name = (root.prompt('Name of the part', m.name) || '').trim(); if (name) { m.name = name.slice(0, 40); remember(); draw(); } }),
+          h('button', { type: 'button', class: 'btn player-mark', onclick: () => loopMarker(i), title: 'Loop this part' }, h('b', null, m.name),
+            h('span', { class: 'player-mark-t' }, range(m) + (m.b && m.rate && m.rate !== 1 ? `, ${Math.round(m.rate * 100)}%` : ''))),
+          btn('Rename', () => { const name = (root.prompt('Name of the part', m.name) || '').trim(); if (name) { m.name = name.slice(0, 40); remember(); draw(); } }, { class: 'chip' }),
           btn('×', () => { P.markers = P.markers.filter((_, k) => k !== i); remember(); draw(); }, { 'aria-label': `Delete ${m.name}` }))))
           : h('p', { class: 'small muted player-hint' }, 'Mark the start of a part (intro, verse, solo), or save a loop under a name. A tap on a part loops it.'));
       }
       if (tab === 'bars') rows.push(...barRows());
+      // A phone shows no tooltip, so the buttons that need a word get it here.
+      const help = helpLines(tab);
+      if (help.length) rows.push(h('details', { class: 'drill-help player-help', open: !!u.helpOpen, ontoggle: e => { u.helpOpen = e.target.open; } },
+        h('summary', null, 'What the buttons do'), help.map(([name, text]) => h('p', null, h('b', null, name), ': ', text))));
       parts.push(h('div', { class: 'controls player-controls' }, rows));
-      parts.push(h('p', { class: 'small muted drill-keys' }, `Keys: Space or Page Down play or pause, ← → 5 seconds, Home or Page Up back to the start, A and B set the loop, L loop on or off, M mark a part, [ and ] slower and faster${isFile() ? ', H hold the sound, + and − zoom' : ''}.`));
+      parts.push(h('p', { class: 'small muted drill-keys' }, `Keys: Space or Page Down play or pause, ← → 5 seconds, Home or Page Up back to the start, A and B set the loop, L repeat on or off, M mark a part, [ and ] slower and faster${isFile() ? ', H hold the sound, + and − zoom' : ''}.`));
     }
     if (!P.kind || P.ytError) watchTransport(null);
     box.replaceChildren(...parts);
@@ -1424,11 +1449,13 @@
     show();
   }
   // A new song: the media part and the panel. The box to open a song folds into one line.
-  function drawAll() { drawMedia(); draw(); foldSource(); mediaKeys(isFile()); if (P.ui.refreshRecent) P.ui.refreshRecent(); }
+  function drawAll() { hideGet(); drawMedia(); draw(); foldSource(); mediaKeys(isFile()); if (P.ui.refreshRecent) P.ui.refreshRecent(); }
   // With a song open, the box to open one closes and the title of the page goes: the song needs the room.
   function foldSource() {
     const f = P.ui.fold;
     if (!f) return;
+    // The box stands under the player. A song that opens from it starts at the top of the page.
+    if (f.open && P.kind && f.isConnected) root.scrollTo(0, 0);
     f.classList.toggle('is-folded', !!P.kind);
     f.open = !P.kind;
     if (P.ui.page) P.ui.page.classList.toggle('has-song', !!P.kind && !P.ytError);
@@ -1446,7 +1473,7 @@
     if (on && !u.dock) {
       u.dockPlay = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => P.playing ? stop() : play() });
       u.dockTime = h('span', { class: 'player-dock-time' });
-      u.dockLoop = h('button', { type: 'button', class: 'chip chip-toggle', title: 'Key L', onclick: () => set({ loop: !P.loop }) }, 'Loop');
+      u.dockLoop = h('button', { type: 'button', class: 'chip chip-toggle', title: 'Key L', onclick: () => set({ loop: !P.loop }) }, 'Repeat');
       u.dock = h('div', { class: 'play-bar player-dock', role: 'region', 'aria-label': 'Player' },
         btn('−5 s', () => seek(P.pos - 5), { 'aria-label': 'Back 5 seconds' }), u.dockPlay, u.dockTime, u.dockLoop);
       document.body.append(u.dock);
@@ -1538,9 +1565,8 @@
       const source = h('div', { class: 'controls player-source', role: 'group', 'aria-label': 'Open a song' },
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
           h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
-        h('div', { class: 'row player-open' }, link, btn('Open', () => openYouTube(link.value)),
-          btn('Download', () => showGet(link.value), { title: 'Get the video as a file, with a command that you run on your computer. The file gets every tool.' }),
-          pictureChip()),
+        h('div', { class: 'row player-open' }, link, btn('Open the video', () => openYouTube(link.value)), btn('Download as a file', () => showGet(link.value, 'box'))),
+        P.ui.hint = h('p', { class: 'small muted player-hint' }, 'A video plays in the frame of YouTube, with few tools. As a file, the song gets every tool.'),
         recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null,
         recList, recent);
       P.ui.fold = h('details', { class: 'player-fold' }, h('summary', null, 'Open a song'), source);
@@ -1548,7 +1574,7 @@
       // A file dropped anywhere on the page opens.
       const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); } },
         h('div', { class: 'lib-title' }, h('div', null, h('h1', null, 'Slow down'), h('p', { class: 'muted lib-sub' }, 'Learn a song by ear: slow it down without changing its pitch, loop a part, change its key.'))),
-        P.ui.now, P.ui.say, P.ui.get, P.ui.fold, P.ui.media, P.ui.box);
+        P.ui.now, P.ui.say, P.ui.media, P.ui.box, P.ui.get, P.ui.fold);
       P.ui.page = page;
       foldSource();
       // Back on the page: a YouTube video opens again (its frame went with the page), a file is still here.
