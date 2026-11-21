@@ -48,7 +48,7 @@
   // ---------- saved songs ----------
   function remember() {
     if (!P.key) return;
-    saved.songs[P.key] = { name: P.name, markers: P.markers, a: P.a, b: P.b, loop: P.loop, rate: P.rate, semis: P.semis, cut: Object.keys(P.cut).filter(k => P.cut[k]), boost: P.boost, gap: P.gap, climb: P.climb, beat: P.beat || null, at: Date.now() };
+    saved.songs[P.key] = { name: P.name, markers: P.markers, a: P.a, b: P.b, loop: P.loop, rate: P.rate, semis: P.semis, cut: Object.keys(P.cut).filter(k => P.cut[k]), boost: P.boost, gap: P.gap, climb: P.climb, beat: P.beat || null, fine: P.fine || undefined, tune: P.tune || undefined, at: Date.now() };
     save();
   }
   function restore(key) {
@@ -58,7 +58,7 @@
     Object.assign(P, { rate: s.rate || 1, semis: s.semis || 0, cut: { bass: cut.includes('bass'), drums: cut.includes('drums'), voice: cut.includes('voice') },
       boost: 'boost' in s ? !!s.boost : s.filter === 'bass-up', a: s.a ?? null, b: s.b ?? null,
       loop: !!s.loop, gap: s.gap || 0, climb: s.climb || 0, markers: Array.isArray(s.markers) ? s.markers : [], pos: 0,
-      beat: s.beat && s.beat.period > 0 ? s.beat : null, taps: null, undo: null });
+      beat: s.beat && s.beat.period > 0 ? s.beat : null, fine: !!s.fine, tune: s.tune || 0, taps: null, undo: null });
   }
 
   // ---------- recordings and copies of opened files, kept in IndexedDB ----------
@@ -294,7 +294,10 @@
   }
 
   // ---------- playing a file ----------
-  const pitch = () => P.semis;
+  // The pitch of the sound: the key you chose, in semitones. With "Tune to 440" on, the recording also moves by the
+  // part of a semitone that it is off (P.tune, see findChords). Note names move with the key only. The page saves
+  // P.tune with the song, so the next time the sound is right from the first second.
+  const pitch = () => P.semis + (P.fine ? -(P.tune || 0) : 0);
   // The engine loops by itself when there is no pause between the passes; with a pause the page stops and starts it.
   const ownLoop = () => P.loop && hasLoop() && !P.gap;
   // Where the song is now. The engine reports its place 20 times a second: between two reports the place moves on
@@ -644,8 +647,8 @@
     let sq = 0;
     for (let i = 0; i < part.length; i += 4) sq += part[i] * part[i];
     if (Math.sqrt(sq / (part.length / 4)) < 0.02 * (sides ? P.sideTop : P.top)) return [];
-    const shift = Math.round(pitch());
-    return T.notesAt(part, rate).map(n => ({ midi: n.midi + shift, pc: T.mod(n.pc + shift), strength: n.strength }));
+    // A recording that is a little sharp or flat reads at its note names: see T.tuning.
+    return T.notesAt(part, rate / Math.pow(2, (P.tune || 0) / 12)).map(n => ({ midi: n.midi + P.semis, pc: T.mod(n.pc + P.semis), strength: n.strength }));
   }
   // Take the sound under a frequency out of a stretch of samples, in place.
   function highpass(x, rate, hz) {
@@ -670,11 +673,22 @@
     const pcs = [...strength.keys()].sort((x, y) => x - y);
     const lowest = heardNow.filter(n => strength.has(n.pc)).reduce((lo, n) => !lo || n.midi < lo.midi ? n : lo, null);
     const bass = lowest ? lowest.pc : pcs.length ? pcs[0] : null;
-    // The chord name is the one of the band on the waveform. Without the band, it is the chord of the notes of the
-    // row. That also holds while the voice cut is on: the row then reads what you hear, and the band does not.
+    // The chord name is the one of the band on the waveform. Where the band has no chord, and while the voice cut
+    // is on (the row then reads what you hear, and the band does not), the notes of the row can name a plain chord:
+    // major, minor or a power chord on its root. Other names from a few notes of a full band are too often wrong.
     const along = P.cut.voice && P.side ? null : chordAt(pos);
-    const chord = along ? { name: chordName(along) } : pcs.length >= 2 ? (T.chordsFrom(pcs, bass)[0] || null) : null;
-    const key = `${pcs.join(',')}|${bass}|${chord ? chord.name : ''}`;
+    const spelled = !along && pcs.length >= 2 ? T.chordsFrom(pcs, bass)[0] : null;
+    const chord = along ? chordName(along) : spelled && !spelled.inversion && ['major', 'minor', 'power'].includes(spelled.chord.id) ? names()[T.pcOf(spelled.root)] + spelled.chord.symbol : null;
+    // The next chord and the time to it, so the hand can get ready. The time is the time you wait at this speed.
+    // While a loop repeats, the song goes back to A at B: the next chord is then the first other one from A.
+    const band = saved.chords && P.chords && !(P.cut.voice && P.side) ? P.chords : [], other = c => chordName(c) !== chord;
+    const round = P.loop && hasLoop() && pos >= P.a && pos < P.b;
+    let next = band.find(c => c.t > pos && (!round || c.t < P.b) && other(c)) || null, far = next ? next.t - pos : 0;
+    if (!next && round) { next = band.find(c => c.end > P.a && c.t < pos && other(c)) || null; far = next ? P.b - pos + Math.max(0, next.t - P.a) : 0; }
+    const wait = next ? Math.max(1, Math.round(far / P.rate)) : 0;
+    // The chords of the loop, each one once in a row.
+    const inLoop = saved.chords && P.chords && hasLoop() ? P.chords.filter(c => Math.min(c.end, P.b) - Math.max(c.t, P.a) >= 0.25).map(chordName).filter((n, i, l) => n !== l[i - 1]) : [];
+    const key = `${pcs.join(',')}|${bass}|${chord}|${next ? chordName(next) + wait : ''}|${inLoop.join(' ')}|${names().join('')}|${P.tune}|${P.fine}|${P.tonic ? P.tonic.root + (P.tonic.minor ? 'm' : '') : ''}`;
     u.cells.forEach((cell, pc) => {
       const v = strength.get(pc) || 0;
       cell.classList.toggle('is-on', v > 0);
@@ -683,9 +697,27 @@
     });
     if (key === u.liveKey) return;
     u.liveKey = key;
-    u.chord.replaceChildren(...(chord ? [h('span', { class: 'muted' }, 'Maybe '), h('b', null, chord.name)]
-      : pcs.length ? [h('b', null, pcs.map(pc => T.PC_PLAIN[pc]).join(' '))] : [h('span', { class: 'muted' }, 'No clear note here')]));
+    u.cells.forEach((cell, pc) => { if (cell.textContent !== names()[pc]) cell.textContent = names()[pc]; });
+    u.chord.replaceChildren(...[
+      h('span', { class: 'player-chord-now' }, ...(chord ? [h('span', { class: 'muted' }, 'Maybe '), h('b', null, chord)]
+        : pcs.length ? [h('b', null, pcs.map(pc => names()[pc]).join(' '))] : [h('span', { class: 'muted' }, 'No clear note here')])),
+      // The second line is always there, so the controls under it stay in place.
+      h('span', { class: 'player-chord-next muted' }, ...(next ? ['then ', h('b', null, chordName(next)), wait <= 30 ? ` in ${wait} s` : ''] : ['\u00a0']))]);
+    u.loopChords.hidden = inLoop.length < 2;
+    if (inLoop.length >= 2) u.loopChords.replaceChildren('Chords in the loop: ', h('b', null, inLoop.join('  ')));
+    aboutSong();
     drawNeck(pcs, bass);
+  }
+  // The line about the song: its key, as a guess, and how far the recording is from the usual pitch. A recording
+  // that is off by 20 cents or more (100 cents are one fret) gets a switch that tunes it, so a guitar in tune fits.
+  function aboutSong() {
+    const u = P.ui, cents = Math.round((P.tune || 0) * 100), off = Math.abs(cents) >= 20;
+    const k = P.tonic && { root: T.mod(P.tonic.root + P.semis), minor: P.tonic.minor };
+    // The line is there from the first moment, so the controls under it stay in place when the key comes.
+    u.aboutText.textContent = k ? `Key: maybe ${names()[k.root]} ${k.minor ? 'minor' : 'major'}.` : P.chords ? 'Key: not clear.' : 'Reading the chords…';
+    u.offText.textContent = off ? `Pitch: ${Math.abs(cents)} cents ${cents > 0 ? 'sharp' : 'flat'}.` : '';
+    u.offText.hidden = u.fineChip.hidden = !off;
+    u.fineChip.setAttribute('aria-pressed', String(!!P.fine));
   }
   function drawNeck(pcs, bass) {
     const u = P.ui;
@@ -695,55 +727,72 @@
     const open = GT.openStrings(), markers = [];
     for (let s = 0; s < 6; s++) for (let f = 0; f <= 12; f++) {
       const pc = T.mod(open[s] + f);
-      if (pcs.includes(pc)) markers.push({ string: s, fret: f, kind: pc === bass ? 'root' : 'other', label: T.PC_PLAIN[pc] });
+      if (pcs.includes(pc)) markers.push({ string: s, fret: f, kind: pc === bass ? 'root' : 'other', label: names()[pc] });
     }
     FB.render(u.neck, { from: 0, to: 12, tuning: open, capo: GT.capo(), markers, leftHanded: settings.leftHanded, orientation: settings.orientation, label: 'The notes at the playhead' });
   }
 
   // ---------- chord guesses along the song ----------
-  // For each quarter of a second the major or minor chord that fits the sound best (theory.js: chroma, triadFrom).
-  // The work runs in small pieces after the song opens, so the page stays quick. P.chords is the result:
-  // [{ t, end, root, minor }] in the key of the recording.
+  // The reading of a song, in small pieces after the song opens, so the page stays quick (theory.js: tuning,
+  // chroma, chordsAlong, keyFromChroma):
+  // - P.tune: how far the recording is from the pitch A = 440 Hz, in semitones. The reader corrects for it.
+  // - P.chords: for each quarter of a second the major or minor chord that fits the sound best, joined to
+  //   [{ t, end, root, minor }] in the key of the recording.
+  // - P.tonic: the key of the song as a guess, { root, minor }. The note names follow it. (P.key is the name
+  //   under which the page saves the song.)
   const CHORD_STEP = 0.25;
   function findChords(my) {
-    P.chords = null;
-    const mono = P.mono, rate = P.monoRate, steps = Math.floor(mono.length / rate / CHORD_STEP), raw = new Array(steps).fill(null);
-    let i = 0;
-    const work = () => {
-      if (my !== opening || mono !== P.mono) return;
-      const until = performance.now() + 12;
-      for (; i < steps && performance.now() < until; i++) {
-        const at = Math.floor(i * CHORD_STEP * rate), part = mono.subarray(at, at + 8192);
-        let sq = 0;
-        for (let k = 0; k < part.length; k += 8) sq += part[k] * part[k];
-        if (part.length < 2048 || Math.sqrt(sq / (part.length / 8)) < 0.02 * P.top) continue;
-        const c = T.triadFrom(T.chroma(part, rate));
-        if (c && c.fit > 0.6) raw[i] = c.root * 2 + (c.minor ? 1 : 0);
-      }
-      if (i < steps) { setTimeout(work, 0); return; }
-      // A guess stays only if the steps around it agree: the most common one of five. Then equal steps join.
-      const calm = raw.map((_, k) => {
-        const count = new Map();
-        for (let d = -2; d <= 2; d++) { const v = raw[k + d]; if (v !== undefined && v !== null) count.set(v, (count.get(v) || 0) + 1); }
-        let best = null;
-        count.forEach((n, v) => { if (!best || n > best.n || (n === best.n && v === raw[k])) best = { v, n }; });
-        return best && best.n >= 2 ? best.v : null;
-      });
-      const out = [];
-      calm.forEach((v, k) => {
-        const last = out[out.length - 1], t = k * CHORD_STEP;
-        if (v === null) return;
-        if (last && last.v === v && t - last.end < CHORD_STEP * 1.5) last.end = t + CHORD_STEP;
-        else out.push({ v, t, end: t + CHORD_STEP, root: v >> 1, minor: !!(v & 1) });
-      });
-      P.chords = out.filter(c => c.end - c.t >= 0.5);
+    Object.assign(P, { chords: null, tonic: null, tune: 0 });
+    const mono = P.mono, rate = P.monoRate, steps = Math.floor(mono.length / rate / CHORD_STEP);
+    const alive = () => my === opening && mono === P.mono;
+    // One pass over the song for a pitch that is off by t semitones.
+    const pass = (t, done) => {
+      const r = rate / Math.pow(2, t / 12), chromas = new Array(steps).fill(null), sum = new Float64Array(12);
+      let i = 0;
+      const work = () => {
+        if (!alive()) return;
+        const until = performance.now() + 12;
+        for (; i < steps && performance.now() < until; i++) {
+          const at = Math.floor(i * CHORD_STEP * rate), part = mono.subarray(at, at + 8192);
+          let sq = 0;
+          for (let k = 0; k < part.length; k += 8) sq += part[k] * part[k];
+          if (part.length < 2048 || Math.sqrt(sq / (part.length / 8)) < 0.02 * P.top) continue;
+          chromas[i] = T.chroma(part, r);
+          for (let k = 0; k < 12; k++) sum[k] += chromas[i][k];
+        }
+        if (i < steps) { setTimeout(work, 0); return; }
+        done({ tune: t, chords: T.chordsAlong(chromas, CHORD_STEP), tonic: T.keyFromChroma(sum) });
+      };
+      setTimeout(work, 0);
+    };
+    const use = out => {
+      if (!alive()) return;
+      const moved = out.tune !== P.tune;
+      Object.assign(P, out);
+      if (moved) remember();
       P.ui.liveKey = P.ui.livePos = null;
+      // With "Tune to 440" on, the sound moves as soon as the page knows by how much.
+      if (P.fine && P.tune && isFile()) { if (P.playing) schedule(); else if (P.holding) holdAt(); }
       paint();
     };
-    setTimeout(work, 0);
+    setTimeout(() => {
+      if (!alive()) return;
+      // A measure that the peaks do not agree on is no measure: the reader then takes the song as it is. It also
+      // takes a song under 15 cents as it is: the overtones of real strings are a little sharp, so a small measure
+      // says little, and the reader has room for it.
+      const found = T.tuning(mono, rate), t = found.sure >= 0.08 && Math.abs(found.tune) >= 0.15 ? Math.round(found.tune * 100) / 100 : 0;
+      pass(t, first => {
+        // Near the middle between two notes the song can be read a little up or a little down. The reading with more
+        // chords on the plain notes wins (theory.js: plainShare).
+        if (Math.abs(t) <= 0.3) { use(first); return; }
+        pass(t > 0 ? t - 1 : t + 1, other => use(T.plainShare(other.chords) > T.plainShare(first.chords) ? other : first));
+      });
+    }, 0);
   }
+  // The twelve note names in the key you hear: G♯ in E major, A♭ in E♭ major.
+  const names = () => T.namesIn(P.tonic && { root: T.mod(P.tonic.root + P.semis), minor: P.tonic.minor });
   // The name of a chord guess in the key you hear.
-  const chordName = c => T.PC_PLAIN[T.mod(c.root + Math.round(pitch()))] + (c.minor ? 'm' : '');
+  const chordName = c => names()[T.mod(c.root + P.semis)] + (c.minor ? 'm' : '');
   const chordAt = t => (saved.chords && P.chords && P.chords.find(c => t >= c.t && t < c.end)) || null;
   // The chord names in a band at the top of the waveform.
   function drawChords(g, x, start, span, w, c) {
@@ -1157,6 +1206,9 @@
     remember();
     if (isFile()) {
       if ('cut' in patch || 'boost' in patch) { if (drums) clearDrum(); route(); P.ui.livePos = P.ui.liveKey = null; }
+      // In another key each note and chord has another name, and with Repeat the next chord is another one, also
+      // while the song stands still.
+      if ('semis' in patch || 'loop' in patch) { P.ui.livePos = P.ui.liveKey = null; paint(); }
       if (P.playing) schedule(); else if (P.holding) holdAt();
     }
     GT.keepPlace(draw);
@@ -1192,6 +1244,9 @@
     if (P.playing && P.loop && jump !== undefined && jump !== null) seek(jump);
     P.ui.needA = false;
     GT.keepPlace(draw);
+    // The chords of the loop and the next chord follow the new loop, also while the song stands still.
+    P.ui.livePos = P.ui.liveKey = null;
+    paint();
   }
   // Undo: the loop as it was before the last change. Each path that changes the loop keeps it first.
   const keepLoop = () => { P.undo = { a: P.a, b: P.b, loop: P.loop }; };
@@ -1325,10 +1380,17 @@
       u.neck = h('div', { class: 'neck player-neck' });
       const neckChip = chip('Neck', saved.neck, () => { saved.neck = !saved.neck; save(); neckChip.setAttribute('aria-pressed', String(saved.neck)); u.liveKey = u.livePos = null; GT.keepPlace(() => liveNotes()); }, 'Show the notes on the neck');
       const chordChip = chip('Chords', saved.chords, () => { saved.chords = !saved.chords; save(); chordChip.setAttribute('aria-pressed', String(saved.chords)); u.liveKey = u.livePos = null; paint(); }, 'Show a chord guess along the waveform');
+      // The chords of the loop: a line at the end of the Loop tab, so it moves no control when it comes.
+      u.loopChords = h('p', { class: 'small muted player-loop-chords', hidden: true });
+      u.aboutText = h('span', { class: 'player-about-key' });
+      u.offText = h('span');
+      u.fineChip = chip('Tune to 440', P.fine, () => { set({ fine: !P.fine }); u.liveKey = u.livePos = null; liveNotes(); }, 'Move the pitch of the song to the usual pitch, where the note A is 440 Hz. A guitar in tune then fits the song.');
+      u.about = h('p', { class: 'small muted player-about' }, u.aboutText, u.offText, u.fineChip);
       u.live = h('div', { class: 'player-live', role: 'group', 'aria-label': 'The notes at the playhead, as a guess' },
         h('div', { class: 'player-pcs' }, u.cells),
         h('div', { class: 'player-live-line' }, u.chord,
           h('div', { class: 'row player-chips' }, chordChip, neckChip)),
+        u.about,
         u.neck);
       parts.push(u.live);
     }
@@ -1420,6 +1482,7 @@
         rows.push(h('div', { class: 'player-field' },
           pair('Between passes', GT.segmented('Pause before each pass', [[0, 'No pause'], [1, '1 s'], [2, '2 s']], P.gap, v => set({ gap: v }))),
           pair('Each pass', GT.segmented('Speed up each pass', P.kind === 'youtube' ? [[0, 'Same speed'], [1, 'Next speed']] : [[0, 'Same speed'], [2, '+2%'], [5, '+5%']], P.kind === 'youtube' ? (P.climb ? 1 : 0) : P.climb, v => set({ climb: v })))));
+        if (isFile() && u.loopChords) rows.push(u.loopChords);
       }
       if (tab === 'sound') {
         // Two rows with their names: the cuts, and the bass made louder.

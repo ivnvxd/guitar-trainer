@@ -414,4 +414,51 @@ eq(T.pitchOf(new Float32Array(4096), 48000), null, 'silence has no pitch');
   assert.strictEqual(T.triadFrom(T.chroma(new Float32Array(8192), rate)), null, 'silence has no chord'); checks++;
 }
 
+// The reading of a song: how far it is from 440, its chords along the time, its key and its note names.
+{
+  const rate = 22050;
+  // Some seconds of chords, each chord for a time, moved off pitch by some cents.
+  const song = (chords, each, cents = 0) => {
+    const x = new Float32Array(Math.floor(rate * each * chords.length));
+    chords.forEach((midis, c) => { for (const m of midis) for (let k = 1; k <= 3; k++) { const f = 440 * Math.pow(2, (m - 69 + cents / 100) / 12) * k; for (let i = Math.floor(c * each * rate), end = Math.floor((c + 1) * each * rate); i < end; i++) x[i] += Math.sin(2 * Math.PI * f * i / rate) / k; } });
+    return x;
+  };
+  const C = [48, 52, 55, 60, 64], G = [43, 47, 50, 55, 59, 67], Am = [45, 52, 57, 60, 64], F = [41, 48, 53, 57, 60, 65], E = [40, 47, 52, 56, 59, 64], A = [45, 52, 57, 61, 64], B = [47, 54, 59, 63, 66];
+  const read = (x, tune = 0) => {
+    const r = rate / Math.pow(2, tune / 12), steps = Math.floor(x.length / rate / 0.25), chromas = [], sum = new Float64Array(12);
+    for (let i = 0; i < steps; i++) { const c = T.chroma(x.subarray(Math.floor(i * 0.25 * rate), Math.floor(i * 0.25 * rate) + 8192), r); chromas.push(c); for (let k = 0; k < 12; k++) sum[k] += c[k]; }
+    return { chords: T.chordsAlong(chromas, 0.25), key: T.keyFromChroma(sum) };
+  };
+  const names = chords => chords.map(c => T.PC_PLAIN[c.root] + (c.minor ? 'm' : '')).join(' ');
+  for (const cents of [-40, -15, 0, 30]) {
+    const found = T.tuning(song([C, G, Am, F], 2, cents), rate);
+    ok(Math.abs(found.tune * 100 - cents) <= 3, `a song ${cents} cents off reads as ${Math.round(found.tune * 100)} cents`);
+    ok(found.sure > 0.5, `the measure of ${cents} cents is sure`);
+  }
+  let seed = 9;
+  const noise = new Float32Array(rate * 10).map(() => { seed = (seed * 16807) % 2147483647; return seed / 2147483647 - 0.5; });
+  ok(T.tuning(noise, rate).sure < 0.08, 'noise gives no sure measure');
+  eq(T.tuning(new Float32Array(rate * 3), rate), { tune: 0, sure: 0 }, 'silence has no measure');
+  const plain = read(song([C, G, Am, F], 2));
+  eq(names(plain.chords), 'C G Am F', 'four chords read in their order');
+  ok(plain.chords.every((c, i) => Math.abs(c.t - i * 2) <= 0.5), 'each chord starts near its time');
+  eq(plain.key, { root: 0, minor: false }, 'C G Am F stands in C major');
+  // 40 cents sharp: without the correction the chords read wrong, with it they read right.
+  const sharp = song([C, G, Am, F], 2, 40);
+  eq(names(read(sharp, T.tuning(sharp, rate).tune).chords), 'C G Am F', 'a song 40 cents sharp reads right with the correction');
+  ok(names(read(sharp).chords) !== 'C G Am F', 'and wrong without it');
+  eq(read(song([E, A, B, E], 2)).key, { root: 4, minor: false }, 'E A B E stands in E major');
+  // A chord that flips its third is one chord.
+  const flip = [0, 0, 0, 1, 1, 0, 0, 0].map(m => { const c = new Float64Array(12); c[4] = 1; c[11] = 1; c[m ? 7 : 8] = 1; return c; });
+  eq(names(T.chordsAlong(flip, 0.25)), 'E', 'E with a short E minor in it is E');
+  eq(T.chordsAlong([null, null, null], 0.25), [], 'quiet steps have no chords');
+  eq(T.namesIn({ root: 4, minor: false })[8], 'G♯', 'E major writes G♯');
+  eq(T.namesIn({ root: 3, minor: false })[8], 'A♭', 'E♭ major writes A♭');
+  eq(T.namesIn({ root: 1, minor: true })[8], 'G♯', 'C♯ minor writes G♯, as E major does');
+  eq(T.namesIn({ root: 7, minor: true })[10], 'B♭', 'G minor writes B♭');
+  eq(T.namesIn(null), T.PC_PLAIN, 'no key: the common names');
+  eq(T.plainShare([{ t: 0, end: 3, root: 9 }, { t: 3, end: 4, root: 8 }]), 0.75, 'three of four seconds stand on plain notes');
+  eq(T.plainShare([]), 0, 'no chords, no share');
+}
+
 console.log(`theory: ${checks} checks passed`);

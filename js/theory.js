@@ -914,22 +914,57 @@
     return out;
   }
 
-  // How strong each of the twelve note names is in a short stretch of a recording, over all octaves from 70 Hz to
-  // 2000 Hz. Unlike notesAt it does not choose notes, so a loud voice or bass does not hide the chord under it.
-  function chroma(samples, rate) {
-    const out = new Float64Array(12);
+  // The spectrum of a short stretch of a recording: how loud each frequency is. The stretch gets a soft start and
+  // end. n is the number of samples that count, a power of 2, and bin k is the frequency k * rate / n.
+  function spectrum(samples) {
     let n = 1;
     while (n * 2 <= Math.min(samples.length, 16384)) n *= 2;
-    if (n < 2048) return out;
+    if (n < 2048) return null;
     const re = new Float64Array(n), im = new Float64Array(n);
     for (let i = 0; i < n; i++) re[i] = samples[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)));
     fft(re, im);
-    for (let k = Math.ceil(70 * n / rate); k < 2000 * n / rate && k < n / 2; k++) {
-      // A bin between two notes counts for neither. The square root keeps one loud note from ruling the sum.
+    const mag = new Float64Array(n / 2);
+    for (let k = 0; k < mag.length; k++) mag[k] = Math.hypot(re[k], im[k]);
+    return { mag, n };
+  }
+  // How strong each of the twelve note names is in a short stretch of a recording, over all octaves from 70 Hz to
+  // 1400 Hz. Unlike notesAt it does not choose notes, so a loud voice or bass does not hide the chord under it.
+  // Only the peaks of the spectrum count: the sound between two peaks is drums and noise, not notes. Above 1400 Hz
+  // the overtones of the notes outnumber the notes.
+  function chroma(samples, rate) {
+    const out = new Float64Array(12), sp = spectrum(samples);
+    if (!sp) return out;
+    const { mag, n } = sp;
+    for (let k = Math.max(1, Math.ceil(70 * n / rate)); k < 1400 * n / rate && k < n / 2 - 1; k++) {
+      if (mag[k] < mag[k - 1] || mag[k] < mag[k + 1]) continue;
+      // A peak between two notes counts for neither. The square root keeps one loud note from ruling the sum.
       const m = 69 + 12 * Math.log2(k * rate / n / 440), near = Math.round(m);
-      if (Math.abs(m - near) <= 0.35) out[mod(near)] += Math.sqrt(Math.hypot(re[k], im[k]));
+      if (Math.abs(m - near) <= 0.35) out[mod(near)] += Math.sqrt(mag[k]);
     }
     return out;
+  }
+  // How far a recording is from the pitch A = 440 Hz, in semitones from -0.5 to 0.5: many records are a little
+  // sharp or flat. The peaks of the spectrum in 40 places of the song each say how far they are from the nearest
+  // note, and the loud peaks say it louder. sure is 0 to 1: how well the peaks agree. To read a recording that is
+  // off by t, give the reader the rate divided by 2^(t / 12): it then hears each note at its name.
+  function tuning(mono, rate) {
+    const size = 8192, places = 40;
+    let x = 0, y = 0, all = 0;
+    for (let p = 0; p < places; p++) {
+      const at = Math.floor((p + 0.5) / places * Math.max(0, mono.length - size)), sp = spectrum(mono.subarray(at, at + size));
+      if (!sp) continue;
+      const { mag, n } = sp;
+      let top = 0;
+      for (let k = 0; k < mag.length; k++) if (mag[k] > top) top = mag[k];
+      for (let k = Math.ceil(150 * n / rate); k < 2000 * n / rate && k < mag.length - 1; k++) {
+        if (mag[k] < 0.05 * top || mag[k] < mag[k - 1] || mag[k] < mag[k + 1]) continue;
+        // The true place of a peak lies between the bins: a curve through the peak and its two neighbours finds it.
+        const a = Math.log(mag[k - 1] + 1e-12), b = Math.log(mag[k]), c = Math.log(mag[k + 1] + 1e-12), d = (a - c) / (2 * (a - 2 * b + c) || 1);
+        const note = 69 + 12 * Math.log2((k + Math.max(-0.5, Math.min(0.5, d))) * rate / n / 440), off = 2 * Math.PI * (note - Math.round(note));
+        x += mag[k] * Math.cos(off); y += mag[k] * Math.sin(off); all += mag[k];
+      }
+    }
+    return { tune: all ? Math.atan2(y, x) / (2 * Math.PI) : 0, sure: all ? Math.hypot(x, y) / all : 0 };
   }
   // The major or minor chord that fits a chroma best: { root, minor, fit }, where fit is 0 to 1. null for silence.
   function triadFrom(c) {
@@ -941,6 +976,79 @@
       if (!best || fit > best.fit) best = { root, minor: third === 3, fit };
     }
     return best;
+  }
+
+  // The chords along a song. chromas has the chroma of each step of the song (null for a quiet step), and step is
+  // the length of a step in seconds. The result is [{ t, end, root, minor }]. A step reads with its two neighbours,
+  // a guess stays only if the steps around it agree (the most common one of five), equal steps join, and a chord
+  // shorter than half a second goes.
+  function chordsAlong(chromas, step) {
+    const raw = chromas.map((c, i) => {
+      if (!c) return null;
+      const sum = new Float64Array(12);
+      for (let d = -1; d <= 1; d++) { const g = chromas[i + d]; if (g) for (let k = 0; k < 12; k++) sum[k] += (d ? 0.5 : 1) * g[k]; }
+      const best = triadFrom(sum);
+      return best && best.fit > 0.6 ? best.root * 2 + (best.minor ? 1 : 0) : null;
+    });
+    const calm = raw.map((_, k) => {
+      const count = new Map();
+      for (let d = -2; d <= 2; d++) { const v = raw[k + d]; if (v !== undefined && v !== null) count.set(v, (count.get(v) || 0) + 1); }
+      let best = null;
+      count.forEach((n, v) => { if (!best || n > best.n || (n === best.n && v === raw[k])) best = { v, n }; });
+      return best && best.n >= 2 ? best.v : null;
+    });
+    const out = [];
+    calm.forEach((v, k) => {
+      const last = out[out.length - 1], t = k * step;
+      if (v === null) return;
+      if (last && last.v === v && t - last.end < step * 1.5) last.end = t + step;
+      else out.push({ v, t, end: t + step, root: v >> 1, minor: !!(v & 1) });
+    });
+    // A chord that flips between major and minor on one root (E, Em, E) is one chord with an unsure third: the kind
+    // with more time takes the whole run.
+    const runs = [];
+    out.filter(c => c.end - c.t >= 0.5).forEach(c => {
+      const run = runs[runs.length - 1], last = run && run[run.length - 1];
+      if (last && last.root === c.root && c.t - last.end < step * 1.5) run.push(c); else runs.push([c]);
+    });
+    return runs.map(run => {
+      let minor = 0, major = 0;
+      run.forEach(c => { if (c.minor) minor += c.end - c.t; else major += c.end - c.t; });
+      return { t: run[0].t, end: run[run.length - 1].end, root: run[0].root, minor: minor > major };
+    });
+  }
+  // The key of a song from the sum of its chromas: { root, minor }. Each of the 24 keys has a known weight for
+  // each of its twelve notes (Krumhansl and Kessler), and the key whose weights fit the sum best wins.
+  const KEY_MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+  const KEY_MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+  function keyFromChroma(sum) {
+    const fit = (w, root) => {
+      let ma = 0, mb = 0;
+      for (let k = 0; k < 12; k++) { ma += sum[k] / 12; mb += w[k] / 12; }
+      let ab = 0, aa = 0, bb = 0;
+      for (let k = 0; k < 12; k++) { const a = sum[mod(root + k)] - ma, b = w[k] - mb; ab += a * b; aa += a * a; bb += b * b; }
+      return aa > 0 ? ab / Math.sqrt(aa * bb) : -1;
+    };
+    let best = null;
+    for (let root = 0; root < 12; root++) for (const minor of [false, true]) {
+      const v = fit(minor ? KEY_MINOR : KEY_MAJOR, root);
+      if (!best || v > best.fit) best = { root, minor, fit: v };
+    }
+    return best && best.fit > 0 ? { root: best.root, minor: best.minor } : null;
+  }
+  // How much of the time of some chords stands on the plain notes (C D E F G A B), 0 to 1. A recording in the middle
+  // between two notes can be read a little up or a little down: guitar songs stand on the plain notes far more
+  // often, so the reading with the larger share wins.
+  function plainShare(chords) {
+    let all = 0, plain = 0;
+    for (const c of chords) { all += c.end - c.t; if ([0, 2, 4, 5, 7, 9, 11].includes(c.root)) plain += c.end - c.t; }
+    return all ? plain / all : 0;
+  }
+  // The twelve note names as a key writes them: G♯ in E major, A♭ in E♭ major. No key: the common names.
+  function namesIn(key) {
+    if (!key) return PC_PLAIN;
+    const major = mod(key.root + (key.minor ? 3 : 0));
+    return [7, 2, 9, 4, 11, 6].includes(major) ? PC_SHARP : [5, 10, 3, 8, 1].includes(major) ? PC_FLAT : PC_PLAIN;
   }
 
   // Close voicing of chord tones near the previous chord, for smooth progressions (MIDI numbers).
@@ -965,7 +1073,7 @@
     TUNINGS, STANDARD, STRING_NAMES, CIRCLE, OPEN_CHORDS, CAGED, MOVABLE, TRIAD_SETS, CHORD_SCALE, INVERSIONS, MODE_INDEX,
     mod, parseNote, pcOf, pcName, parseDegree, spell, intervalBySemi, INTERVAL_SONGS, scaleById, chordById,
     tonesOn, chordName, signature, diatonic, outsideChords, keyOf, keyCells, cagedShapes, cagedMap, standardShift, sharedPlaces, triadVoicings, positions, boxes, SEQUENCES, sequence,
-    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, scaleFingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, chroma, triadFrom, scaleChords, parentMajor, modeInKey, voiceLead,
+    placeShape, chordShapes, slashShapes, DROP_SETS, dropVoicings, fingers, scaleFingers, arpeggioBoxes, romanOf, pitchOf, identifyChord, chordsFrom, scalesWith, notesAt, chroma, triadFrom, tuning, chordsAlong, plainShare, keyFromChroma, namesIn, scaleChords, parentMajor, modeInKey, voiceLead,
     midiName: (midi, flats = false) => pcName(midi, flats),
     freq: midi => 440 * Math.pow(2, (midi - 69) / 12)
   };
