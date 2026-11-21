@@ -582,7 +582,7 @@
   };
   // The first install, for someone who has never used the Terminal.
   const installSteps = open => h('details', { class: 'drill-help player-install', open },
-    h('summary', null, 'Install the programs (you do this once)'),
+    h('summary', null, 'First time? Install these three programs first'),
     h('p', null, 'The command needs three programs on your computer: yt-dlp, deno and ffmpeg. The install takes about 10 minutes.'),
     h('ol', null,
       h('li', null, 'Open the Terminal app. Press Cmd+Space, type ', h('code', null, 'Terminal'), ', and press Enter. A window with text opens. You paste commands there and press Enter.'),
