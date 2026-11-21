@@ -1349,7 +1349,7 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-get { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; margin: 10px 0; scroll-margin: 76px 0 100px; }
 .player-get > .seg { justify-self: start; }
 /* In the box to open a song the panel is a part of that box. */
-.player-source > .player-get { margin: 0; padding: 12px 0 0; border-top: 1px solid var(--line-strong); border-radius: 0; background: none; }
+.player-source > .player-get { margin: 6px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line-strong); border-radius: 0; background: none; }
 .player-source > .player-get .say-close { margin-right: 0; }
 .player-on-computer { margin-top: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .player-on-computer > .seg { justify-self: start; }
@@ -1426,7 +1426,8 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 .player-pair { display: inline-flex; align-items: center; gap: 10px; }
 .player-pair .player-label { flex: none; min-width: 104px; }
 .player-pair.is-short .player-label { min-width: 52px; }
-.player-help { margin-top: 0; }
+.player-help { margin: 12px 0 0; }
+.player-help + .drill-keys { margin-top: 10px; }
 .player-help p { margin: 0; }
 .player-help b { color: var(--text); font-weight: 600; }
 .player-key { min-width: 7.5em; text-align: center; }

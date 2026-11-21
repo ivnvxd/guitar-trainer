@@ -582,8 +582,8 @@
   };
   // The first install, for someone who has never used the Terminal.
   const installSteps = open => h('details', { class: 'drill-help player-install', open },
-    h('summary', null, 'First time? Install the programs'),
-    h('p', null, 'You do this once. It takes about 10 minutes.'),
+    h('summary', null, 'Install the programs (you do this once)'),
+    h('p', null, 'The command needs three programs on your computer: yt-dlp, deno and ffmpeg. The install takes about 10 minutes.'),
     h('ol', null,
       h('li', null, 'Open the Terminal app. Press Cmd+Space, type ', h('code', null, 'Terminal'), ', and press Enter. A window with text opens. You paste commands there and press Enter.'),
       h('li', null, 'Install Homebrew, a program that installs other programs. Copy this line, paste it in the Terminal, and press Enter.', copyable(BREW),
@@ -595,8 +595,8 @@
     h('p', null, 'If a download stops working later, YouTube changed something. Run ', h('code', null, 'brew upgrade yt-dlp'), '.'),
     h('p', null, 'These steps are for a Mac. On Windows, install the programs with ', h('code', null, 'winget install yt-dlp.yt-dlp DenoLand.Deno Gyan.FFmpeg'), ' and run the command in PowerShell. On Linux, install yt-dlp, deno and ffmpeg with the package manager of your system. Windows and Linux are not tested.'));
   // Download: the panel with the command for one video.
-  // where: 'box' puts the panel under the link in the box to open a song, 'tab' under the open tab. Without it the
-  // panel stays where it is.
+  // where: 'box' puts the panel at the end of the box to open a song, under the ways to add one, 'tab' under the
+  // open tab. Without it the panel stays where it is.
   function showGet(text, where) {
     const id = ytIdOf(text), el = P.ui.get;
     if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
@@ -615,7 +615,7 @@
         h('li', null, 'Paste it in the Terminal and press Enter. The file goes to your Downloads folder.'),
         h('li', null, 'Drop the file on this page, or choose it. ', btn('Open a song file', () => P.ui.pick()))),
       installSteps(open)];
-    if (where) (where === 'box' ? P.ui.hint : P.ui.box).after(el);
+    if (where === 'box') P.ui.source.append(el); else if (where) P.ui.box.after(el);
     el.hidden = false;
     el.replaceChildren(
       h('div', { class: 'player-get-head' }, h('b', null, 'Download with your computer'),
@@ -1510,11 +1510,12 @@
           : h('p', { class: 'small muted player-hint' }, 'Mark the start of a part (intro, verse, solo), or save a loop under a name. A tap on a part loops it.'));
       }
       if (tab === 'bars') rows.push(...barRows());
-      // A phone shows no tooltip, so the buttons that need a word get it here.
-      const help = helpLines(tab);
-      if (help.length) rows.push(h('details', { class: 'drill-help player-help', open: !!u.helpOpen, ontoggle: e => { u.helpOpen = e.target.open; } },
-        h('summary', null, 'What the buttons do'), help.map(([name, text]) => h('p', null, h('b', null, name), ': ', text))));
       parts.push(h('div', { class: 'controls player-controls' }, rows));
+      // A phone shows no tooltip, so the buttons that need a word get it here. The help stands under the box of the
+      // tab, with the line about the keys: the box holds settings only.
+      const help = helpLines(tab);
+      if (help.length) parts.push(h('details', { class: 'drill-help player-help', open: !!u.helpOpen, ontoggle: e => { u.helpOpen = e.target.open; } },
+        h('summary', null, 'What the buttons do'), help.map(([name, text]) => h('p', null, h('b', null, name), ': ', text))));
       parts.push(h('p', { class: 'small muted drill-keys' }, `Keys: Space or Page Down play or pause, ← → 5 seconds, Home or Page Up back to the start, A and B set the loop, L repeat on or off, M mark a part, [ and ] slower and faster${isFile() ? ', H hold the sound, + and − zoom' : ''}.`));
     }
     if (!P.kind || P.ytError) watchTransport(null);
@@ -1661,8 +1662,11 @@
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
           h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'), ' The browser keeps a copy, so the song opens again with one tap.')),
         h('div', { class: 'row player-open' }, link, btn('Open the video', () => openYouTube(link.value)), btn('Download as a file', () => showGet(link.value, 'box'))),
-        P.ui.hint = h('p', { class: 'small muted player-hint' }, 'A video plays in the frame of YouTube, with few tools. As a file, the song gets every tool.'),
+        h('p', { class: 'small muted player-hint' }, 'A video plays in the frame of YouTube, with few tools. As a file, the song gets every tool.'),
         recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null);
+      // The ways to add a song stand together: a file, a video, a recording of a tab. The panel with the download
+      // command opens under them.
+      P.ui.source = source;
       P.ui.fold = h('details', { class: 'player-fold' }, h('summary', null, 'Open a song'), source);
       foldSource();
       // A file dropped anywhere on the page opens.
