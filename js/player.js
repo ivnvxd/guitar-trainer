@@ -142,12 +142,27 @@
   // Drums: see js/drumcut.js. Voice: above 180 Hz only what differs between left and right stays, so a voice in the
   // middle of a stereo mix goes, and what else is in the middle there. Under 180 Hz the sound stays, so the bass
   // and the kick drum stay. Bass: the sound under 200 Hz goes.
+  // The loudness of the output, from now on. It ends a fade that still runs (see hush).
+  function loud(v) {
+    if (!P.out) return;
+    const now = P.out.context.currentTime;
+    P.out.gain.cancelScheduledValues(now);
+    P.out.gain.setValueAtTime(v, now);
+  }
+  // Silence at once: the output closes in a few milliseconds. The engine and the drum cut still hold a moment of
+  // the sound, and it would come out after the stop. The next play or hold opens the output again (route).
+  function hush() {
+    if (!P.out) return;
+    const now = P.out.context.currentTime;
+    P.out.gain.cancelScheduledValues(now);
+    P.out.gain.setTargetAtTime(0, now, 0.008);
+  }
   function route() {
     if (!P.node) return;
     const c = A.context();
     [P.node, P.drum].concat(P.chain || []).forEach(n => { try { if (n) n.disconnect(); } catch (e) { /* not connected */ } });
     P.chain = [];
-    P.out.gain.value = A.volume;
+    loud(A.volume);
     let last = P.node;
     const add = n => { last.connect(n); P.chain.push(n); last = n; return n; };
     const filter = (type, hz, gain) => { const f = c.createBiquadFilter(); f.type = type; f.frequency.value = hz; f.Q.value = 0.7; if (gain) f.gain.value = gain; return f; };
@@ -328,18 +343,20 @@
     if (P.loop && P.a !== null && P.b !== null && (P.pos < P.a || P.pos >= P.b)) P.pos = P.a;
     if (P.pos >= P.duration - 0.05) P.pos = 0;
     route();
+    // The drum cut still holds a moment of the sound from before: drop it, or it would sound first.
+    clearDrum();
     schedule({ active: true, input: P.pos });
     P.playing = true;
     P.lastT = P.pos;
     P.posAt = performance.now();
-    if (P.video) { P.video.currentTime = P.pos; P.video.playbackRate = Math.max(0.25, P.rate); P.video.play().catch(() => {}); }
+    if (P.video) { placeVideo(P.pos); P.video.playbackRate = Math.max(0.25, P.rate); P.video.play().catch(() => {}); }
     show();
   }
   function stop() {
     clearTimeout(P.waitTimer);
     P.waiting = false;
     if (P.kind === 'youtube' && P.yt && P.yt.pauseVideo) P.yt.pauseVideo();
-    if (P.node && (P.playing || P.holding)) P.node.stop();
+    if (P.node && (P.playing || P.holding)) { P.node.stop(); hush(); }
     P.playing = false; P.holding = false;
     if (P.video) P.video.pause();
     show();
@@ -351,7 +368,7 @@
     if (!isFile() || !P.node || on === !!P.holding) return;
     if (!on) {
       P.holding = false;
-      if (P.heldPlaying) play(); else { P.node.stop(); show(); }
+      if (P.heldPlaying) play(); else { P.node.stop(); hush(); show(); }
       return;
     }
     const c = A.context();
@@ -365,8 +382,11 @@
     clearTimeout(P.waitTimer);
     P.waiting = false; P.playing = false; P.holding = true;
     route();
+    // With the drum cut the sound comes out a moment late. Without this, the song would go on for that moment and
+    // then fall back to the held place.
+    clearDrum();
     holdAt();
-    if (P.video) { P.video.pause(); P.video.currentTime = P.pos; }
+    if (P.video) { P.video.pause(); placeVideo(P.pos); }
     show();
   }
   function seek(t) {
@@ -416,10 +436,28 @@
       if (ownLoop() && wrapped && P.climb && P.rate < 1) { P.rate = Math.min(1, Math.round((P.rate + P.climb / 100) * 100) / 100); schedule(); remember(); }
       else if (!ownLoop() && t >= P.b) nextPass();
     } else if (t >= P.duration - 0.02) { stop(); P.pos = 0; }
-    if (P.video && Math.abs(P.video.currentTime - t) > 0.25) P.video.currentTime = t;
-    if (P.video) P.video.playbackRate = Math.max(0.25, P.rate);
+    // The engine took the sound back to the start of the loop by itself: the picture goes there too.
+    if (P.video && wrapped && ownLoop() && P.playing) P.video.currentTime = t;
+    followVideo();
     show();
   }
+  // The picture of a video file follows the sound. A small gap closes with a little more or less speed of the
+  // picture, because a jump of the picture takes time (most of all in Safari) and leaves it late again. Only a gap
+  // of more than a second gets a jump, and never while the last jump still runs.
+  function followVideo() {
+    const v = P.video;
+    if (!v || !P.playing || P.waiting) return;
+    const base = Math.max(0.25, P.rate), gap = v.currentTime - heard();
+    let rate = base;
+    if (Math.abs(gap) > 1) { if (!v.seeking) v.currentTime = heard(); }
+    // Once the picture hurries or waits, it goes on until the gap is nearly closed.
+    else if (Math.abs(gap) > (P.videoHurry ? 0.02 : 0.06)) rate = base * (gap < 0 ? 1.25 : 0.8);
+    P.videoHurry = rate !== base;
+    if (v.playbackRate !== rate) v.playbackRate = rate;
+  }
+  // Put the picture at a place of the song. Where it stands there already, it stays: a jump to the same place
+  // still costs time.
+  function placeVideo(t) { if (P.video && Math.abs(P.video.currentTime - t) > 0.04) P.video.currentTime = t; }
 
   // ---------- YouTube ----------
   const ytIdOf = text => {
@@ -1166,7 +1204,9 @@
     if (u.rateIn && document.activeElement !== u.rateIn && !u.rateIn.held) u.rateIn.value = Math.round(P.rate * 100);
     if (u.seek && document.activeElement !== u.seek && !u.seek.held) { u.seek.max = Math.max(1, P.duration); u.seek.value = P.pos; }
     if (u.hold && u.hold.getAttribute('aria-pressed') !== String(!!P.holding)) u.hold.setAttribute('aria-pressed', String(!!P.holding));
-    if (!!P.playing !== !!P.awake) { P.awake = !!P.playing; awake(P.awake); if (isFile() && navigator.mediaSession) navigator.mediaSession.playbackState = P.playing ? 'playing' : 'paused'; }
+    // A hold makes sound too: the screen stays on, and the lock screen shows the song as playing.
+    const sounding = !!(P.playing || P.holding);
+    if (sounding !== !!P.awake) { P.awake = sounding; awake(sounding); if (isFile() && navigator.mediaSession) navigator.mediaSession.playbackState = sounding ? 'playing' : 'paused'; }
     paint();
   }
   // The screen stays on while a song plays. A phone that sleeps in the middle of a loop stops the practice.
@@ -1178,7 +1218,7 @@
     } catch (e) { /* the browser said no: the screen sleeps as usual */ }
   }
   // The browser drops the lock when the page is hidden: take it again when the page is back and the song plays.
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && P.playing) awake(true); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (P.playing || P.holding)) awake(true); });
   // Play, pause and the jumps for the lock screen, a headphone button and the media keys of a keyboard.
   function mediaKeys(on) {
     const ms = navigator.mediaSession;
@@ -1578,6 +1618,9 @@
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
     if (el.matches && el.matches('a, summary, button:focus-visible') && (e.key === ' ' || e.key === 'Enter')) return;
     const k = e.key;
+    // A key that stays down sends itself again and again. Only the jumps, the speed and the zoom take that: a
+    // switch such as Hold or Play would go on and off many times a second.
+    if (e.repeat && !['ArrowLeft', 'ArrowRight', '[', ']', '+', '=', '-', '_'].includes(k)) { if (k === ' ' || k === 'PageDown' || k === 'PageUp' || k === 'Home') e.preventDefault(); return; }
     if (k === ' ' || k === 'PageDown') { e.preventDefault(); P.playing ? stop() : play(); }
     else if (k === 'PageUp') { e.preventDefault(); seek(hasLoop() ? P.a : 0); }
     else if (k === 'h' || k === 'H') hold(!P.holding);
@@ -1709,7 +1752,7 @@
     (src.file ? openFile(src.file) : openRecording(src.rec)).then(() => { if (same()) { P.pos = Math.min(pos, P.duration); show(); } });
   };
   // The sound switch and the volume of Settings work for the player too.
-  A.onVolume = () => { if (P.out) P.out.gain.value = A.volume; };
+  A.onVolume = () => { if (P.playing || P.holding) loud(A.volume); };
 
   // state: the player state, for checks in the browser.
   GT.player = { view, leave, ytIdOf, command, state: () => P };
