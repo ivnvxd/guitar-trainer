@@ -1311,15 +1311,20 @@ body.has-play-bar main { padding-bottom: calc(150px + env(safe-area-inset-bottom
 /* With a song open, the title of the page goes and the box to open a song is behind the "Other song" button. */
 .player-page.has-song > .lib-title { display: none; }
 .player-page.has-song > .player-now { margin-top: 12px; }
-.player-fold.is-folded > .controls { margin-top: 4px; }
-.player-recent { display: grid; gap: 6px; }
+.player-fold.is-folded > .controls { margin: 4px 0 14px; }
+/* Your songs: the name of a song, and under it what it is. */
+.player-recent { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .player-recent:empty { display: none; }
 .player-recent-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.player-recent-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; max-height: 260px; overflow-y: auto; }
+.player-recent-head b { color: var(--text); }
+.player-recent-head .btn { flex: none; }
+.player-recent-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .player-recent-list li { display: flex; gap: 6px; align-items: center; }
-.player-recent-list .player-mark { justify-content: space-between; }
-.player-recent-list .player-mark b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.player-recent-list .player-mark-t { flex: none; font-size: 13px; font-weight: 400; }
+.player-recent-list .player-mark { flex-direction: column; align-items: flex-start; gap: 0; padding-block: 6px; text-align: left; }
+.player-recent-list .player-mark b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-recent-list .player-mark-t { font-size: 13px; font-weight: 400; }
+.player-recent-list .player-mark[aria-current] { border-color: var(--accent); }
+.player-more { justify-self: start; }
 /* The dock while Play is off the screen. */
 .player-dock { padding: 6px; gap: 6px; }
 .player-dock-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3.2em; text-align: center; }

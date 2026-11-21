@@ -49,9 +49,6 @@
   function remember() {
     if (!P.key) return;
     saved.songs[P.key] = { name: P.name, markers: P.markers, a: P.a, b: P.b, loop: P.loop, rate: P.rate, semis: P.semis, cut: Object.keys(P.cut).filter(k => P.cut[k]), boost: P.boost, gap: P.gap, climb: P.climb, beat: P.beat || null, at: Date.now() };
-    // The 30 songs you opened last.
-    const keys = Object.keys(saved.songs).sort((x, y) => saved.songs[y].at - saved.songs[x].at);
-    keys.slice(30).forEach(k => delete saved.songs[k]);
     save();
   }
   function restore(key) {
@@ -64,8 +61,12 @@
       beat: s.beat && s.beat.period > 0 ? s.beat : null, taps: null, undo: null });
   }
 
-  // ---------- recordings, kept in IndexedDB ----------
-  const NOT_KEPT = 'The browser did not keep this song: its storage is full, or it is a private window. The song is open now, but it is gone when you leave the page. Delete songs that you do not need in "Recordings and downloads".';
+  // ---------- recordings and copies of opened files, kept in IndexedDB ----------
+  const NOT_KEPT = 'The browser did not keep this song: its storage is full, or it is a private window. The song is open now, but it is gone when you leave the page. Delete songs that you do not need in "Your songs".';
+  const NO_COPY = 'The browser did not keep a copy of this song: its storage is full, or it is a private window. The song is open now. Next time, choose the file again. Delete songs that you do not need in "Your songs".';
+  // The key of a kept song in the saved songs. The copy of a file has the key of that file as its id, so the loop
+  // and the parts of a file are the same with and without a copy.
+  const songKey = r => r.id.startsWith('file:') ? r.id : `rec:${r.id}`;
   function db() {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open('guitar-trainer', 1);
@@ -262,7 +263,9 @@
       m.load();
     });
   }
-  async function openFile(file) {
+  // keep: you chose or dropped the file. A copy stays in the browser, so the song opens again from "Your songs"
+  // with one tap: a page cannot open a file on the disk by itself.
+  async function openFile(file, keep) {
     stop();
     const my = ++opening;
     if (file.size > MAX_BYTES) { say(`${file.name} is ${Math.round(file.size / 1048576)} MB. The player takes files up to 300 MB: use the sound only (mp3 or m4a), or a shorter part.`, 'bad'); return; }
@@ -282,6 +285,11 @@
       P.source = { file };
       say('');
       drawAll();
+      if (keep) {
+        const key = P.key, kept = await recordings('put', { id: key, name: file.name, blob: file, at: Date.now() });
+        if (P.ui.refreshSongs) P.ui.refreshSongs();
+        if (!kept && P.key === key) say(NO_COPY);
+      }
     } catch (e) { if (my === opening) say(e.message || 'The file did not open.', 'bad'); }
   }
 
@@ -511,7 +519,7 @@
       const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
       const id = `r${Date.now()}`, name = `Recording ${new Date().toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
       const kept = await recordings('put', { id, name, blob, at: Date.now() });
-      if (P.ui.refreshRecs) P.ui.refreshRecs();
+      if (P.ui.refreshSongs) P.ui.refreshSongs();
       await openRecording({ id, name, blob });
       if (!kept) say(NOT_KEPT);
     };
@@ -522,6 +530,7 @@
     draw();
     P.recTimer = setInterval(() => say(`Recording… ${fmt((Date.now() - started) / 1000)}. Play the part in the other tab, then come back and tap Stop recording.`, 'rec'), 500);
   }
+  // r: a recording, a download or the copy of a file, as the browser keeps it.
   async function openRecording(r) {
     stop();
     const my = ++opening;
@@ -531,8 +540,10 @@
       let buf;
       try { buf = await c.decodeAudioData(await r.blob.arrayBuffer()); }
       catch (e) { throw new Error(`The browser could not make the sound of ${r.name}. A long song can be too much for the memory of this device: each minute takes about 20 MB.`); }
-      // A download can have the picture of the video as a second file, without sound.
-      if (my !== opening || !await loadDecoded(buf, r.name, `rec:${r.id}`, r.picture || null, my)) return;
+      // A download can have the picture of the video as a second file, without sound. The copy of a video file
+      // has its picture in itself.
+      const media = r.picture || (/^video\//.test(r.blob.type) ? r.blob : null);
+      if (my !== opening || !await loadDecoded(buf, r.name, songKey(r), media, my)) return;
       P.source = { rec: r };
       say('');
     } catch (e) { if (my === opening) say(e.message || 'The recording did not open.', 'bad'); }
@@ -555,7 +566,7 @@
     "-P ~/Downloads -o '%(title)s.%(ext)s'",
     `'https://www.youtube.com/watch?v=${id}'`].join(' ');
   const BREW = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
-  const mb = bytes => bytes < 1048576 * 10 ? (bytes / 1048576).toFixed(1) : String(Math.round(bytes / 1048576));
+  const mb = bytes => bytes < 1048576 * 10 ? Math.max(0.1, bytes / 1048576).toFixed(1) : String(Math.round(bytes / 1048576));
   // A command with a button that copies it. You can also select the text by hand.
   const copyable = text => {
     const copy = btn('Copy', () => {
@@ -588,15 +599,16 @@
     if (!id) { say('That is not a YouTube link. Copy the address of the video, for example https://youtu.be/…', 'bad'); return; }
     if (!el) return;
     say('');
-    // The folds stay open when the command changes with the choice of the picture.
+    // The folds stay open when the command changes with the choice of the picture. The picture is on until you
+    // choose the sound only.
     const open = !!el.querySelector('.player-install[open]'), shown = !!el.querySelector('.player-on-computer[open]');
     // A phone or a tablet cannot run the command: the note comes first there, and the steps wait in a fold.
     const touch = root.matchMedia('(hover: none) and (pointer: coarse)').matches;
     const steps = [
-      GT.segmented('The file', [[0, 'Sound only'], [1, 'With picture']], saved.picture ? 1 : 0, v => { saved.picture = !!v; save(); showGet(id); }),
-      saved.picture ? h('p', { class: 'small muted' }, 'The picture comes in small size. The file is about four times as large.') : '',
+      GT.segmented('The file', [[1, 'With picture'], [0, 'Sound only']], saved.soundOnly ? 0 : 1, v => { saved.soundOnly = !v; save(); showGet(id); }),
+      h('p', { class: 'small muted' }, saved.soundOnly ? 'The file has no picture. It is about four times smaller.' : 'The picture comes in small size. The sound only makes a file about four times smaller.'),
       h('ol', { class: 'player-steps' },
-        h('li', null, 'Copy this command.', copyable(command(id, !!saved.picture))),
+        h('li', null, 'Copy this command.', copyable(command(id, !saved.soundOnly))),
         h('li', null, 'Paste it in the Terminal and press Enter. The file goes to your Downloads folder.'),
         h('li', null, 'Drop the file on this page, or choose it. ', btn('Open a song file', () => P.ui.pick()))),
       installSteps(open)];
@@ -820,8 +832,6 @@
     const el = P.ui.say;
     clearInterval(sayTimer);
     if (!el) return;
-    // With a song open, the box to open another one stands under the player. A note for that box shows above it.
-    if (text) { const f = P.ui.fold; if (f && f.open && P.kind && f.isConnected) f.before(el); else if (P.ui.now && P.ui.now.isConnected) P.ui.now.after(el); }
     el.hidden = !text;
     el.className = `player-say say${kind ? ` is-${kind}` : ''}`;
     el.setAttribute('role', kind === 'bad' ? 'alert' : 'status');
@@ -1282,7 +1292,7 @@
       u.time = h('span', { class: 'player-time' });
       u.name = h('b', null, P.name);
       u.now.replaceChildren(h('span', { class: 'player-name' }, ...[u.name, P.kind === 'youtube' ? h('span', { class: 'muted small' }, ' on YouTube') : null].filter(Boolean)), u.time,
-        h('button', { type: 'button', class: 'btn btn-text', onclick: () => { u.fold.open = !u.fold.open; if (u.refreshRecent) u.refreshRecent(); if (u.fold.open) u.fold.scrollIntoView({ block: 'nearest' }); } }, 'Other song'));
+        u.other = h('button', { type: 'button', class: 'btn btn-text', 'aria-expanded': String(u.fold.open), onclick: () => showFold(!u.fold.open) }, u.fold.open ? 'Close' : 'Other song'));
     } else u.now.replaceChildren();
     if (P.kind === 'youtube') { u.ytBox = h('div'); parts.push(h('div', { class: 'player-yt' }, u.ytBox)); }
     if (P.video) parts.push(h('div', { class: 'player-video-box' }, P.video));
@@ -1451,27 +1461,39 @@
     show();
   }
   // A new song: the media part and the panel. The box to open a song folds into one line.
-  function drawAll() { hideGet(); drawMedia(); draw(); foldSource(); mediaKeys(isFile()); if (P.ui.refreshRecent) P.ui.refreshRecent(); }
-  // With a song open, the box to open one closes and the title of the page goes: the song needs the room.
+  function drawAll() { hideGet(); drawMedia(); draw(); foldSource(); mediaKeys(isFile()); if (P.ui.refreshSongs) P.ui.refreshSongs(); }
+  // With a song open, the box to open another one is behind the "Other song" button. It opens under that button,
+  // and the same button closes it.
+  function showFold(open) {
+    const u = P.ui;
+    u.fold.open = open;
+    if (u.other) { u.other.setAttribute('aria-expanded', String(open)); u.other.textContent = open && P.kind ? 'Close' : 'Other song'; }
+    if (open && u.refreshSongs) u.refreshSongs();
+    if (u.watch) dock(u.playOff);
+  }
+  // With a song open, the box to open another one closes and the title of the page goes: the song needs the room.
   function foldSource() {
     const f = P.ui.fold;
     if (!f) return;
-    // The box stands under the player. A song that opens from it starts at the top of the page.
+    // A song that opens from the box starts at the top of the page.
     if (f.open && P.kind && f.isConnected) root.scrollTo(0, 0);
     f.classList.toggle('is-folded', !!P.kind);
-    f.open = !P.kind;
+    showFold(!P.kind);
     if (P.ui.page) P.ui.page.classList.toggle('has-song', !!P.kind && !P.ytError);
   }
   // The dock: a small bar at the bottom while Play is off the screen, with back 5 seconds, Play, the time and Loop.
+  // It stays away while the box to open another song is open: it would stand on the list.
   function watchTransport(row) {
     const u = P.ui;
     if (u.watch) { u.watch.disconnect(); u.watch = null; }
+    u.playOff = false;
     if (!row || !root.IntersectionObserver) { dock(false); return; }
-    u.watch = new IntersectionObserver(([e]) => dock(!e.isIntersecting));
+    u.watch = new IntersectionObserver(([e]) => { u.playOff = !e.isIntersecting; dock(u.playOff); });
     u.watch.observe(row);
   }
   function dock(on) {
     const u = P.ui;
+    on = on && !(u.fold && u.fold.open);
     if (on && !u.dock) {
       u.dockPlay = h('button', { type: 'button', class: 'btn btn-primary', onclick: () => P.playing ? stop() : play() });
       u.dockTime = h('span', { class: 'player-dock-time' });
@@ -1517,7 +1539,7 @@
     // A redraw would cut the video and the YouTube frame: this page keeps its parts and draws only what changes.
     keep: true,
     render() {
-      const file = h('input', { type: 'file', accept: 'audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.mp4,.mov,.webm', hidden: true, onchange: e => { const f = e.target.files[0]; if (f) openFile(f); e.target.value = ''; } });
+      const file = h('input', { type: 'file', accept: 'audio/*,video/*,.mp3,.m4a,.aac,.wav,.flac,.ogg,.opus,.mp4,.mov,.webm', hidden: true, onchange: e => { const f = e.target.files[0]; if (f) openFile(f, true); e.target.value = ''; } });
       const link = h('input', { type: 'url', class: 'player-link', placeholder: 'Paste a YouTube link', 'aria-label': 'YouTube link', enterkeyhint: 'go',
         onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); openYouTube(link.value); } } });
       // A dock of an earlier drawing of the page goes.
@@ -1526,57 +1548,64 @@
         get: h('div', { class: 'controls player-get', role: 'region', 'aria-label': 'Download with your computer', hidden: true }), pick: () => file.click() };
       const recBtn = canRecord() ? btn(P.rec ? '■ Stop recording' : '● Record a part from a tab', () => record()) : null;
       P.ui.recBtn = recBtn;
-      P.ui.refreshRecs = () => refreshRecs();
-      const recList = h('div', { class: 'player-recs' });
+      // Your songs, the last one first: each file that you opened (the browser keeps a copy), each recording and
+      // each video. One tap opens a song again, with its loop and parts. A file from before the copies has no
+      // copy: you choose it one more time.
+      const songs = h('div', { class: 'player-recent' });
       const size = r => r.blob.size + (r.picture ? r.picture.size : 0);
-      const drop = async list => { for (const r of list) { await recordings('delete', r.id); delete saved.songs[`rec:${r.id}`]; } save(); refreshRecs(); };
-      const refreshRecs = () => recordings('list').then(list => {
-        if (!list || !list.length) { recList.replaceChildren(); return; }
-        // A download can be made again with its command. A recording of a tab cannot, so the one button for many
-        // songs takes the downloads only.
-        const got = list.filter(r => r.id[0] === 'y'), all = list.reduce((sum, r) => sum + size(r), 0);
-        recList.replaceChildren(
-          h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, `Recordings and downloads, ${mb(all)} MB in this browser`),
-            got.length > 1 ? h('button', { type: 'button', class: 'btn btn-text', onclick: () => { if (root.confirm(`Delete the ${got.length} downloaded songs (${mb(got.reduce((sum, r) => sum + size(r), 0))} MB), with their loops and parts?${got.length < list.length ? ' Recordings stay.' : ''}`)) drop(got); } }, 'Delete the downloads') : null),
-          h('ul', { class: 'player-recent-list' }, list.sort((x, y) => y.at - x.at).map(r => h('li', null,
-            h('button', { type: 'button', class: 'btn player-mark', onclick: () => openRecording(r) }, h('b', null, r.name), h('span', { class: 'player-mark-t' }, `${r.picture ? 'with picture, ' : ''}${mb(size(r))} MB`)),
-            btn('×', () => { if (root.confirm(`Delete ${r.name}?`)) drop([r]); }, { 'aria-label': `Delete ${r.name}` })))));
-      });
-      refreshRecs();
-      // The last songs: a video opens again with one tap. A file does not, because a browser cannot open a file by
-      // itself, but its loop and parts come back when you choose it again.
-      const recent = h('div', { class: 'player-recent' });
-      const forget = keys => { keys.forEach(k => delete saved.songs[k]); save(); refreshRecent(); };
-      const refreshRecent = () => {
-        const keys = Object.keys(saved.songs).filter(k => !k.startsWith('rec:')).sort((x, y) => saved.songs[y].at - saved.songs[x].at);
-        if (!keys.length) { recent.replaceChildren(); return; }
-        recent.replaceChildren(
-          h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, 'Last songs'),
-            h('button', { type: 'button', class: 'btn btn-text', onclick: () => { if (root.confirm(`Remove all ${keys.length} songs from the list, with their loops and parts? Recordings stay.`)) forget(keys); } }, 'Clear the list')),
-          h('ul', { class: 'player-recent-list' }, keys.map(k => {
-            const s = saved.songs[k], video = k.startsWith('yt:'), n = (s.markers || []).length;
-            const note = [video ? 'YouTube' : 'file: choose it again', n ? `${n} part${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ');
+      // Five songs show at first.
+      const FEW = 5;
+      let showAll = false, drawn = 0;
+      const refreshSongs = async () => {
+        const my = ++drawn, list = await recordings('list') || [];
+        if (my !== drawn) return;
+        const copy = {};
+        list.forEach(r => { copy[songKey(r)] = r; });
+        const at = k => saved.songs[k] ? saved.songs[k].at : copy[k].at;
+        const keys = [...new Set([...Object.keys(saved.songs), ...Object.keys(copy)])].sort((x, y) => at(y) - at(x));
+        // Of the songs without a copy, the list keeps the 30 that you opened last.
+        const cut = keys.filter(k => !copy[k]).slice(30);
+        if (cut.length) { cut.forEach(k => delete saved.songs[k]); save(); }
+        // A recording that the browser did not keep has no row: there is no file to choose again.
+        const rows = keys.filter(k => !cut.includes(k) && (copy[k] || !k.startsWith('rec:')));
+        if (!rows.length) { songs.replaceChildren(); return; }
+        const remove = async some => { for (const k of some) { if (copy[k]) await recordings('delete', copy[k].id); delete saved.songs[k]; } save(); refreshSongs(); };
+        // A recording of a tab cannot be made again, so the one button for many songs leaves the recordings.
+        const rest = rows.filter(k => !(copy[k] && copy[k].id[0] === 'r')), kept = rest.filter(k => copy[k]).length;
+        const all = list.reduce((sum, r) => sum + size(r), 0), shown = showAll ? rows : rows.slice(0, FEW);
+        songs.replaceChildren(...[
+          h('div', { class: 'player-recent-head' }, h('span', { class: 'small muted' }, h('b', null, 'Your songs'), list.length ? `, ${mb(all)} MB stored` : ''),
+            rest.length > 1 ? h('button', { type: 'button', class: 'btn btn-text', onclick: () => { if (root.confirm(`Remove ${rest.length} songs from the list, with their loops and parts?${kept ? ' What the browser keeps of them goes too. Files on your disk stay.' : ''}${rest.length < rows.length ? ' Recordings stay.' : ''}`)) remove(rest); } }, 'Clear the list') : null),
+          h('ul', { class: 'player-recent-list' }, shown.map(k => {
+            const s = saved.songs[k] || {}, r = copy[k], name = s.name || (r && r.name) || 'Song', video = k.startsWith('yt:'), n = (s.markers || []).length, open = k === P.key;
+            const note = [open ? 'open now' : '', video ? 'YouTube' : r ? `${r.id[0] === 'r' ? 'recording, ' : ''}${mb(size(r))} MB` : open ? 'no copy in this browser' : 'choose the file again', n ? `${n} part${n > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ');
             return h('li', null,
-              h('button', { type: 'button', class: 'btn player-mark', onclick: () => { if (video) openYouTube(k.slice(3)); else { say(`Choose ${s.name} again. Its loop and parts come back.`); file.click(); } } },
-                h('b', null, s.name || 'Song'), h('span', { class: 'player-mark-t' }, note)),
-              btn('×', () => forget([k]), { 'aria-label': `Remove ${s.name} from the list, with its loop and parts` }));
-          })));
+              h('button', { type: 'button', class: 'btn player-mark', 'aria-current': open ? 'true' : null, onclick: () => {
+                if (open) showFold(false);
+                else if (video) openYouTube(k.slice(3));
+                else if (r) openRecording(r);
+                else { say(`Choose ${name} one more time. After that, the browser has a copy of it.`); file.click(); }
+              } }, h('b', null, name), h('span', { class: 'player-mark-t' }, note)),
+              // A recording or a download is only in the browser, so the page asks first.
+              btn('×', () => { if (!r || r.id.startsWith('file:') || root.confirm(`Delete ${name}?`)) remove([k]); }, { 'aria-label': `Remove ${name} from the list, with its loop and parts` }));
+          })),
+          rows.length > shown.length ? h('button', { type: 'button', class: 'btn btn-text player-more', onclick: () => { showAll = true; refreshSongs(); } }, `Show all ${rows.length} songs`) : null].filter(Boolean));
       };
-      P.ui.refreshRecent = refreshRecent;
-      refreshRecent();
+      P.ui.refreshSongs = refreshSongs;
+      refreshSongs();
       const source = h('div', { class: 'controls player-source', role: 'group', 'aria-label': 'Open a song' },
+        songs,
         h('div', { class: 'row player-open' }, btn('Open a song file', () => file.click(), { class: 'btn btn-primary' }), file,
-          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'))),
+          h('span', { class: 'small muted' }, 'mp3, m4a, wav, flac, or a video (mp4, mov, webm), up to 300 MB.', h('span', { class: 'mouse-only' }, ' Or drop it on this page.'), ' The browser keeps a copy, so the song opens again with one tap.')),
         h('div', { class: 'row player-open' }, link, btn('Open the video', () => openYouTube(link.value)), btn('Download as a file', () => showGet(link.value, 'box'))),
         P.ui.hint = h('p', { class: 'small muted player-hint' }, 'A video plays in the frame of YouTube, with few tools. As a file, the song gets every tool.'),
-        recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null,
-        recList, recent);
+        recBtn ? h('div', { class: 'row player-open' }, recBtn, h('span', { class: 'small muted' }, 'Chrome or Edge: share the YouTube tab with its sound, play the part, and the player keeps it.')) : null);
       P.ui.fold = h('details', { class: 'player-fold' }, h('summary', null, 'Open a song'), source);
       foldSource();
       // A file dropped anywhere on the page opens.
-      const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f); } },
+      const page = h('div', { class: 'player-page', ondragover: e => { e.preventDefault(); }, ondrop: e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openFile(f, true); } },
         h('div', { class: 'lib-title' }, h('div', null, h('h1', null, 'Slow down'), h('p', { class: 'muted lib-sub' }, 'Learn a song by ear: slow it down without changing its pitch, loop a part, change its key.'))),
-        P.ui.now, P.ui.say, P.ui.media, P.ui.box, P.ui.get, P.ui.fold);
+        P.ui.now, P.ui.say, P.ui.fold, P.ui.media, P.ui.box, P.ui.get);
       P.ui.page = page;
       foldSource();
       // Back on the page: a YouTube video opens again (its frame went with the page), a file is still here.

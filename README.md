@@ -10,7 +10,7 @@ Everything runs in the browser. The site has no server code, no build step and n
 
 - Library shows notes, intervals, scales, chords with the CAGED shapes, triads, keys with the circle of fifths, and rhythm. A search box reads chords and scales as guitarists write them, for example `C maj7` or `Am pentatonic`. Scales and keys play along with you. "Name it" names the chord of the notes that you tap.
 - Train has drills in four tracks: ear, neck, keys and rhythm. Each drill asks again what you miss or answer slowly. A daily goal counts real practice time.
-- Tools has a tuner, a metronome and Slow down. Slow down plays a song file or a YouTube link. A file plays slower without a change of pitch or in another key, and you loop a part of it.
+- Tools has a tuner, a metronome and Slow down. Slow down plays a song file or a YouTube link. A file plays slower without a change of pitch or in another key, and you loop a part of it. The browser keeps a copy of each file that you open, so the song opens again from a list.
 
 Settings has the theme, the tuning, a capo, a left-handed neck and the pitch of A.
 
