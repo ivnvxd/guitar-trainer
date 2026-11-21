@@ -1110,18 +1110,23 @@
         start.classList.remove('btn-primary');
         say('Waiting for the microphone…');
         const last = [];
-        let quiet = 0, silent = 0, inTune = 0;
+        let quiet = 0, silent = 0, inTune = 0, room = Infinity;
         const frame = (buf, rate) => {
           if (!buf) { say('The sound of the page is paused. Tap Stop, then Start.'); return; }
           const { rms, peak } = A.levelOf(buf);
-          level.style.width = `${Math.min(100, Math.round(rms / 0.08 * 100))}%`;
+          // The bar grows fast at first, so a quiet guitar shows too.
+          level.style.width = `${Math.min(100, Math.round(Math.sqrt(rms / 0.08) * 100))}%`;
           // About five seconds of nothing at all: the microphone gives the page no sound.
           silent = peak === 0 ? silent + 1 : 0;
           if (silent === 55) say('The microphone gives no sound. Tap Stop, then Start. If it stays silent, reload the page.');
-          const f = T.pitchOf(buf, rate);
+          // The level of the room: the quietest frame so far, which rises slowly. A quiet sound is a string only when
+          // it stands well above the room: an electric guitar that is not plugged in does, a hum of the room does not.
+          // The level never goes under the noise of a microphone: a frame of zeros at the start would hold it at zero.
+          room = Math.max(0.0005, Math.min(room * 1.005, rms));
+          const f = rms >= 0.008 || rms > room * 2 ? T.pitchOf(buf, rate) : null;
           if (!f) {
             quiet++;
-            if (quiet === 30 && peak > 0) say('Too quiet. Play a string louder, or hold the phone nearer.');
+            if (quiet === 30 && peak > 0) say('No clear note. Play one string and let it ring, or hold the phone nearer.');
             if (quiet > 12) { box.classList.remove('is-in', 'is-near'); chips.querySelectorAll('.tuner-string').forEach(b => b.classList.remove('is-heard')); last.length = 0; inTune = 0; }
             return;
           }

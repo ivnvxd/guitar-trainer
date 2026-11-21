@@ -252,9 +252,12 @@ D.pickset('Strings', [5, 4, 3, 2, 1, 0].map(s => ({ value: s, main: `${ord(s)}`,
     if (!v) return;
     if (!buf) { v.say('The sound of the page is paused. Leave the drill and open it again.'); return; }
     const { rms } = A.levelOf(buf);
-    v.level.style.width = `${Math.min(100, Math.round(rms / 0.08 * 100))}%`;
+    // The bar grows fast at first, so a quiet guitar shows too.
+    v.level.style.width = `${Math.min(100, Math.round(Math.sqrt(rms / 0.08) * 100))}%`;
     // The page follows the sound also between questions, so a note played during the feedback is known.
-    if (rms > Math.max(0.012, ear.floor * 1.8)) { ear.fresh = true; ear.run = []; ear.floor = rms; }
+    // A new pluck: the sound gets nearly twice as loud as it was. The small limit is for a quiet guitar, such as an
+    // electric guitar that is not plugged in.
+    if (rms > Math.max(0.0015, ear.floor * 1.8)) { ear.fresh = true; ear.run = []; ear.floor = rms; }
     else ear.floor = Math.min(ear.floor, rms);
     const f = T.pitchOf(buf, rate);
     if (!f) { ear.run = []; v.hold(0); return; }

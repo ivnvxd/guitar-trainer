@@ -827,7 +827,11 @@
     return positions(rootName, pent, tuning, maxFret).map(p => fillBox(p, chord.toneList, rootPc, tuning, maxFret)).filter(p => p.notes.length);
   }
 
-  // The frequency of a buffer, or null when it is too quiet or has no clear pitch. Periods from 60 Hz to 1000 Hz.
+  // The frequency of a buffer, or null when it has no clear pitch. Periods from 60 Hz to 1000 Hz.
+  // A note counts by how well the sound repeats, not by how loud it is: a quiet string, such as an electric guitar
+  // that is not plugged in, repeats as well as a loud one, and the noise of a room does not repeat. clear is the
+  // part of the sound that repeats after one period, 0 to 1: a string gives 0.8 and more, noise 0.1.
+  const CLEAR = 0.5;
   function pitchOf(buf, rate) {
     // Above 30 kHz, half the samples are enough: the pitch comes out the same, with a quarter of the work.
     if (rate > 30000) {
@@ -835,9 +839,11 @@
       for (let i = 0; i < half.length; i++) half[i] = (buf[2 * i] + buf[2 * i + 1]) * 0.5;
       return pitchOf(half, rate / 2);
     }
-    let rms = 0;
-    for (const v of buf) rms += v * v;
-    if (Math.sqrt(rms / buf.length) < 0.008) return null;
+    let power = 0;
+    for (const v of buf) power += v * v;
+    power /= buf.length;
+    // Under this level a microphone gives only its own noise.
+    if (Math.sqrt(power) < 0.0005) return null;
     const minLag = Math.floor(rate / 1000), maxLag = Math.min(Math.floor(rate / 60), buf.length >> 1);
     const c = new Float32Array(maxLag + 2);
     // Each sum is divided by its number of terms: longer lags have fewer, and would read too short otherwise.
@@ -851,7 +857,7 @@
     if (!(top > 0)) return null;
     let at = -1;
     for (let lag = Math.max(start, minLag + 1); lag <= maxLag; lag++) if (c[lag] >= 0.9 * top && c[lag] >= c[lag - 1] && c[lag] >= c[lag + 1]) { at = lag; break; }
-    if (at < 0) return null;
+    if (at < 0 || c[at] < CLEAR * power) return null;
     const a = c[at - 1], b = c[at], d = c[at + 1], shift = (a - d) / (2 * (a - 2 * b + d) || 1);
     return rate / (at + (Number.isFinite(shift) ? shift : 0));
   }

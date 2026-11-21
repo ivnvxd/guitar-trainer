@@ -372,6 +372,19 @@ for (const rate of [48000, 44100]) for (const hz of [82.41, 110, 146.83, 196, 24
   ok(got && Math.abs(1200 * Math.log2(got / hz)) < 3, `pitch of ${hz} Hz at ${rate} read as ${got && got.toFixed(2)}`);
 }
 eq(T.pitchOf(new Float32Array(4096), 48000), null, 'silence has no pitch');
+// A note counts by how clear it is, not by how loud: a quiet string reads, and noise does not.
+{
+  let seed = 4;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }, noise = () => Math.sqrt(-2 * Math.log(rnd() + 1e-12)) * Math.cos(2 * Math.PI * rnd());
+  // A string with five overtones at a loudness (root mean square), in the noise of a room.
+  const string = (hz, level, room) => { const x = new Float32Array(4096); let sq = 0; for (let i = 0; i < x.length; i++) { for (let k = 1; k <= 6; k++) x[i] += Math.sin(2 * Math.PI * hz * k * i / 48000) / k; sq += x[i] * x[i]; } const g = level / Math.sqrt(sq / x.length); return x.map(v => v * g + noise() * room); };
+  for (const hz of [82.41, 110, 196, 329.63]) {
+    const got = T.pitchOf(string(hz, 0.002, 0.0005), 48000);
+    ok(got && Math.abs(1200 * Math.log2(got / hz)) < 20, `a quiet string at ${hz} Hz reads as ${got && got.toFixed(1)} Hz`);
+  }
+  for (const level of [0.001, 0.01, 0.1]) eq(T.pitchOf(string(110, 0, level), 48000), null, `noise at ${level} is no note`);
+  eq(T.pitchOf(string(110, 0.0002, 0), 48000), null, 'a sound under the noise of a microphone is no note');
+}
 
 // Fingers of a scale position
 {
